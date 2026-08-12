@@ -67,6 +67,12 @@ UserMessage {
     color: #e6e6e6;
 }
 
+Spinner {
+    color: #8a8a8a;
+    margin: 0 0 1 0;
+    padding: 0 1;
+}
+
 AssistantMessage {
     margin: 0 0 1 0;
     padding: 0 1;

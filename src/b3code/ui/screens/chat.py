@@ -18,6 +18,7 @@ from b3code.services.chat import ChatEvent
 from b3code.services.session import DisplayTurn
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.permission import PermissionPicker
+from b3code.ui.widgets.spinner import Spinner
 from b3code.ui.widgets.messages import (
     AssistantMessage,
     RoleLabel,
@@ -43,6 +44,7 @@ class ChatScreen(Screen):
         self._buffer = ""
         self._tools: dict[str, ToolRow] = {}
         self.awaiting_permission = False
+        self._thinking: Spinner | None = None
 
     def compose(self) -> ComposeResult:
         cwd = _short_cwd(self.c.cwd)
@@ -123,6 +125,11 @@ class ChatScreen(Screen):
                 event.stop()
                 event.prevent_default()
 
+    def _stop_thinking(self) -> None:
+        if self._thinking is not None:
+            self._thinking.remove()
+            self._thinking = None
+
     def confirm_permission(self) -> None:
         picker = self.query_one(PermissionPicker)
         choice = picker.current()
@@ -177,6 +184,9 @@ class ChatScreen(Screen):
         self._assistant = AssistantMessage("")
         chat.mount(RoleLabel("assistant"))
         chat.mount(self._assistant)
+        self._stop_thinking()
+        self._thinking = Spinner("thinking")
+        chat.mount(self._thinking)
         self._scroll_end()
         prompt = expand_attachments(typed, self.c.cwd, self.c.file_index.read)
         self._run_agent(prompt)
@@ -196,6 +206,7 @@ class ChatScreen(Screen):
             self._buffer += event.text
             if self._assistant is not None:
                 self._assistant.update(self._buffer)
+            self._stop_thinking()
         elif event.kind == "tool_start":
             row = self._tools.get(event.tool)
             if row is None:
@@ -225,10 +236,12 @@ class ChatScreen(Screen):
                 event.text, event.detail, self.c.config.accent
             )
         elif event.kind == "error":
+            self._stop_thinking()
             chat.mount(SystemNote(event.text))
             if self._assistant is not None and not self._buffer:
                 self._assistant.update("_(cancelled or failed)_")
         elif event.kind == "done":
+            self._stop_thinking()
             if self._assistant is not None and event.text and not self._buffer:
                 self._assistant.update(event.text)
         self._scroll_end()
@@ -280,6 +293,7 @@ class ChatScreen(Screen):
         self._buffer = ""
         self._tools = {}
         self.awaiting_permission = False
+        self._thinking = None
         self.query_one(PermissionPicker).hide()
 
     def _rebuild(self) -> None:
