@@ -21,6 +21,11 @@ def test_parent_escape(tmp_path: Path):
     assert (tmp_path / "secret.txt").resolve() in hits
 
 
+def test_work_mount_is_inside_cwd(tmp_path: Path):
+    assert escaped_paths("cd /work && git status", tmp_path) == []
+    assert escaped_paths("ls /work/src", tmp_path) == []
+
+
 def test_safe_workspace_still_blocks(tmp_path: Path):
     import pytest
 

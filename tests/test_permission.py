@@ -18,6 +18,7 @@ async def test_local_command_does_not_ask(tmp_path: Path):
     gate = make_gate(tmp_path)
     gate.on_ask = lambda req: pytest.fail("should not ask")
     await gate.ensure("pytest -q")
+    await gate.ensure("cd /work && git status")
 
 
 async def test_allowlist_skips_ask(tmp_path: Path):

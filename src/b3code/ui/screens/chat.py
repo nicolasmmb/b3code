@@ -17,6 +17,7 @@ from b3code.container import AppContainer
 from b3code.services.chat import ChatEvent
 from b3code.services.session import DisplayTurn
 from b3code.ui.widgets.autocomplete import Autocomplete
+from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.messages import (
     AssistantMessage,
     RoleLabel,
@@ -49,11 +50,13 @@ class ChatScreen(Screen):
         with VerticalScroll(id="chat"):
             yield Welcome()
         yield Autocomplete()
+        yield PermissionPicker(id="permission")
         with Horizontal(id="prompt-row"):
             yield Input(placeholder="send a message  (@ file  / command)", id="prompt")
             yield Static(self.c.config.selected_model, id="model-label")
 
     def on_mount(self) -> None:
+        self.query_one(PermissionPicker).display = False
         self.query_one("#prompt", Input).focus()
         turns = self.c.session_store.display_turns()
         if turns:
@@ -67,6 +70,9 @@ class ChatScreen(Screen):
 
     @on(Input.Submitted, "#prompt")
     def on_prompt_submitted(self, event: Input.Submitted) -> None:
+        if self.awaiting_permission:
+            self.confirm_permission()
+            return
         ac = self.query_one(Autocomplete)
         if ac.display and ac.current() is not None:
             self._apply(ac.current())
@@ -82,13 +88,23 @@ class ChatScreen(Screen):
         self._send_chat(text)
 
     def on_key(self, event: Key) -> None:
-        if self.awaiting_permission and event.key in {"y", "a", "n"}:
-            choice = {"y": "once", "a": "always", "n": "deny"}[event.key]
-            self.awaiting_permission = False
-            self.c.chat.answer_permission(choice)
-            event.stop()
-            event.prevent_default()
-            return
+        if self.awaiting_permission:
+            picker = self.query_one(PermissionPicker)
+            if event.key == "down":
+                picker.move(1)
+                event.stop()
+                event.prevent_default()
+                return
+            if event.key == "up":
+                picker.move(-1)
+                event.stop()
+                event.prevent_default()
+                return
+            if event.key == "enter":
+                self.confirm_permission()
+                event.stop()
+                event.prevent_default()
+                return
         ac = self.query_one(Autocomplete)
         if not ac.display:
             return
@@ -104,9 +120,17 @@ class ChatScreen(Screen):
                 event.stop()
                 event.prevent_default()
 
+    def confirm_permission(self) -> None:
+        picker = self.query_one(PermissionPicker)
+        choice = picker.current()
+        self.awaiting_permission = False
+        picker.hide()
+        self.c.chat.answer_permission(choice)
+
     def action_escape(self) -> None:
         if self.awaiting_permission:
             self.awaiting_permission = False
+            self.query_one(PermissionPicker).hide()
             self.c.chat.answer_permission("deny")
             return
         ac = self.query_one(Autocomplete)
@@ -193,12 +217,8 @@ class ChatScreen(Screen):
                 row.set_status("done", event.detail)
         elif event.kind == "permission":
             self.awaiting_permission = True
-            chat.mount(
-                SystemNote(
-                    f"? run_command\n  {event.text}\n  outside: {event.detail}\n"
-                    "[y] once   [a] always   [n] deny"
-                )
-            )
+            self.query_one(Autocomplete).set_suggestions([])
+            self.query_one(PermissionPicker).show(event.text, event.detail)
         elif event.kind == "error":
             chat.mount(SystemNote(event.text))
             if self._assistant is not None and not self._buffer:
@@ -255,6 +275,7 @@ class ChatScreen(Screen):
         self._buffer = ""
         self._tools = {}
         self.awaiting_permission = False
+        self.query_one(PermissionPicker).hide()
 
     def _rebuild(self) -> None:
         chat = self.query_one("#chat", VerticalScroll)

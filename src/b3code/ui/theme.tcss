@@ -107,6 +107,32 @@ Autocomplete > .option-list--option-highlighted {
     color: #e6e6e6;
 }
 
+PermissionPicker {
+    display: none;
+    height: auto;
+    border: solid #3a3a3a;
+    background: #141414;
+    padding: 1 1 0 1;
+}
+
+#permission-summary {
+    color: #c8c8c8;
+    margin-bottom: 1;
+}
+
+#permission-options {
+    height: auto;
+    max-height: 6;
+    border: none;
+    background: #141414;
+    padding: 0;
+}
+
+#permission-options > .option-list--option-highlighted {
+    background: #2a2a2a;
+    color: #e6e6e6;
+}
+
 .role {
     color: #6e6e6e;
     text-style: bold;
