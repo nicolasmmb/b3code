@@ -1,0 +1,115 @@
+Screen {
+    background: #1a1b1e;
+    color: #d4d4d4;
+}
+
+#cwd {
+    color: #6e6e6e;
+    padding: 0 1;
+    height: 1;
+}
+
+#chat {
+    height: 1fr;
+    padding: 0 2;
+}
+
+Welcome {
+    width: 72;
+    height: auto;
+    border: solid #3a3a3a;
+    padding: 1 2;
+    margin: 4 0;
+    align: center middle;
+}
+
+#welcome-title {
+    color: #e6e6e6;
+    text-style: bold;
+}
+
+#welcome-hint {
+    color: #c9a227;
+    margin-top: 1;
+}
+
+#welcome-menu {
+    color: #c8c8c8;
+    margin-top: 1;
+}
+
+UserMessage {
+    margin: 1 12 0 0;
+    padding: 0 1;
+    color: #e6e6e6;
+}
+
+AssistantMessage {
+    margin: 0 0 1 0;
+    padding: 0 1;
+}
+
+ToolRow {
+    color: #8a8a8a;
+    padding: 0 1;
+}
+
+ToolRow.running {
+    color: #c9a227;
+}
+
+ToolRow.done {
+    color: #6e6e6e;
+}
+
+ToolRow.error {
+    color: #c45c5c;
+}
+
+SystemNote {
+    color: #8a8a8a;
+    padding: 0 1;
+    margin: 1 0;
+}
+
+#prompt-row {
+    height: auto;
+    dock: bottom;
+    border: solid #3a3a3a;
+    padding: 0 1;
+}
+
+#prompt {
+    background: #1a1b1e;
+    border: none;
+    padding: 0;
+    width: 1fr;
+}
+
+#model-label {
+    width: auto;
+    color: #8a8a8a;
+    padding: 0 1;
+    content-align: right middle;
+}
+
+Autocomplete {
+    display: none;
+    max-height: 10;
+    height: auto;
+    border: solid #3a3a3a;
+    background: #141414;
+    padding: 0;
+}
+
+Autocomplete > .option-list--option-highlighted {
+    background: #2a2a2a;
+    color: #e6e6e6;
+}
+
+.role {
+    color: #6e6e6e;
+    text-style: bold;
+    padding: 0 1;
+    margin-top: 1;
+}
