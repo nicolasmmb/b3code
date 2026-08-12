@@ -46,14 +46,15 @@ class ChatScreen(Screen):
 
     def compose(self) -> ComposeResult:
         cwd = _short_cwd(self.c.cwd)
-        yield Static(cwd, id="cwd")
+        with Horizontal(id="top-bar"):
+            yield Static(cwd, id="cwd")
+            yield Static(self.c.config.selected_model, id="model-label")
         with VerticalScroll(id="chat"):
             yield Welcome()
         yield Autocomplete()
         yield PermissionPicker(id="permission")
         with Horizontal(id="prompt-row"):
             yield Input(placeholder="send a message  (@ file  / command)", id="prompt")
-            yield Static(self.c.config.selected_model, id="model-label")
 
     def on_mount(self) -> None:
         self.query_one(PermissionPicker).display = False
