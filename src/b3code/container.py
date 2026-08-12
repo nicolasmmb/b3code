@@ -8,6 +8,7 @@ from b3code.config.schema import AppConfig
 from b3code.config.store import ConfigStore
 from b3code.services.chat import ChatService
 from b3code.services.files import FileIndex
+from b3code.services.permission import PermissionGate
 from b3code.services.session import SessionStore
 
 
@@ -28,6 +29,7 @@ class AppContainer:
         config = store.load()
         sessions = SessionStore.for_cwd(cwd)
         files = FileIndex(cwd)
-        chat = ChatService(config=config, session=sessions, cwd=cwd)
+        gate = PermissionGate(store, config, cwd)
+        chat = ChatService(config=config, session=sessions, cwd=cwd, gate=gate)
         commands = CommandRegistry.build(store, config, sessions, chat)
         return cls(config, store, sessions, files, commands, chat, cwd)

@@ -11,6 +11,8 @@ class AppConfig(BaseModel):
     api_models: list[str] = Field(default_factory=lambda: ["gpt-4o"])
     # Modelo ativo. No gateway é um item de api_models; no catálogo é provider:model.
     selected_model: str = ""
+    # Paths absolutos que o Shell pode usar sem perguntar de novo.
+    shell_allowed_paths: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _default_selected(self) -> "AppConfig":

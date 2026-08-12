@@ -25,6 +25,14 @@ def test_legacy_json_defaults_gateway(tmp_path: Path):
     loaded = ConfigStore(path).load()
     assert loaded.use_provider_gateway is True
     assert loaded.selected_model == "m1"
+    assert loaded.shell_allowed_paths == []
+
+
+def test_shell_allowed_paths_roundtrip(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(shell_allowed_paths=["/tmp"])
+    store.save(cfg)
+    assert store.load().shell_allowed_paths == ["/tmp"]
 
 
 def test_roundtrip(tmp_path: Path):

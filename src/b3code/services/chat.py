@@ -16,23 +16,32 @@ from pydantic_ai import (
     CancellationToken,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
+    ModelRetry,
     PartDeltaEvent,
     PartStartEvent,
 )
+from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.messages import TextPart, TextPartDelta, ToolReturnPart
 from pydantic_ai.models import Model
-from pydantic_ai_harness import CodeMode
+from pydantic_ai_harness import CodeMode, Shell
+from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS
 from pydantic_monty import MountDir
 
 from b3code.config.schema import AppConfig
 from b3code.libs.models import build_model
+from b3code.services.permission import PermissionDenied, PermissionGate, PermissionRequest
 from b3code.services.session import SessionStore
 from b3code.tools.workspace import workspace_toolset
 
 # Estático de propósito: mudar instructions a cada turno invalida o cache Azure.
 INSTRUCTIONS = (
     "You are b3code, a concise coding assistant in the current workspace. "
-    "Prefer CodeMode: write Python that calls tools instead of many round-trips."
+    "Use run_code to batch file tools (paths under /work). "
+    "Use run_command for git/tests/lint. Last expression is the run_code return."
+)
+
+SHELL_TOOLS = frozenset(
+    {"run_command", "start_command", "check_command", "stop_command"}
 )
 
 
@@ -54,10 +63,12 @@ class ChatService:
         session: SessionStore,
         cwd: Path,
         model: Model | None = None,
+        gate: PermissionGate | None = None,
     ) -> None:
         self.config = config
         self.session = session
         self.cwd = cwd
+        self.gate = gate
         # Testes injetam TestModel e pulam o Azure.
         self._injected_model = model
         self._agent: Agent[None, str] | None = None
@@ -70,6 +81,12 @@ class ChatService:
         """Recria o agent no próximo run (ex.: /model). Histórico fica no store."""
         self.config = config
         self._agent = None
+        if self.gate is not None:
+            self.gate.config = config
+
+    def answer_permission(self, choice: str) -> None:
+        if self.gate is not None:
+            self.gate.answer(choice)
 
     def cancel_current(self) -> None:
         if self._cancel is not None:
@@ -100,6 +117,8 @@ class ChatService:
 
         token = CancellationToken()
         self._cancel = token
+        if self.gate is not None:
+            self.gate.on_ask = lambda req: on_event(_permission_event(req))
 
         async def handler(_ctx: Any, events: Any) -> None:
             async for event in events:
@@ -121,6 +140,8 @@ class ChatService:
             on_event(ChatEvent(kind="error", text=str(exc)))
         finally:
             self._cancel = None
+            if self.gate is not None:
+                self.gate.on_ask = None
 
     def _get_agent(self) -> Agent[None, str]:
         if self._agent is None:
@@ -132,22 +153,46 @@ class ChatService:
         # TestModel/FunctionModel não precisam de CodeMode — ele só gera retries.
         if self._injected_model is not None:
             return Agent(model, instructions=INSTRUCTIONS)
+        hooks = Hooks()
+
+        @hooks.on.before_tool_execute(tools=["run_command", "start_command"])
+        async def gate_shell(ctx: Any, *, call: Any, tool_def: Any, args: Any) -> Any:
+            if self.gate is None:
+                return args
+            command = args["command"] if isinstance(args, dict) else getattr(args, "command", "")
+            try:
+                await self.gate.ensure(command)
+            except PermissionDenied as exc:
+                raise ModelRetry(str(exc)) from exc
+            return args
+
         return Agent(
             model,
             instructions=INSTRUCTIONS,
             toolsets=[workspace_toolset(self.cwd)],
             capabilities=[
+                Shell(
+                    cwd=self.cwd,
+                    persist_cwd=True,
+                    default_timeout=120,
+                    denied_env_patterns=LLM_API_KEY_ENV_PATTERNS,
+                ),
                 CodeMode(
-                    tools="all",
-                    max_retries=3,
+                    tools=lambda ctx, td: td.name not in SHELL_TOOLS,
                     mount=MountDir(
                         virtual_path="/work",
                         host_path=str(self.cwd),
                         mode="read-write",
                     ),
-                )
+                    max_retries=3,
+                ),
+                hooks,
             ],
         )
+
+
+def _permission_event(req: PermissionRequest) -> ChatEvent:
+    return ChatEvent(kind="permission", text=req.command, detail=", ".join(req.paths))
 
 
 def _map_event(event: Any) -> list[ChatEvent]:

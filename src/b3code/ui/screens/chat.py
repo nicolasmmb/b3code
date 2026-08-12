@@ -41,6 +41,7 @@ class ChatScreen(Screen):
         self._assistant: AssistantMessage | None = None
         self._buffer = ""
         self._tools: dict[str, ToolRow] = {}
+        self.awaiting_permission = False
 
     def compose(self) -> ComposeResult:
         cwd = _short_cwd(self.c.cwd)
@@ -81,6 +82,13 @@ class ChatScreen(Screen):
         self._send_chat(text)
 
     def on_key(self, event: Key) -> None:
+        if self.awaiting_permission and event.key in {"y", "a", "n"}:
+            choice = {"y": "once", "a": "always", "n": "deny"}[event.key]
+            self.awaiting_permission = False
+            self.c.chat.answer_permission(choice)
+            event.stop()
+            event.prevent_default()
+            return
         ac = self.query_one(Autocomplete)
         if not ac.display:
             return
@@ -97,6 +105,10 @@ class ChatScreen(Screen):
                 event.prevent_default()
 
     def action_escape(self) -> None:
+        if self.awaiting_permission:
+            self.awaiting_permission = False
+            self.c.chat.answer_permission("deny")
+            return
         ac = self.query_one(Autocomplete)
         if ac.display:
             ac.set_suggestions([])
@@ -179,6 +191,14 @@ class ChatScreen(Screen):
                     chat.mount(row)
             else:
                 row.set_status("done", event.detail)
+        elif event.kind == "permission":
+            self.awaiting_permission = True
+            chat.mount(
+                SystemNote(
+                    f"? run_command\n  {event.text}\n  outside: {event.detail}\n"
+                    "[y] once   [a] always   [n] deny"
+                )
+            )
         elif event.kind == "error":
             chat.mount(SystemNote(event.text))
             if self._assistant is not None and not self._buffer:
@@ -234,6 +254,7 @@ class ChatScreen(Screen):
         self._assistant = None
         self._buffer = ""
         self._tools = {}
+        self.awaiting_permission = False
 
     def _rebuild(self) -> None:
         chat = self.query_one("#chat", VerticalScroll)

@@ -25,6 +25,7 @@ Config (`.b3code/config.json`):
 - `/gateway on|off` — persiste a flag
 - `@arquivo` — anexa o conteúdo no turno
 - `/help` `/new` `/resume` `/model` `/gateway` `/quit`
+- Shell (`run_command`) no cwd é livre. Path fora (`/tmp`, `../`) pede `[y] once  [a] always  [n] deny`. `always` grava em `shell_allowed_paths`.
 - sessão em `.b3code/sessions.json` (gitignore)
 
 ```bash
