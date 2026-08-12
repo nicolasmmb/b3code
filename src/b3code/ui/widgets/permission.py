@@ -12,6 +12,7 @@ from b3code.config.schema import DEFAULT_ACCENT
 class QuietOptions(OptionList, can_focus=False):
     pass
 
+
 CHOICES = (
     ("once", "once", "this time"),
     ("always", "always", "remember"),

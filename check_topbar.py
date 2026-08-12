@@ -1,7 +1,7 @@
-
 import asyncio
 from pathlib import Path
 import sys
+
 sys.path.insert(0, "src")
 
 from textual.widgets import Static
@@ -9,6 +9,7 @@ from textual.widgets import Static
 from b3code.container import AppContainer
 from b3code.ui.app import B3App
 from b3code.ui.screens.chat import ChatScreen
+
 
 async def main():
     app = B3App(AppContainer.build(Path(".").resolve()))
@@ -25,5 +26,6 @@ async def main():
             print("screenshot ok, len", len(svg))
         except Exception as e:
             print("screenshot falhou:", type(e).__name__, e)
+
 
 asyncio.run(main())

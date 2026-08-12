@@ -75,12 +75,18 @@ def _write_tree(root: Path) -> list[str]:
 def _synth_messages() -> list[Any]:
     msgs: list[Any] = []
     for i in range(SESSION_TURNS):
-        msgs.append(ModelRequest(parts=[UserPromptPart(content=f"please look at file {i}")]))
+        msgs.append(
+            ModelRequest(parts=[UserPromptPart(content=f"please look at file {i}")])
+        )
         msgs.append(
             ModelResponse(
                 parts=[
-                    ToolCallPart(tool_name="read_file", args={"path": f"src/mod_{i:04d}.py"}),
-                    TextPart(content=f"here is a summary of file {i} " + ("word " * 40)),
+                    ToolCallPart(
+                        tool_name="read_file", args={"path": f"src/mod_{i:04d}.py"}
+                    ),
+                    TextPart(
+                        content=f"here is a summary of file {i} " + ("word " * 40)
+                    ),
                 ]
             )
         )
@@ -208,7 +214,9 @@ async def _stall(
     gaps_ms = [g * 1000 for g in gaps if g > 0]
     if not gaps_ms:
         gaps_ms = [wall_ms]
-    p95 = statistics.quantiles(gaps_ms, n=20)[18] if len(gaps_ms) >= 20 else max(gaps_ms)
+    p95 = (
+        statistics.quantiles(gaps_ms, n=20)[18] if len(gaps_ms) >= 20 else max(gaps_ms)
+    )
     missed = sum(1 for g in gaps_ms if g > HEARTBEAT * 1000 * 2.5)
     return result, {
         "wall_ms": wall_ms,
@@ -283,7 +291,11 @@ def _compare(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
             failures.append(f"missing metric {name}")
             continue
         b, a = bm[name], am[name]
-        wall_pct = ((a["wall_ms"] - b["wall_ms"]) / b["wall_ms"] * 100) if b["wall_ms"] else 0.0
+        wall_pct = (
+            ((a["wall_ms"] - b["wall_ms"]) / b["wall_ms"] * 100)
+            if b["wall_ms"]
+            else 0.0
+        )
         print(
             f"  {name:<22} wall {b['wall_ms']:8.1f} → {a['wall_ms']:8.1f} ({wall_pct:+6.1f}%)  "
             f"max_gap {b['max_gap_ms']:8.1f} → {a['max_gap_ms']:8.1f}"
@@ -309,7 +321,9 @@ def _compare(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
 
     updates = am["delta_updates"].get("updates", DELTA_BURST)
     if updates >= DELTA_BURST * 0.5:
-        failures.append(f"delta_updates {int(updates)} not coalesced (burst={DELTA_BURST})")
+        failures.append(
+            f"delta_updates {int(updates)} not coalesced (burst={DELTA_BURST})"
+        )
 
     return failures
 

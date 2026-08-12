@@ -34,7 +34,7 @@ def expand_attachments(text: str, cwd: Path, read_file) -> str:
         try:
             body = read_file(rel)
         except (OSError, ValueError):
-            chunks.append(f'(could not read @{rel})')
+            chunks.append(f"(could not read @{rel})")
             continue
         chunks.append(f'<file path="{rel}">\n{body}\n</file>')
     return "\n".join(chunks).rstrip()

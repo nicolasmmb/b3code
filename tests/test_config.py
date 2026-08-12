@@ -21,7 +21,9 @@ def test_select_unknown_model():
 
 def test_legacy_json_defaults_gateway(tmp_path: Path):
     path = tmp_path / "config.json"
-    path.write_text('{"api_key": "k", "api_endpoint": "https://x/", "api_models": ["m1"]}\n')
+    path.write_text(
+        '{"api_key": "k", "api_endpoint": "https://x/", "api_models": ["m1"]}\n'
+    )
     loaded = ConfigStore(path).load()
     assert loaded.use_provider_gateway is True
     assert loaded.selected_model == "m1"

@@ -18,9 +18,7 @@ class Autocomplete(OptionList, can_focus=False):
             self.display = False
             return
         self.display = True
-        self.add_options(
-            [Option(f"{item.label}  {item.hint}") for item in items]
-        )
+        self.add_options([Option(f"{item.label}  {item.hint}") for item in items])
         self.highlighted = 0
 
     def current(self) -> Suggestion | None:

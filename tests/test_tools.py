@@ -17,7 +17,9 @@ def test_safe_path_accepts_work_prefix(tmp_path: Path):
 
 
 def test_read_write_list_grep(tmp_path: Path):
-    fns = {name: tool.function for name, tool in workspace_toolset(tmp_path).tools.items()}
+    fns = {
+        name: tool.function for name, tool in workspace_toolset(tmp_path).tools.items()
+    }
     assert fns["write_file"]("n.txt", "hello world") == "wrote n.txt"
     assert fns["read_file"]("n.txt") == "hello world"
     assert "n.txt" in fns["list_dir"](".")

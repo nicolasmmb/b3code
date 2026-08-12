@@ -209,9 +209,7 @@ def _map_event(event: Any) -> list[ChatEvent]:
         return [ChatEvent(kind="text_delta", text=content)] if content else []
     if isinstance(event, PartDeltaEvent):
         content = (
-            event.delta.content_delta
-            if isinstance(event.delta, TextPartDelta)
-            else ""
+            event.delta.content_delta if isinstance(event.delta, TextPartDelta) else ""
         )
         return [ChatEvent(kind="text_delta", text=content)] if content else []
     if isinstance(event, FunctionToolCallEvent):
