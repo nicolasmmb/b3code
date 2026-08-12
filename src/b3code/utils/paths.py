@@ -75,13 +75,15 @@ def iter_workspace_files(
                     try:
                         if entry.is_dir(follow_symlinks=False):
                             stack.append(Path(entry.path))
-                        elif entry.is_file(follow_symlinks=False):
-                            if (
-                                max_size is not None
-                                and entry.stat(follow_symlinks=False).st_size > max_size
-                            ):
-                                continue
-                            yield Path(entry.path)
+                            continue
+                        if not entry.is_file(follow_symlinks=False):
+                            continue
+                        if (
+                            max_size is not None
+                            and entry.stat(follow_symlinks=False).st_size > max_size
+                        ):
+                            continue
+                        yield Path(entry.path)
                     except OSError:
                         continue
         except OSError:

@@ -66,13 +66,13 @@ class SessionStore:
 
     @property
     def messages(self) -> list[ModelMessage]:
-        if self._messages is None:
-            if not self._current.messages:
-                self._messages = []
-            else:
-                self._messages = ModelMessagesTypeAdapter.validate_python(
-                    self._current.messages
-                )
+        if self._messages is not None:
+            return self._messages
+        self._messages = (
+            ModelMessagesTypeAdapter.validate_python(self._current.messages)
+            if self._current.messages
+            else []
+        )
         return self._messages
 
     def replace(self, messages: list[ModelMessage]) -> None:

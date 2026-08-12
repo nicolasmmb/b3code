@@ -204,14 +204,16 @@ def _permission_event(req: PermissionRequest) -> ChatEvent:
 
 
 def _map_event(event: Any) -> list[ChatEvent]:
-    if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
-        if event.part.content:
-            return [ChatEvent(kind="text_delta", text=event.part.content)]
-        return []
-    if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
-        if event.delta.content_delta:
-            return [ChatEvent(kind="text_delta", text=event.delta.content_delta)]
-        return []
+    if isinstance(event, PartStartEvent):
+        content = event.part.content if isinstance(event.part, TextPart) else ""
+        return [ChatEvent(kind="text_delta", text=content)] if content else []
+    if isinstance(event, PartDeltaEvent):
+        content = (
+            event.delta.content_delta
+            if isinstance(event.delta, TextPartDelta)
+            else ""
+        )
+        return [ChatEvent(kind="text_delta", text=content)] if content else []
     if isinstance(event, FunctionToolCallEvent):
         args = str(event.part.args)
         return [
@@ -221,27 +223,27 @@ def _map_event(event: Any) -> list[ChatEvent]:
                 detail=_short(args),
             )
         ]
-    if isinstance(event, FunctionToolResultEvent) and isinstance(
+    if not isinstance(event, FunctionToolResultEvent) or not isinstance(
         event.part, ToolReturnPart
     ):
-        events = [
-            ChatEvent(
-                kind="tool_end",
-                tool=event.part.tool_name,
-                detail=_short(str(event.part.content)),
-            )
-        ]
-        # CodeMode empacota tools filhas em metadata do run_code.
-        meta = event.part.metadata or {}
-        nested = meta.get("tool_calls") or {}
-        returns = meta.get("tool_returns") or {}
-        for call_id, call in nested.items():
-            name = getattr(call, "tool_name", "tool")
-            ret = returns.get(call_id)
-            detail = _short(str(getattr(ret, "content", ""))) if ret else ""
-            events.append(ChatEvent(kind="tool_end", tool=name, detail=detail))
-        return events
-    return []
+        return []
+    events = [
+        ChatEvent(
+            kind="tool_end",
+            tool=event.part.tool_name,
+            detail=_short(str(event.part.content)),
+        )
+    ]
+    # CodeMode empacota tools filhas em metadata do run_code.
+    meta = event.part.metadata or {}
+    nested = meta.get("tool_calls") or {}
+    returns = meta.get("tool_returns") or {}
+    for call_id, call in nested.items():
+        name = getattr(call, "tool_name", "tool")
+        ret = returns.get(call_id)
+        detail = _short(str(getattr(ret, "content", ""))) if ret else ""
+        events.append(ChatEvent(kind="tool_end", tool=name, detail=detail))
+    return events
 
 
 def _short(value: str, n: int = 80) -> str:

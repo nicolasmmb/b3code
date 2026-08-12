@@ -61,9 +61,7 @@ class PermissionPicker(Vertical):
         for i, (_value, label, hint) in enumerate(CHOICES):
             mark = "›" if i == idx else " "
             body = f"{mark}  {label:<8} {hint}".rstrip()
-            if i == idx:
-                rows.append(Option(Text(body, style=self.accent)))
-            else:
-                rows.append(Option(Text(body, style="#6e6e6e")))
+            style = self.accent if i == idx else "#6e6e6e"
+            rows.append(Option(Text(body, style=style)))
         options.add_options(rows)
         options.highlighted = idx

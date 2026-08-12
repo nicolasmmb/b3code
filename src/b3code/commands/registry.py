@@ -64,7 +64,9 @@ class CommandRegistry:
                 rows = []
                 for session in sessions.list_sessions():
                     mark = "*" if session.id == sessions.current_id else " "
-                    rows.append(f"{mark} {session.id}  {session.created_at}  {len(session.messages)} msgs")
+                    rows.append(
+                        f"{mark} {session.id}  {session.created_at}  {len(session.messages)} msgs"
+                    )
                 return CommandResult("sessions:\n" + "\n".join(rows) or "(none)")
             sessions.activate(args[0])
             return CommandResult(f"resumed {args[0]}", action="refresh")
@@ -90,9 +92,12 @@ class CommandRegistry:
             if token not in {"on", "off", "true", "false"}:
                 return CommandResult("usage: /gateway on|off")
             config.use_provider_gateway = token in {"on", "true"}
-            if config.use_provider_gateway and config.selected_model not in config.api_models:
-                if config.api_models:
-                    config.selected_model = config.api_models[0]
+            if (
+                config.use_provider_gateway
+                and config.api_models
+                and config.selected_model not in config.api_models
+            ):
+                config.selected_model = config.api_models[0]
             store.save(config)
             chat.reload(config)
             state = "on" if config.use_provider_gateway else "off"
@@ -116,7 +121,9 @@ class CommandRegistry:
         head = tokens[0] if tokens else ""
         if len(tokens) <= 1:
             return [
-                Suggestion(value=f"/{c.name}", label=f"/{c.name}", hint=c.help, kind="cmd")
+                Suggestion(
+                    value=f"/{c.name}", label=f"/{c.name}", hint=c.help, kind="cmd"
+                )
                 for c in self.roots.values()
                 if c.name.startswith(head)
             ]
@@ -139,7 +146,12 @@ class CommandRegistry:
         if cmd.name == "resume":
             return []
         return [
-            Suggestion(value=f"/{cmd.name} {child.name}", label=f"/{cmd.name} {child.name}", hint=child.help, kind="cmd")
+            Suggestion(
+                value=f"/{cmd.name} {child.name}",
+                label=f"/{cmd.name} {child.name}",
+                hint=child.help,
+                kind="cmd",
+            )
             for child in cmd.children.values()
             if child.name.startswith(prefix)
         ]

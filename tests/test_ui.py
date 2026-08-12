@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from textual.app import App
 from textual.widgets import Static
 
 from b3code.container import AppContainer
@@ -10,7 +11,7 @@ from b3code.ui.app import B3App
 from b3code.ui.coalesce import count_markdown_updates
 from b3code.ui.screens.chat import ChatScreen, Welcome
 from b3code.ui.widgets.autocomplete import Autocomplete
-from b3code.ui.widgets.messages import SystemNote
+from b3code.ui.widgets.messages import SystemNote, ToolRow
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.spinner import FRAMES, Spinner
 
@@ -52,9 +53,6 @@ async def test_permission_picker_arrows(tmp_path: Path):
         await pilot.press("down")
         await pilot.pause()
         assert picker.current() == "always"
-
-
-from textual.app import App
 
 
 async def test_spinner_animates():
@@ -127,3 +125,16 @@ async def test_new_refused_while_busy(tmp_path: Path):
         await pilot.pause()
         notes = [str(n.render()) for n in screen.query(SystemNote)]
         assert any("busy" in n for n in notes)
+
+
+async def test_tool_events_reuse_the_same_row(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._apply_event(ChatEvent(kind="tool_start", tool="grep", detail="one"))
+        screen._apply_event(ChatEvent(kind="tool_end", tool="grep", detail="two"))
+        rows = list(screen.query(ToolRow))
+        assert len(rows) == 1
+        assert rows[0].detail == "two"

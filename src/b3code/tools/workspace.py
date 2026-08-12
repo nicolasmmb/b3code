@@ -44,10 +44,11 @@ def workspace_toolset(cwd: Path) -> FunctionToolset:
                 continue
             rel = file.relative_to(cwd.resolve())
             for i, line in enumerate(lines, 1):
-                if rx.search(line):
-                    hits.append(f"{rel}:{i}:{line}")
-                    if len(hits) >= _MAX_HITS:
-                        return "\n".join(hits)
+                if not rx.search(line):
+                    continue
+                hits.append(f"{rel}:{i}:{line}")
+                if len(hits) >= _MAX_HITS:
+                    return "\n".join(hits)
         return "\n".join(hits) or "(no matches)"
 
     def write_file(path: str, content: str) -> str:

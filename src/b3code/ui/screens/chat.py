@@ -102,13 +102,9 @@ class ChatScreen(Screen):
     def on_key(self, event: Key) -> None:
         if self.awaiting_permission:
             picker = self.query_one(PermissionPicker)
-            if event.key == "down":
-                picker.move(1)
-                event.stop()
-                event.prevent_default()
-                return
-            if event.key == "up":
-                picker.move(-1)
+            delta = {"down": 1, "up": -1}.get(event.key)
+            if delta is not None:
+                picker.move(delta)
                 event.stop()
                 event.prevent_default()
                 return
@@ -117,20 +113,26 @@ class ChatScreen(Screen):
                 event.stop()
                 event.prevent_default()
                 return
+            return
         ac = self.query_one(Autocomplete)
         if not ac.display:
             return
         if event.key == "down":
             ac.action_cursor_down()
             event.stop()
-        elif event.key == "up":
+            return
+        if event.key == "up":
             ac.action_cursor_up()
             event.stop()
-        elif event.key == "tab":
-            if ac.current() is not None:
-                self._apply(ac.current())
-                event.stop()
-                event.prevent_default()
+            return
+        if event.key != "tab":
+            return
+        item = ac.current()
+        if item is None:
+            return
+        self._apply(item)
+        event.stop()
+        event.prevent_default()
 
     def _stop_thinking(self) -> None:
         if self._thinking is not None:
@@ -246,43 +248,45 @@ class ChatScreen(Screen):
         self._flush_text()
         chat = self.query_one("#chat")
         if event.kind == "tool_start":
-            row = self._tools.get(event.tool)
-            if row is None:
-                row = ToolRow(event.tool, event.detail, status="running")
-                self._tools[event.tool] = row
-                if self._assistant is not None:
-                    chat.mount(row, before=self._assistant)
-                else:
-                    chat.mount(row)
-            else:
-                row.set_status("running", event.detail)
-        elif event.kind == "tool_end":
-            row = self._tools.get(event.tool)
-            if row is None:
-                row = ToolRow(event.tool, event.detail, status="done")
-                self._tools[event.tool] = row
-                if self._assistant is not None:
-                    chat.mount(row, before=self._assistant)
-                else:
-                    chat.mount(row)
-            else:
-                row.set_status("done", event.detail)
-        elif event.kind == "permission":
+            self._upsert_tool(chat, event, "running")
+            self._scroll_end()
+            return
+        if event.kind == "tool_end":
+            self._upsert_tool(chat, event, "done")
+            self._scroll_end()
+            return
+        if event.kind == "permission":
             self.awaiting_permission = True
             self.query_one(Autocomplete).set_suggestions([])
             self.query_one(PermissionPicker).show(
                 event.text, event.detail, self.c.config.accent
             )
-        elif event.kind == "error":
+            self._scroll_end()
+            return
+        if event.kind == "error":
             self._stop_thinking()
             chat.mount(SystemNote(event.text))
             if self._assistant is not None and not self._buffer:
                 self._assistant.update("_(cancelled or failed)_")
-        elif event.kind == "done":
+            self._scroll_end()
+            return
+        if event.kind == "done":
             self._stop_thinking()
             if self._assistant is not None and event.text and not self._buffer:
                 self._assistant.update(event.text)
         self._scroll_end()
+
+    def _upsert_tool(self, chat, event: ChatEvent, status: str) -> None:
+        row = self._tools.get(event.tool)
+        if row is not None:
+            row.set_status(status, event.detail)
+            return
+        row = ToolRow(event.tool, event.detail, status=status)
+        self._tools[event.tool] = row
+        if self._assistant is None:
+            chat.mount(row)
+            return
+        chat.mount(row, before=self._assistant)
 
     def _refresh_autocomplete(self, value: str, cursor: int) -> None:
         _, _, token = current_token(value, cursor)
@@ -335,10 +339,12 @@ class ChatScreen(Screen):
         if turn.role == "user":
             chat.mount(RoleLabel("you"))
             chat.mount(UserMessage(turn.text))
-        elif turn.role == "assistant":
+            return
+        if turn.role == "assistant":
             chat.mount(RoleLabel("assistant"))
             chat.mount(AssistantMessage(turn.text))
-        elif turn.role == "tool":
+            return
+        if turn.role == "tool":
             chat.mount(ToolRow(turn.tool, turn.detail, status="done"))
 
     def _reset_chat(self) -> None:
