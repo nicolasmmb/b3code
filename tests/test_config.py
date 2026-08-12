@@ -10,13 +10,21 @@ def test_select_model_moves_to_front():
     cfg = AppConfig(api_models=["a", "b", "c"])
     cfg.select_model("c")
     assert cfg.api_models == ["c", "a", "b"]
-    assert cfg.model == "c"
+    assert cfg.selected_model == "c"
 
 
 def test_select_unknown_model():
     cfg = AppConfig(api_models=["a"])
     with pytest.raises(ValueError):
         cfg.select_model("nope")
+
+
+def test_legacy_json_defaults_gateway(tmp_path: Path):
+    path = tmp_path / "config.json"
+    path.write_text('{"api_key": "k", "api_endpoint": "https://x/", "api_models": ["m1"]}\n')
+    loaded = ConfigStore(path).load()
+    assert loaded.use_provider_gateway is True
+    assert loaded.selected_model == "m1"
 
 
 def test_roundtrip(tmp_path: Path):
@@ -26,7 +34,8 @@ def test_roundtrip(tmp_path: Path):
     store.save(cfg)
     loaded = store.load()
     assert loaded.api_key == "k"
-    assert loaded.model == "m1"
+    assert loaded.selected_model == "m1"
+    assert loaded.use_provider_gateway is True
 
 
 def test_load_creates_default(tmp_path: Path):

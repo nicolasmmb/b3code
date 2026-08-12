@@ -46,5 +46,30 @@ def test_execute_model_switch(tmp_path: Path):
     reg = CommandRegistry.build(store, cfg, sessions, chat)
     result = reg.execute("/model gpt-4o-mini")
     assert result.action == "refresh"
-    assert cfg.model == "gpt-4o-mini"
-    assert store.load().model == "gpt-4o-mini"
+    assert cfg.selected_model == "gpt-4o-mini"
+    assert store.load().selected_model == "gpt-4o-mini"
+
+
+def test_gateway_toggle(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(api_models=["gpt-4o"])
+    store.save(cfg)
+    sessions = SessionStore(tmp_path / "sessions.json")
+    chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
+    reg = CommandRegistry.build(store, cfg, sessions, chat)
+    assert cfg.use_provider_gateway is True
+    result = reg.execute("/gateway off")
+    assert result.action == "refresh"
+    assert cfg.use_provider_gateway is False
+    assert store.load().use_provider_gateway is False
+
+
+def test_complete_catalog_models(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(use_provider_gateway=False, api_models=["gpt-4o"])
+    store.save(cfg)
+    sessions = SessionStore(tmp_path / "sessions.json")
+    chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
+    reg = CommandRegistry.build(store, cfg, sessions, chat)
+    names = [s.value for s in reg.complete("/model openai:")]
+    assert any(n.startswith("openai:") for n in names)

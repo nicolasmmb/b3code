@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from b3code.config.schema import AppConfig
 from b3code.config.store import ConfigStore
+from b3code.services.catalog import complete_models
 from b3code.services.chat import ChatService
 from b3code.services.session import SessionStore
 
@@ -35,9 +36,9 @@ class Command:
 
 
 class CommandRegistry:
-    def __init__(self, roots: dict[str, Command], models: list[str] | None = None) -> None:
+    def __init__(self, roots: dict[str, Command], config: AppConfig) -> None:
         self.roots = roots
-        self.models = models or []
+        self.config = config
 
     @classmethod
     def build(
@@ -70,15 +71,32 @@ class CommandRegistry:
 
         def model_cmd(*args: str) -> CommandResult:
             if not args:
-                lines = []
-                for i, name in enumerate(config.api_models):
-                    mark = "*" if i == 0 else " "
-                    lines.append(f"{mark} {name}")
-                return CommandResult("models:\n" + "\n".join(lines))
-            config.select_model(args[0])
+                mode = "gateway" if config.use_provider_gateway else "catalog"
+                return CommandResult(
+                    f"model: {config.selected_model}  ({mode})\n"
+                    "type /model <name> or search in the autocomplete"
+                )
+            name = " ".join(args)
+            config.select_model(name)
             store.save(config)
             chat.reload(config)
-            return CommandResult(f"model → {config.model}", action="refresh")
+            return CommandResult(f"model → {config.selected_model}", action="refresh")
+
+        def gateway_cmd(*args: str) -> CommandResult:
+            if not args:
+                state = "on" if config.use_provider_gateway else "off"
+                return CommandResult(f"gateway: {state}")
+            token = args[0].lower()
+            if token not in {"on", "off", "true", "false"}:
+                return CommandResult("usage: /gateway on|off")
+            config.use_provider_gateway = token in {"on", "true"}
+            if config.use_provider_gateway and config.selected_model not in config.api_models:
+                if config.api_models:
+                    config.selected_model = config.api_models[0]
+            store.save(config)
+            chat.reload(config)
+            state = "on" if config.use_provider_gateway else "off"
+            return CommandResult(f"gateway: {state}", action="refresh")
 
         roots = {
             "help": Command("help", "list commands", help_cmd),
@@ -87,8 +105,9 @@ class CommandRegistry:
             "quit": Command("quit", "quit the app", quit_cmd),
             "exit": Command("exit", "quit the app", quit_cmd),
             "model": Command("model", "list or switch model", model_cmd),
+            "gateway": Command("gateway", "toggle Azure gateway", gateway_cmd),
         }
-        return cls(roots, models=list(config.api_models))
+        return cls(roots, config)
 
     def complete(self, line: str) -> list[Suggestion]:
         if not line.startswith("/"):
@@ -106,10 +125,16 @@ class CommandRegistry:
             return []
         prefix = tokens[1]
         if cmd.name == "model":
+            hint = "gateway" if self.config.use_provider_gateway else "catalog"
             return [
-                Suggestion(value=name, label=name, hint="deployment", kind="cmd")
-                for name in self.models
-                if name.startswith(prefix)
+                Suggestion(value=name, label=name, hint=hint, kind="cmd")
+                for name in complete_models(self.config, prefix)
+            ]
+        if cmd.name == "gateway":
+            return [
+                Suggestion(value=v, label=v, hint="toggle", kind="cmd")
+                for v in ("on", "off")
+                if v.startswith(prefix)
             ]
         if cmd.name == "resume":
             return []

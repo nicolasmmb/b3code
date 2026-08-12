@@ -25,7 +25,7 @@ from pydantic_ai_harness import CodeMode
 from pydantic_monty import MountDir
 
 from b3code.config.schema import AppConfig
-from b3code.libs.azure import build_model
+from b3code.libs.models import build_model
 from b3code.services.session import SessionStore
 from b3code.tools.workspace import workspace_toolset
 
@@ -85,15 +85,18 @@ class ChatService:
                 self.busy = False
 
     async def _run_one(self, prompt: str, on_event: OnEvent) -> None:
-        if not self.config.api_key or not self.config.api_endpoint:
-            if self._injected_model is None:
-                on_event(
-                    ChatEvent(
-                        kind="error",
-                        text="missing api_key or api_endpoint in .b3code/config.json",
-                    )
+        if (
+            self._injected_model is None
+            and self.config.use_provider_gateway
+            and (not self.config.api_key or not self.config.api_endpoint)
+        ):
+            on_event(
+                ChatEvent(
+                    kind="error",
+                    text="missing api_key or api_endpoint in .b3code/config.json",
                 )
-                return
+            )
+            return
 
         token = CancellationToken()
         self._cancel = token

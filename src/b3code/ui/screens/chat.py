@@ -50,7 +50,7 @@ class ChatScreen(Screen):
         yield Autocomplete()
         with Horizontal(id="prompt-row"):
             yield Input(placeholder="send a message  (@ file  / command)", id="prompt")
-            yield Static(self.c.config.model, id="model-label")
+            yield Static(self.c.config.selected_model, id="model-label")
 
     def on_mount(self) -> None:
         self.query_one("#prompt", Input).focus()
@@ -122,7 +122,7 @@ class ChatScreen(Screen):
             self._reset_chat()
         if result.action == "refresh":
             self._rebuild()
-            self.query_one("#model-label", Static).update(self.c.config.model)
+            self.query_one("#model-label", Static).update(self.c.config.selected_model)
         if result.message:
             self._show_welcome(False)
             self.query_one("#chat").mount(SystemNote(result.message))
