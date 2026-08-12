@@ -3,6 +3,8 @@ from pathlib import Path
 from b3code.container import AppContainer
 from b3code.ui.app import B3App
 from b3code.ui.screens.chat import ChatScreen, Welcome
+from textual.widgets import Static
+
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.permission import PermissionPicker
 
@@ -17,7 +19,10 @@ async def test_app_opens_welcome(tmp_path: Path):
         assert screen.query_one("#prompt")
         assert screen.query_one("#cwd-icon")
         assert screen.query_one("#model-icon")
-        assert screen.query_one("#model-label")
+        cwd = screen.query_one("#cwd", Static)
+        model = screen.query_one("#model-label", Static)
+        assert cwd.content
+        assert model.content
         await pilot.press("/")
         await pilot.pause()
         ac = screen.query_one(Autocomplete)
