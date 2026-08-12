@@ -47,7 +47,9 @@ class ChatScreen(Screen):
     def compose(self) -> ComposeResult:
         cwd = _short_cwd(self.c.cwd)
         with Horizontal(id="top-bar"):
+            yield Static("▸", id="cwd-icon")
             yield Static(cwd, id="cwd")
+            yield Static("◆", id="model-icon")
             yield Static(self.c.config.selected_model, id="model-label")
         with VerticalScroll(id="chat"):
             yield Welcome()
@@ -219,7 +221,9 @@ class ChatScreen(Screen):
         elif event.kind == "permission":
             self.awaiting_permission = True
             self.query_one(Autocomplete).set_suggestions([])
-            self.query_one(PermissionPicker).show(event.text, event.detail)
+            self.query_one(PermissionPicker).show(
+                event.text, event.detail, self.c.config.accent
+            )
         elif event.kind == "error":
             chat.mount(SystemNote(event.text))
             if self._assistant is not None and not self._buffer:

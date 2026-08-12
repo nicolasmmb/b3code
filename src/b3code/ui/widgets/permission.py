@@ -1,47 +1,69 @@
-"""Lista de permissão do Shell: setas + Enter."""
+"""Lista de permissão do Shell: setas + Enter. Highlight usa accent do JSON."""
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
+from b3code.config.schema import DEFAULT_ACCENT
+
+
+class QuietOptions(OptionList, can_focus=False):
+    pass
+
 CHOICES = (
-    ("once", "once", "run this command once"),
-    ("always", "always", "save path and always allow"),
-    ("deny", "deny", "do not run"),
+    ("once", "once", "this time"),
+    ("always", "always", "remember"),
+    ("deny", "deny", ""),
 )
 
 
 class PermissionPicker(Vertical):
+    def __init__(self, accent: str = DEFAULT_ACCENT, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.accent = accent
+
     def compose(self) -> ComposeResult:
         yield Static("", id="permission-summary")
-        yield OptionList(id="permission-options")
+        yield QuietOptions(id="permission-options")
 
-    def show(self, command: str, outside: str) -> None:
-        extra = f"\noutside: {outside}" if outside else ""
-        self.query_one("#permission-summary", Static).update(
-            f"allow this command?\n{command}{extra}"
-        )
-        options = self.query_one("#permission-options", OptionList)
-        options.clear_options()
-        options.add_options(
-            [Option(f"{label}    {hint}") for _value, label, hint in CHOICES]
-        )
-        options.highlighted = 0
+    def show(self, command: str, outside: str, accent: str | None = None) -> None:
+        if accent:
+            self.accent = accent
+        line = command.replace("\n", " ")
+        if len(line) > 72:
+            line = line[:71] + "…"
+        extra = f"\n   {outside}" if outside else ""
+        self.query_one("#permission-summary", Static).update(f"▸  {line}{extra}")
         self.display = True
+        self.paint(0)
 
     def hide(self) -> None:
         self.display = False
 
     def move(self, delta: int) -> None:
-        options = self.query_one("#permission-options", OptionList)
-        if delta > 0:
-            options.action_cursor_down()
-        else:
-            options.action_cursor_up()
+        options = self.query_one("#permission-options", QuietOptions)
+        idx = options.highlighted or 0
+        idx = max(0, min(len(CHOICES) - 1, idx + delta))
+        self.paint(idx)
 
     def current(self) -> str:
         idx = self.query_one("#permission-options", OptionList).highlighted
         if idx is None:
             return "deny"
         return CHOICES[idx][0]
+
+    def paint(self, idx: int) -> None:
+        options = self.query_one("#permission-options", QuietOptions)
+        options.clear_options()
+        rows: list[Option] = []
+        for i, (_value, label, hint) in enumerate(CHOICES):
+            mark = "›" if i == idx else " "
+            body = f"{mark}  {label:<8} {hint}".rstrip()
+            if i == idx:
+                rows.append(Option(Text(body, style=self.accent)))
+            else:
+                rows.append(Option(Text(body, style="#6e6e6e")))
+        options.add_options(rows)
+        options.highlighted = idx

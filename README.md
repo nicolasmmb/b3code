@@ -16,7 +16,8 @@ Config (`.b3code/config.json`):
   "api_key": "...",
   "api_endpoint": "https://SEU-RECURSO.openai.azure.com/openai/v1/",
   "api_models": ["gpt-4o"],
-  "selected_model": "gpt-4o"
+  "selected_model": "gpt-4o",
+  "accent": "#c9a227"
 }
 ```
 

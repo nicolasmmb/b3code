@@ -4,22 +4,27 @@ Screen {
 }
 
 #top-bar {
-    height: auto;
-    min-height: 1;
-    background: #202225;
-    border-bottom: solid #33363b;
+    height: 1;
+    background: #1a1b1e;
+    border-bottom: solid #2a2a2e;
+    padding: 0 1;
+}
+
+#cwd-icon,
+#model-icon {
+    width: auto;
+    color: #6e6e6e;
+    padding: 0 1 0 0;
 }
 
 #cwd {
-    color: #6e6e6e;
-    padding: 0 0 0 1;
+    color: #9a9a9a;
     width: 1fr;
 }
 
 #model-label {
     width: auto;
-    color: #8a8a8a;
-    padding: 0 1 0 0;
+    color: #9a9a9a;
     content-align: right middle;
 }
 
@@ -117,27 +122,26 @@ Autocomplete > .option-list--option-highlighted {
 PermissionPicker {
     display: none;
     height: auto;
-    border: solid #3a3a3a;
-    background: #141414;
-    padding: 1 1 0 1;
+    background: #1a1b1e;
+    border-top: solid #2a2a2e;
+    padding: 1 2;
 }
 
 #permission-summary {
-    color: #c8c8c8;
+    color: #9a9a9a;
     margin-bottom: 1;
 }
 
 #permission-options {
     height: auto;
-    max-height: 6;
+    max-height: 5;
     border: none;
-    background: #141414;
+    background: #1a1b1e;
     padding: 0;
 }
 
 #permission-options > .option-list--option-highlighted {
-    background: #2a2a2a;
-    color: #e6e6e6;
+    background: #1a1b1e;
 }
 
 .role {

@@ -1,6 +1,11 @@
 """Config persistida. JSON antigo (sem os campos novos) continua válido."""
 
-from pydantic import BaseModel, Field, model_validator
+import re
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+DEFAULT_ACCENT = "#c9a227"
+_HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 
 class AppConfig(BaseModel):
@@ -13,6 +18,14 @@ class AppConfig(BaseModel):
     selected_model: str = ""
     # Paths absolutos que o Shell pode usar sem perguntar de novo.
     shell_allowed_paths: list[str] = Field(default_factory=list)
+    accent: str = DEFAULT_ACCENT
+
+    @field_validator("accent", mode="before")
+    @classmethod
+    def accent_hex(cls, value: object) -> str:
+        if isinstance(value, str) and _HEX.match(value.strip()):
+            return value.strip()
+        return DEFAULT_ACCENT
 
     @model_validator(mode="after")
     def _default_selected(self) -> "AppConfig":

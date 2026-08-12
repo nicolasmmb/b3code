@@ -15,6 +15,9 @@ async def test_app_opens_welcome(tmp_path: Path):
         assert isinstance(screen, ChatScreen)
         assert screen.query_one(Welcome).display
         assert screen.query_one("#prompt")
+        assert screen.query_one("#cwd-icon")
+        assert screen.query_one("#model-icon")
+        assert screen.query_one("#model-label")
         await pilot.press("/")
         await pilot.pause()
         ac = screen.query_one(Autocomplete)
