@@ -6,8 +6,14 @@ porque o sandbox monta o cwd em `/work`.
 
 from __future__ import annotations
 
+import os
 import shlex
+from collections.abc import Iterator
 from pathlib import Path
+
+SKIP_DIRS = frozenset(
+    {".git", ".venv", ".b3code", "node_modules", "__pycache__", "dist"}
+)
 
 
 def resolve_agent_path(path: str, cwd: Path) -> Path:
@@ -45,3 +51,46 @@ def escaped_paths(command: str, cwd: Path) -> list[Path]:
         if not resolved.is_relative_to(cwd) and resolved not in found:
             found.append(resolved)
     return found
+
+
+def iter_workspace_files(
+    root: Path,
+    *,
+    skip_dirs: frozenset[str] = SKIP_DIRS,
+    max_size: int | None = None,
+) -> Iterator[Path]:
+    """Walk files under `root`, pruning skip_dirs at each level (no post-filter rglob)."""
+    root = root.resolve()
+    if root.is_file():
+        yield root
+        return
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as it:
+                for entry in it:
+                    if entry.name in skip_dirs:
+                        continue
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            if (
+                                max_size is not None
+                                and entry.stat(follow_symlinks=False).st_size > max_size
+                            ):
+                                continue
+                            yield Path(entry.path)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write `text` via temp + os.replace so a crash never leaves a half JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)

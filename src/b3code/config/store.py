@@ -1,8 +1,10 @@
 """Load/save de `.b3code/config.json` no cwd do projeto."""
 
+import asyncio
 from pathlib import Path
 
 from b3code.config.schema import AppConfig
+from b3code.utils.paths import atomic_write_text
 
 
 class ConfigStore:
@@ -21,5 +23,8 @@ class ConfigStore:
         return AppConfig.model_validate_json(self.path.read_text(encoding="utf-8"))
 
     def save(self, cfg: AppConfig) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(cfg.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        atomic_write_text(self.path, cfg.model_dump_json(indent=2) + "\n")
+
+    async def asave(self, cfg: AppConfig) -> None:
+        text = cfg.model_dump_json(indent=2) + "\n"
+        await asyncio.to_thread(atomic_write_text, self.path, text)

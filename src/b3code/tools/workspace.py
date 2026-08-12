@@ -7,9 +7,8 @@ from pathlib import Path
 
 from pydantic_ai.toolsets import FunctionToolset
 
-from b3code.utils.paths import safe_workspace_path
+from b3code.utils.paths import SKIP_DIRS, iter_workspace_files, safe_workspace_path
 
-_SKIP_DIRS = {".git", ".venv", ".b3code", "node_modules", "__pycache__", "dist"}
 _MAX_HITS = 50
 _MAX_FILE_CHARS = 200_000
 
@@ -28,7 +27,7 @@ def workspace_toolset(cwd: Path) -> FunctionToolset:
         target = safe_workspace_path(path, cwd)
         names: list[str] = []
         for child in sorted(target.iterdir(), key=lambda p: p.name.lower()):
-            if child.name in _SKIP_DIRS:
+            if child.name in SKIP_DIRS:
                 continue
             names.append(child.name + ("/" if child.is_dir() else ""))
         return names
@@ -62,15 +61,4 @@ def workspace_toolset(cwd: Path) -> FunctionToolset:
 
 
 def _iter_text_files(root: Path):
-    root = root.resolve()
-    if root.is_file():
-        yield root
-        return
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in _SKIP_DIRS for part in path.parts):
-            continue
-        if path.stat().st_size > 1_000_000:
-            continue
-        yield path
+    yield from iter_workspace_files(root, max_size=1_000_000)

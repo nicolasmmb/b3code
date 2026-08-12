@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from textual import on, work
@@ -10,15 +11,15 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import Key
 from textual.screen import Screen
+from textual.timer import Timer
 from textual.widgets import Input, Static
 
 from b3code.commands.registry import Suggestion
 from b3code.container import AppContainer
 from b3code.services.chat import ChatEvent
 from b3code.services.session import DisplayTurn
+from b3code.ui.coalesce import FLUSH_INTERVAL
 from b3code.ui.widgets.autocomplete import Autocomplete
-from b3code.ui.widgets.permission import PermissionPicker
-from b3code.ui.widgets.spinner import Spinner
 from b3code.ui.widgets.messages import (
     AssistantMessage,
     RoleLabel,
@@ -26,6 +27,8 @@ from b3code.ui.widgets.messages import (
     ToolRow,
     UserMessage,
 )
+from b3code.ui.widgets.permission import PermissionPicker
+from b3code.ui.widgets.spinner import Spinner
 from b3code.utils.prompt import apply_suggestion, current_token, expand_attachments
 
 
@@ -45,6 +48,9 @@ class ChatScreen(Screen):
         self._tools: dict[str, ToolRow] = {}
         self.awaiting_permission = False
         self._thinking: Spinner | None = None
+        self._flush_timer: Timer | None = None
+        self._text_dirty = False
+        self._ac_query: str | None = None
 
     def compose(self) -> ComposeResult:
         cwd = _short_cwd(self.c.cwd)
@@ -68,6 +74,7 @@ class ChatScreen(Screen):
             self._show_welcome(False)
             for turn in turns:
                 self._mount_turn(turn)
+        self._scan_files()
 
     @on(Input.Changed, "#prompt")
     def on_prompt_changed(self, event: Input.Changed) -> None:
@@ -160,6 +167,14 @@ class ChatScreen(Screen):
         self.app.exit()
 
     def _run_command(self, line: str) -> None:
+        name = (line[1:].split() or [""])[0]
+        if name in {"new", "resume"} and self.c.chat.busy:
+            self._show_welcome(False)
+            self.query_one("#chat").mount(
+                SystemNote("busy — press esc to cancel first")
+            )
+            self._scroll_end()
+            return
         result = self.c.commands.execute(line)
         if result.action == "quit":
             self.app.exit()
@@ -188,26 +203,49 @@ class ChatScreen(Screen):
         self._thinking = Spinner("thinking")
         chat.mount(self._thinking)
         self._scroll_end()
-        prompt = expand_attachments(typed, self.c.cwd, self.c.file_index.read)
-        self._run_agent(prompt)
+        self._run_agent(typed)
+
+    @work(exclusive=True, group="files-scan")
+    async def _scan_files(self) -> None:
+        await self.c.file_index.ensure_scanned()
+        self._after_scan()
+
+    def _after_scan(self) -> None:
+        inp = self.query_one("#prompt", Input)
+        self._refresh_autocomplete(inp.value, inp.cursor_position)
 
     @work(exclusive=False)
-    async def _run_agent(self, prompt: str) -> None:
-        # enqueue serializa: se já houver um run, esta msg espera na fila
+    async def _run_agent(self, typed: str) -> None:
+        # anexos e enqueue no worker: o submit da UI não lê disco
+        prompt = await asyncio.to_thread(
+            expand_attachments, typed, self.c.cwd, self.c.file_index.read
+        )
         await self.c.chat.enqueue(prompt, self._on_event)
 
     def _on_event(self, event: ChatEvent) -> None:
         # O handler do agent pode disparar fora de um callback Textual.
         self.call_later(self._apply_event, event)
 
+    def _flush_text(self) -> None:
+        self._flush_timer = None
+        if not self._text_dirty:
+            return
+        self._text_dirty = False
+        if self._assistant is not None:
+            self._assistant.update(self._buffer)
+        self._stop_thinking()
+        self._scroll_end()
+
     def _apply_event(self, event: ChatEvent) -> None:
-        chat = self.query_one("#chat")
         if event.kind == "text_delta":
             self._buffer += event.text
-            if self._assistant is not None:
-                self._assistant.update(self._buffer)
-            self._stop_thinking()
-        elif event.kind == "tool_start":
+            self._text_dirty = True
+            if self._flush_timer is None:
+                self._flush_timer = self.set_timer(FLUSH_INTERVAL, self._flush_text)
+            return
+        self._flush_text()
+        chat = self.query_one("#chat")
+        if event.kind == "tool_start":
             row = self._tools.get(event.tool)
             if row is None:
                 row = ToolRow(event.tool, event.detail, status="running")
@@ -251,23 +289,42 @@ class ChatScreen(Screen):
         ac = self.query_one(Autocomplete)
         # `/` vale para a linha inteira (subcomandos depois do espaço).
         if value.startswith("/"):
+            self._ac_query = None
             ac.set_suggestions(self.c.commands.complete(value[:cursor] or "/"))
             return
         if token.startswith("@"):
             query = token[1:]
-            hits = self.c.file_index.search(query)
-            ac.set_suggestions(
-                [
-                    Suggestion(value=str(p), label=str(p), hint="file", kind="file")
-                    for p in hits
-                ]
-            )
+            self._ac_query = query
+            self._search_files(query)
             return
+        self._ac_query = None
         ac.set_suggestions([])
+
+    @work(exclusive=True, group="files-search")
+    async def _search_files(self, query: str) -> None:
+        await asyncio.sleep(0.05)
+        if query != self._ac_query:
+            return
+        hits = await asyncio.to_thread(self.c.file_index.search, query)
+        if query != self._ac_query:
+            return
+        self.call_later(self._show_file_hits, query, hits)
+
+    def _show_file_hits(self, query: str, hits: list[Path]) -> None:
+        if query != self._ac_query:
+            return
+        self.query_one(Autocomplete).set_suggestions(
+            [
+                Suggestion(value=str(p), label=str(p), hint="file", kind="file")
+                for p in hits
+            ]
+        )
 
     def _apply(self, item: Suggestion) -> None:
         inp = self.query_one("#prompt", Input)
-        new, cursor = apply_suggestion(inp.value, inp.cursor_position, item.value, item.kind)
+        new, cursor = apply_suggestion(
+            inp.value, inp.cursor_position, item.value, item.kind
+        )
         inp.value = new
         inp.cursor_position = cursor
         self.query_one(Autocomplete).set_suggestions([])
@@ -289,6 +346,10 @@ class ChatScreen(Screen):
         chat.remove_children()
         chat.mount(Welcome())
         self._show_welcome(True)
+        if self._flush_timer is not None:
+            self._flush_timer.stop()
+            self._flush_timer = None
+        self._text_dirty = False
         self._assistant = None
         self._buffer = ""
         self._tools = {}
@@ -322,9 +383,7 @@ class Welcome(Vertical):
         yield Static("b3code  0.1.0", id="welcome-title")
         yield Static("minimal coding TUI", id="welcome-hint")
         yield Static(
-            "New session      ctrl+n\n"
-            "Resume session   ctrl+s\n"
-            "Quit             ctrl+d",
+            "New session      ctrl+n\nResume session   ctrl+s\nQuit             ctrl+d",
             id="welcome-menu",
         )
 

@@ -29,13 +29,17 @@ from pydantic_monty import MountDir
 
 from b3code.config.schema import AppConfig
 from b3code.libs.models import build_model
-from b3code.services.permission import PermissionDenied, PermissionGate, PermissionRequest
+from b3code.services.permission import (
+    PermissionDenied,
+    PermissionGate,
+    PermissionRequest,
+)
 from b3code.services.session import SessionStore
 from b3code.tools.workspace import workspace_toolset
 
 # Estático de propósito: mudar instructions a cada turno invalida o cache Azure.
 INSTRUCTIONS = (
-    "You are b3code, a concise coding assistant in the current workspace. "
+    "You are b3code, a concise coding assistant. "
     "Use run_code to batch file tools (paths under /work). "
     "Use run_command for git/tests/lint. Last expression is the run_code return."
 )
@@ -134,7 +138,7 @@ class ChatService:
             )
             # Persistir o acumulado (user + llm + tools) para o próximo turno
             # reusar o mesmo prefixo e acertar o cache.
-            self.session.replace(result.all_messages())
+            await self.session.areplace(result.all_messages())
             on_event(ChatEvent(kind="done", text=result.output or ""))
         except Exception as exc:
             on_event(ChatEvent(kind="error", text=str(exc)))
@@ -159,7 +163,11 @@ class ChatService:
         async def gate_shell(ctx: Any, *, call: Any, tool_def: Any, args: Any) -> Any:
             if self.gate is None:
                 return args
-            command = args["command"] if isinstance(args, dict) else getattr(args, "command", "")
+            command = (
+                args["command"]
+                if isinstance(args, dict)
+                else getattr(args, "command", "")
+            )
             try:
                 await self.gate.ensure(command)
             except PermissionDenied as exc:
@@ -213,7 +221,9 @@ def _map_event(event: Any) -> list[ChatEvent]:
                 detail=_short(args),
             )
         ]
-    if isinstance(event, FunctionToolResultEvent) and isinstance(event.part, ToolReturnPart):
+    if isinstance(event, FunctionToolResultEvent) and isinstance(
+        event.part, ToolReturnPart
+    ):
         events = [
             ChatEvent(
                 kind="tool_end",

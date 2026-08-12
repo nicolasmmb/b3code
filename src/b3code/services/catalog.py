@@ -6,11 +6,16 @@ from pydantic_ai.models import known_model_names
 
 from b3code.config.schema import AppConfig
 
+_KNOWN: list[str] | None = None
+
 
 def list_models(cfg: AppConfig) -> list[str]:
     if cfg.use_provider_gateway:
         return list(cfg.api_models)
-    return list(known_model_names())
+    global _KNOWN
+    if _KNOWN is None:
+        _KNOWN = list(known_model_names())
+    return _KNOWN
 
 
 def complete_models(cfg: AppConfig, prefix: str, limit: int = 40) -> list[str]:

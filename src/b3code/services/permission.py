@@ -39,7 +39,9 @@ class PermissionGate:
         return False
 
     async def ensure(self, command: str) -> None:
-        outside = [p for p in escaped_paths(command, self.cwd) if not self.is_allowed(p)]
+        outside = [
+            p for p in escaped_paths(command, self.cwd) if not self.is_allowed(p)
+        ]
         if not outside:
             return
         answer = await self.ask(command, outside)
@@ -47,7 +49,7 @@ class PermissionGate:
             raise PermissionDenied(f"denied: {', '.join(map(str, outside))}")
         if answer == "always":
             for path in outside:
-                self.persist(path)
+                await self.persist(path)
 
     def answer(self, choice: str) -> None:
         if self.pending is not None and not self.pending.done():
@@ -63,8 +65,8 @@ class PermissionGate:
         finally:
             self.pending = None
 
-    def persist(self, path: Path) -> None:
+    async def persist(self, path: Path) -> None:
         text = str(path.resolve())
         if text not in self.config.shell_allowed_paths:
             self.config.shell_allowed_paths.append(text)
-            self.store.save(self.config)
+            await self.store.asave(self.config)
