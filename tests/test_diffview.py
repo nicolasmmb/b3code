@@ -1,4 +1,12 @@
-from b3code.utils.diffview import MAX_DIFF_LINES, DiffLine, diff_texts, summary
+from b3code.utils.diffview import (
+    COLLAPSE,
+    EXPAND_CAP,
+    DiffLine,
+    diff_texts,
+    hidden_count,
+    summary,
+    visible,
+)
 
 
 def test_new_file_is_all_plus():
@@ -29,11 +37,23 @@ def test_edit_has_plus_minus_and_context():
     assert summary(change) == "a.py  +1 −1"
 
 
-def test_truncates_display_but_keeps_full_counts():
+def test_keeps_full_hunk_and_slices_for_display():
     old = ""
-    new = "\n".join(f"line {i}" for i in range(MAX_DIFF_LINES + 20))
+    new = "\n".join(f"line {i}" for i in range(COLLAPSE + 20))
     change = diff_texts("big.py", old, new)
-    assert change.added == MAX_DIFF_LINES + 20
+    assert change.added == COLLAPSE + 20
     assert change.removed == 0
     assert change.truncated is True
-    assert len(change.lines) == MAX_DIFF_LINES
+    assert len(change.lines) == COLLAPSE + 20
+    assert len(visible(change, expanded=False)) == COLLAPSE
+    assert hidden_count(change, expanded=False) == 20
+    assert len(visible(change, expanded=True)) == COLLAPSE + 20
+    assert hidden_count(change, expanded=True) == 0
+
+
+def test_expand_cap_limits_visible_lines():
+    new = "\n".join(f"line {i}" for i in range(EXPAND_CAP + 40))
+    change = diff_texts("huge.py", "", new)
+    assert len(change.lines) == EXPAND_CAP + 40
+    assert len(visible(change, expanded=True)) == EXPAND_CAP
+    assert hidden_count(change, expanded=True) == 40

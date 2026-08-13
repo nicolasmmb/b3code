@@ -11,7 +11,13 @@ from b3code.ui.app import B3App
 from b3code.ui.coalesce import count_markdown_updates
 from b3code.ui.screens.chat import ChatScreen, Welcome
 from b3code.ui.widgets.autocomplete import Autocomplete
-from b3code.ui.widgets.messages import DiffBlock, SystemNote, ToolRow, render_diff
+from b3code.ui.widgets.messages import (
+    DiffBlock,
+    DiffFold,
+    SystemNote,
+    ToolRow,
+    render_diff,
+)
 from b3code.utils.diffview import diff_texts
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.spinner import FRAMES, Spinner
@@ -203,11 +209,12 @@ async def test_diff_event_mounts_block(tmp_path: Path):
         )
         await pilot.pause()
         block = screen.query_one(DiffBlock)
-        rendered = str(block.render())
-        assert "Edit" in rendered
-        assert "a.py" in rendered
-        assert "x = 2" in rendered
-        assert "+x = 2" not in rendered
+        painted = render_diff(change, width=40)
+        assert "Edit" in painted.plain
+        assert "a.py" in painted.plain
+        assert "x = 2" in painted.plain
+        assert "+x = 2" not in painted.plain
+        assert not list(block.query(DiffFold))
 
 
 def test_render_diff_uses_line_numbers_and_bands():
@@ -215,3 +222,24 @@ def test_render_diff_uses_line_numbers_and_bands():
     painted = render_diff(change, width=40)
     assert "Edit" in painted.plain
     assert any(span.style and "on #" in str(span.style) for span in painted.spans)
+
+
+async def test_diff_fold_toggles_omitted_lines(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        change = diff_texts("big.py", "", "\n".join(f"line {i}" for i in range(60)))
+        screen._apply_event(
+            ChatEvent(kind="diff", tool="write_file", detail="big.py", change=change)
+        )
+        await pilot.pause()
+        block = screen.query_one(DiffBlock)
+        fold = block.query_one(DiffFold)
+        assert "omitidas" in str(fold.render())
+        assert block.expanded is False
+        block.toggle()
+        await pilot.pause()
+        assert block.expanded is True
+        assert "recolher" in str(fold.render())

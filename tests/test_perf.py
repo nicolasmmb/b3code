@@ -20,6 +20,8 @@ from b3code.services.catalog import list_models
 from b3code.services.chat import ChatService
 from b3code.services.files import FileIndex
 from b3code.services.session import SessionStore
+from b3code.ui.widgets.messages import render_diff, render_lines
+from b3code.utils.diffview import EXPAND_CAP, diff_texts, visible
 
 # tetos folgados: pegam regressão real, não ruído de CI
 BUDGET_MS = {
@@ -29,6 +31,10 @@ BUDGET_MS = {
     "complete_model": 2.0,
     "complete_resume": 0.25,
     "index_search": 5.0,
+    "diff_2k": 40.0,
+    "render_collapsed": 4.0,
+    "render_expanded": 20.0,
+    "toggle_expand": 20.0,
 }
 
 
@@ -81,6 +87,7 @@ def test_hot_paths_stay_under_budget(tmp_path: Path):
         "complete_model": _ms_per_op(lambda: reg.complete("/model claude"), 200),
         "complete_resume": _ms_per_op(lambda: reg.complete("/resume"), 1_000),
         "index_search": _ms_per_op(lambda: idx.search("mod"), 200),
+        **_diff_metrics(),
     }
 
     print("\nhot path                  ms/op    budget")
@@ -90,5 +97,36 @@ def test_hot_paths_stay_under_budget(tmp_path: Path):
         print(f"  {name:<22} {got:7.3f}    {budget:6.2f}")
         if got > budget:
             failed.append(f"{name} {got:.3f}ms > {budget:.2f}ms")
-    # pytest mostra o print no -s; no fail a mensagem leva os números
     assert not failed, "slowdown: " + "; ".join(failed)
+
+
+def _diff_metrics() -> dict[str, float]:
+    old = [f"line {i} keep" for i in range(2000)]
+    new = list(old)
+    for i in range(100, 180):
+        new[i] = f"line {i} changed"
+    old_s = "\n".join(old)
+    new_s = "\n".join(new)
+    change = diff_texts("big.py", old_s, new_s)
+
+    def toggle_paint() -> None:
+        collapsed = visible(change, expanded=False)
+        render_lines(collapsed, 80)
+        expanded = visible(change, expanded=True)
+        render_lines(expanded, 80)
+
+    huge = diff_texts(
+        "huge.py",
+        "",
+        "\n".join(f"row {i}" for i in range(EXPAND_CAP + 10)),
+    )
+    return {
+        "diff_2k": _ms_per_op(lambda: diff_texts("big.py", old_s, new_s), 8, warmup=2),
+        "render_collapsed": _ms_per_op(
+            lambda: render_diff(change, 80, expanded=False), 40
+        ),
+        "render_expanded": _ms_per_op(
+            lambda: render_lines(visible(huge, expanded=True), 80), 20
+        ),
+        "toggle_expand": _ms_per_op(toggle_paint, 20),
+    }

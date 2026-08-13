@@ -100,6 +100,17 @@ DiffBlock {
     height: auto;
 }
 
+DiffFold {
+    color: #9a9a9a;
+    height: 1;
+    padding: 0 1;
+}
+
+DiffFold:focus {
+    color: #e6e6e6;
+    text-style: bold;
+}
+
 SystemNote {
     color: #8a8a8a;
     padding: 0 1;
