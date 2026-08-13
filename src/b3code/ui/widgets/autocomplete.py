@@ -1,4 +1,4 @@
-"""Dropdown acima do prompt. Sem focus próprio — o Input dirige as setas."""
+"""Dropdown acima do prompt. Sem focus próprio — o PromptBar dirige as setas."""
 
 from textual.widgets import OptionList
 from textual.widgets.option_list import Option

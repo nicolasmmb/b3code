@@ -3,12 +3,14 @@ from pathlib import Path
 
 import pytest
 from textual.app import App
+from textual.events import Paste
 from textual.widgets import Static
 
 from b3code.container import AppContainer
 from b3code.services.chat import ChatEvent
 from b3code.ui.app import B3App
 from b3code.ui.coalesce import count_markdown_updates
+from b3code.ui.prompt_bar import PromptBar, PromptInput
 from b3code.ui.screens.chat import ChatScreen, Welcome
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.messages import (
@@ -45,6 +47,77 @@ async def test_app_opens_welcome(tmp_path: Path):
         assert ac.display
         labels = [item.label for item in ac.suggestions]
         assert "/help" in labels
+
+
+async def test_paste_preserves_newlines(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste("linha 1\nlinha 2"))
+        await pilot.pause()
+        assert prompt.text == "linha 1\nlinha 2"
+
+
+async def test_shift_enter_inserts_newline(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("a", "shift+enter", "b")
+        await pilot.pause()
+        prompt = app.screen.query_one("#prompt", PromptInput)
+        assert prompt.text == "a\nb"
+
+
+async def test_enter_submits_multiline_chat(tmp_path: Path):
+    sent: list[str] = []
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.query_one(PromptBar)._on_chat = sent.append
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.text = "linha 1\nlinha 2"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert sent == ["linha 1\nlinha 2"]
+        assert prompt.text == ""
+
+
+async def test_multiline_off_paste_drops_newlines(tmp_path: Path):
+    container = AppContainer.build(tmp_path)
+    container.config.multiline = False
+    app = B3App(container)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste("linha 1\nlinha 2"))
+        await pilot.pause()
+        assert "\n" not in prompt.text
+        assert "linha 1" in prompt.text
+        assert "linha 2" in prompt.text
+
+
+async def test_prompt_grows_then_caps(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste("\n".join(f"l{i}" for i in range(12))))
+        await pilot.pause()
+        assert prompt.text.count("\n") == 11
+        assert prompt.size.height <= 8
+        assert prompt.size.height >= 1
 
 
 async def test_enter_on_help_executes(tmp_path: Path):

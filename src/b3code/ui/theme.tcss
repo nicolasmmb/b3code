@@ -133,15 +133,34 @@ SystemNote {
 
 #prompt-row {
     height: auto;
-    border: solid #3a3a3a;
+    border: round #3a3a3a;
     padding: 0 1;
+}
+
+#prompt-prefix {
+    width: 2;
+    height: 1;
+    color: #c9a227;
+    content-align: left top;
 }
 
 #prompt {
     background: #1a1b1e;
+    color: #d4d4d4;
     border: none;
     padding: 0;
     width: 1fr;
+    height: auto;
+    min-height: 1;
+    max-height: 8;
+}
+
+#prompt:focus {
+    border: none;
+}
+
+#prompt .text-area--cursor-line {
+    background: #1a1b1e;
 }
 
 Autocomplete {

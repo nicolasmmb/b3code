@@ -79,7 +79,12 @@ def _previous_token(text: str, cursor: int) -> str:
     start, _, token = current_token(text, cursor)
     if token:
         return ""
-    before = text[:start].rstrip()
-    if not before:
+    end = start
+    while end > 0 and text[end - 1].isspace():
+        end -= 1
+    if end == 0:
         return ""
-    return before[before.rfind(" ") + 1 :]
+    begin = end
+    while begin > 0 and not text[begin - 1].isspace():
+        begin -= 1
+    return text[begin:end]

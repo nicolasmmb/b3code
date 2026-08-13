@@ -37,6 +37,14 @@ def test_toggle_gateway_snaps_to_api_model(tmp_path: Path):
     assert service.config.selected_model == "a"
 
 
+def test_set_multiline(tmp_path: Path):
+    service = _service(tmp_path)
+    assert service.config.multiline is True
+    service.set_multiline(False)
+    assert service.config.multiline is False
+    assert service.store.load().multiline is False
+
+
 def test_persist_allowed_path(tmp_path: Path):
     service = _service(tmp_path)
     path = Path("/tmp").resolve()

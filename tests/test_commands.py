@@ -147,6 +147,29 @@ def test_complete_partial_still_lists_command(tmp_path: Path):
     assert all(not s.consume for s in reg.complete("/mo"))
 
 
+def test_multiline_toggle(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(api_models=["gpt-4o"])
+    store.save(cfg)
+    sessions = SessionStore(tmp_path / "sessions.json")
+    chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
+    reg = CommandRegistry.build(store, cfg, sessions, chat)
+    assert "/multiline" in [s.label for s in reg.complete("/")]
+    assert cfg.multiline is True
+    toggled = reg.execute("/multiline")
+    assert "off" in toggled.message
+    assert cfg.multiline is False
+    assert store.load().multiline is False
+    on = reg.execute("/multiline on")
+    assert "on" in on.message
+    assert cfg.multiline is True
+    off = reg.execute("/multiline off")
+    assert "off" in off.message
+    assert cfg.multiline is False
+    bad = reg.execute("/multiline maybe")
+    assert "usage" in bad.message
+
+
 def test_plan_on_off_and_view(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(api_models=["gpt-4o"])

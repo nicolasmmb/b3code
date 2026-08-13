@@ -50,3 +50,7 @@ class ConfigService:
             return
         self._config.shell_allowed_paths.append(text)
         self.store.save(self._config)
+
+    def set_multiline(self, on: bool) -> None:
+        self._config.multiline = on
+        self.store.save(self._config)

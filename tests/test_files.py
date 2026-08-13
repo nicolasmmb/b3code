@@ -3,7 +3,7 @@ from pathlib import Path
 from b3code.commands.apply import apply_suggestion
 from b3code.commands.types import Suggestion
 from b3code.services.files import FileIndex
-from b3code.utils.prompt import expand_attachments
+from b3code.utils.prompt import current_token, expand_attachments
 
 
 def test_constructor_does_not_scan(tmp_path: Path):
@@ -52,6 +52,13 @@ def test_expand_attachments_truncates_large_file(tmp_path: Path):
     out = expand_attachments("veja @big.txt", tmp_path, FileIndex(tmp_path).read)
     assert "...[truncated]" in out
     assert "z" * (ATTACH_CHAR_LIMIT + 50) not in out
+
+
+def test_current_token_splits_on_newline():
+    text = "linha 1\n@src/app.py"
+    start, end, token = current_token(text, len(text))
+    assert token == "@src/app.py"
+    assert text[start:end] == token
 
 
 def test_apply_file_suggestion():

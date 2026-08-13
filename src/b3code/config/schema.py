@@ -19,6 +19,9 @@ class AppConfig(BaseModel):
     # Paths absolutos que o Shell pode usar sem perguntar de novo.
     shell_allowed_paths: list[str] = Field(default_factory=list)
     accent: str = DEFAULT_ACCENT
+    # true = paste preserva \\n; Shift+Enter / Alt+Enter inserem newline.
+    # false = composer de uma linha (Enter envia; newline não entra).
+    multiline: bool = True
 
     @field_validator("accent", mode="before")
     @classmethod

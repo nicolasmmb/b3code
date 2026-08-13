@@ -15,8 +15,10 @@ ATTACH_CHAR_LIMIT = 80_000
 
 
 def current_token(text: str, cursor: int) -> tuple[int, int, str]:
-    """Token sob o cursor (do último espaço até o cursor)."""
-    start = text.rfind(" ", 0, cursor) + 1
+    """Token sob o cursor (do último whitespace até o cursor)."""
+    start = cursor
+    while start > 0 and not text[start - 1].isspace():
+        start -= 1
     return start, cursor, text[start:cursor]
 
 

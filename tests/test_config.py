@@ -37,6 +37,7 @@ def test_legacy_json_defaults_gateway(tmp_path: Path):
     assert loaded.selected_model == "m1"
     assert loaded.shell_allowed_paths == []
     assert loaded.accent == "#c9a227"
+    assert loaded.multiline is True
 
 
 def test_accent_rejects_bad_hex():

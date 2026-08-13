@@ -9,15 +9,122 @@ from pathlib import Path
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.events import Key
-from textual.widgets import Input
+from textual.events import Key, Paste
+from textual.geometry import Size
+from textual.message import Message
+from textual.widgets import Static, TextArea
 
 from b3code.commands.apply import Decision, decide_submit
 from b3code.commands.registry import CommandRegistry
 from b3code.commands.types import Suggestion
+from b3code.config.schema import AppConfig
 from b3code.services.files import FileIndex
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.utils.prompt import current_token
+
+MAX_PROMPT_LINES = 8
+_NEWLINE_KEYS = frozenset({"shift+enter", "alt+enter"})
+
+
+class PromptInput(TextArea):
+    """Composer estilo grok: 1 linha em repouso, cresce até MAX, depois scroll."""
+
+    class Submitted(Message):
+        def __init__(self, text_area: PromptInput, value: str) -> None:
+            super().__init__()
+            self.text_area = text_area
+            self.value = value
+
+        @property
+        def control(self) -> PromptInput:
+            return self.text_area
+
+        @property
+        def input(self) -> PromptInput:
+            return self.text_area
+
+    def __init__(self, config: AppConfig, **kwargs) -> None:
+        super().__init__(
+            "",
+            soft_wrap=True,
+            tab_behavior="focus",
+            show_line_numbers=False,
+            compact=True,
+            highlight_cursor_line=False,
+            placeholder="send a message  (@ file  / command)",
+            **kwargs,
+        )
+        self._config = config
+
+    @property
+    def multiline(self) -> bool:
+        return self._config.multiline
+
+    @property
+    def value(self) -> str:
+        return self.text
+
+    @value.setter
+    def value(self, text: str) -> None:
+        self.text = text
+
+    @property
+    def cursor_position(self) -> int:
+        return self.document.get_index_from_location(self.cursor_location)
+
+    @cursor_position.setter
+    def cursor_position(self, index: int) -> None:
+        index = max(0, min(index, len(self.text)))
+        self.move_cursor(self.document.get_location_from_index(index))
+
+    def clear(self) -> None:
+        self.text = ""
+
+    def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
+        return max(1, min(MAX_PROMPT_LINES, self.wrapped_document.height or 1))
+
+    def action_cursor_up(self, select: bool = False) -> None:
+        if _nav_autocomplete(self, "up"):
+            return
+        super().action_cursor_up(select)
+
+    def action_cursor_down(self, select: bool = False) -> None:
+        if _nav_autocomplete(self, "down"):
+            return
+        super().action_cursor_down(select)
+
+    async def _on_key(self, event: Key) -> None:
+        if event.key in _NEWLINE_KEYS:
+            event.stop()
+            event.prevent_default()
+            if self.multiline:
+                self.insert("\n")
+            return
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.Submitted(self, self.text))
+            return
+        await super()._on_key(event)
+
+    async def _on_paste(self, event: Paste) -> None:
+        event.stop()
+        event.prevent_default()
+        if self.read_only:
+            return
+        text = event.text.replace("\r\n", "\n").replace("\r", "\n")
+        if not self.multiline:
+            text = " ".join(text.split("\n"))
+        if result := self._replace_via_keyboard(text, *self.selection):
+            self.move_cursor(result.end_location)
+            self.focus()
+
+
+def _nav_autocomplete(widget: PromptInput, direction: str) -> bool:
+    for node in widget.ancestors:
+        if isinstance(node, PromptBar):
+            return node.nav_autocomplete(direction)
+    return False
 
 
 class PromptBar(Vertical):
@@ -25,6 +132,7 @@ class PromptBar(Vertical):
         self,
         commands: CommandRegistry,
         files: FileIndex,
+        config: AppConfig,
         on_command: Callable[[str], None],
         on_chat: Callable[[str], None],
         **kwargs,
@@ -32,6 +140,7 @@ class PromptBar(Vertical):
         super().__init__(**kwargs)
         self._commands = commands
         self._files = files
+        self._config = config
         self._on_command = on_command
         self._on_chat = on_chat
         self._ac_query: str | None = None
@@ -39,22 +148,38 @@ class PromptBar(Vertical):
     def compose(self) -> ComposeResult:
         yield Autocomplete()
         with Horizontal(id="prompt-row"):
-            yield Input(placeholder="send a message  (@ file  / command)", id="prompt")
+            yield Static("❯", id="prompt-prefix")
+            yield PromptInput(self._config, id="prompt")
+
+    def _prompt(self) -> PromptInput:
+        return self.query_one("#prompt", PromptInput)
 
     def disable_input(self) -> None:
-        self.query_one("#prompt", Input).disabled = True
+        self._prompt().disabled = True
 
     def enable_input(self) -> None:
-        prompt_input = self.query_one("#prompt", Input)
+        prompt_input = self._prompt()
         prompt_input.disabled = False
         prompt_input.focus()
 
     def focus_input(self) -> None:
-        self.query_one("#prompt", Input).focus()
+        self._prompt().focus()
 
     def refresh_suggestions(self) -> None:
-        prompt_input = self.query_one("#prompt", Input)
+        prompt_input = self._prompt()
         self._refresh_autocomplete(prompt_input.value, prompt_input.cursor_position)
+
+    def nav_autocomplete(self, direction: str) -> bool:
+        autocomplete = self.query_one(Autocomplete)
+        if not autocomplete.display:
+            return False
+        if direction == "down":
+            autocomplete.action_cursor_down()
+            return True
+        if direction == "up":
+            autocomplete.action_cursor_up()
+            return True
+        return False
 
     @work(exclusive=True, group="files-scan")
     async def refresh_index(self) -> None:
@@ -78,28 +203,32 @@ class PromptBar(Vertical):
         item = autocomplete.current()
         if item is None:
             return False
-        prompt_input = self.query_one("#prompt", Input)
+        prompt_input = self._prompt()
         decision = decide_submit(prompt_input.value, prompt_input.cursor_position, item)
         self.apply_submit_decision(decision, prompt_input, autocomplete, execute=False)
         event.stop()
         event.prevent_default()
         return True
 
-    @on(Input.Changed, "#prompt")
-    def on_prompt_changed(self, event: Input.Changed) -> None:
-        self._refresh_autocomplete(event.value, event.input.cursor_position)
+    @on(TextArea.Changed, "#prompt")
+    def on_prompt_changed(self, event: TextArea.Changed) -> None:
+        prompt_input = event.control
+        if not isinstance(prompt_input, PromptInput):
+            prompt_input = self._prompt()
+        self._refresh_autocomplete(prompt_input.value, prompt_input.cursor_position)
 
-    @on(Input.Submitted, "#prompt")
-    def on_prompt_submitted(self, event: Input.Submitted) -> None:
+    @on(PromptInput.Submitted, "#prompt")
+    def on_prompt_submitted(self, event: PromptInput.Submitted) -> None:
         autocomplete = self.query_one(Autocomplete)
         suggestion = autocomplete.current() if autocomplete.display else None
-        decision = decide_submit(event.value, event.input.cursor_position, suggestion)
-        self.apply_submit_decision(decision, event.input, autocomplete, execute=True)
+        prompt_input = event.text_area
+        decision = decide_submit(event.value, prompt_input.cursor_position, suggestion)
+        self.apply_submit_decision(decision, prompt_input, autocomplete, execute=True)
 
     def apply_submit_decision(
         self,
         decision: Decision,
-        prompt_input: Input,
+        prompt_input: PromptInput,
         autocomplete: Autocomplete,
         *,
         execute: bool,

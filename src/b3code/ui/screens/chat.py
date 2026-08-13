@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.events import Key
 from textual.screen import Screen
-from textual.widgets import Input, OptionList
+from textual.widgets import OptionList
 
 from b3code.ui.chat_view import ChatView, Welcome
 from b3code.ui.coalesce import FLUSH_INTERVAL
@@ -18,7 +18,7 @@ from b3code.ui.deps import ScreenDeps
 from b3code.ui.effects import CommandHooks, dispatch_command
 from b3code.ui.permission_controller import PermissionController
 from b3code.ui.plan_controller import PlanController
-from b3code.ui.prompt_bar import PromptBar
+from b3code.ui.prompt_bar import PromptBar, PromptInput
 from b3code.ui.stream import FlushScheduler, TextBuffer
 from b3code.ui.stream_host import ChatStreamMixin
 from b3code.ui.widgets.autocomplete import Autocomplete
@@ -75,6 +75,7 @@ class ChatScreen(ChatStreamMixin, Screen):
         yield PromptBar(
             self.deps.commands,
             self.deps.files,
+            self.deps.config,
             on_command=self._run_command,
             on_chat=self._send_chat,
             id="prompt-bar",
@@ -115,8 +116,8 @@ class ChatScreen(ChatStreamMixin, Screen):
     def _set_plan_badge(self) -> None:
         self.query_one(TopBar).set_plan_badge(self.deps.chat.plan.active)
 
-    @on(Input.Submitted, "#prompt")
-    def on_prompt_submitted(self, event: Input.Submitted) -> None:
+    @on(PromptInput.Submitted, "#prompt")
+    def on_prompt_submitted(self, event: PromptInput.Submitted) -> None:
         if self.awaiting_permission:
             self.confirm_permission()
             event.stop()

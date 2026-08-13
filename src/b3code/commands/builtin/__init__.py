@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from b3code.commands.builtin.help import build_help
 from b3code.commands.builtin.model import build_gateway, build_model
+from b3code.commands.builtin.multiline import build_multiline
 from b3code.commands.builtin.plan import build_plan, build_view_plan
 from b3code.commands.builtin.session import (
     build_exit,
@@ -35,6 +36,7 @@ def build_all(services: CommandServices) -> list[Command]:
             build_exit(),
             build_model(services.config_service, services.catalog, services.chat),
             build_gateway(services.config_service, services.chat),
+            build_multiline(services.config_service),
             build_plan(services.chat),
             build_view_plan(services.chat),
         ]
