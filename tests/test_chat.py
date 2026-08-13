@@ -55,6 +55,26 @@ async def test_serial_requests(tmp_path: Path):
     assert chat.busy is False
 
 
+async def test_enqueue_error_includes_traceback(tmp_path: Path):
+    chat = _service(tmp_path)
+
+    async def boom(*_args, **_kwargs):
+        try:
+            raise ConnectionError("dns failed")
+        except ConnectionError as exc:
+            raise RuntimeError("request failed") from exc
+
+    chat._dispatch_turn = boom  # type: ignore[method-assign]
+    events: list[ChatEvent] = []
+    await chat.enqueue("hi", events.append)
+    err = next(event for event in events if event.kind == "error")
+    assert "ConnectionError" in err.text or "ConnectionError" in err.detail
+    assert "dns failed" in err.detail
+    assert "request failed" in err.detail
+    assert "Traceback" in err.detail
+    assert "RuntimeError" in err.detail
+
+
 async def test_enqueue_in_plan_mode(tmp_path: Path):
     chat = _service(tmp_path)
     chat.enter_plan()

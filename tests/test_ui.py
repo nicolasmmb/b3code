@@ -16,6 +16,8 @@ from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.messages import (
     DiffBlock,
     DiffFold,
+    ErrorBlock,
+    ErrorFold,
     PlanDoc,
     SystemNote,
     ToolRow,
@@ -394,6 +396,56 @@ def test_render_diff_uses_line_numbers_and_bands():
     painted = render_diff(change, width=40)
     assert "Edit" in painted.plain
     assert any(span.style and "on #" in str(span.style) for span in painted.spans)
+
+
+async def test_error_block_expands_and_copies(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        detail = (
+            "Traceback (most recent call last):\n"
+            '  File "chat.py", line 1, in _run_turn\n'
+            "    await self._dispatch_turn(...)\n"
+            "httpx.ConnectError: [Errno 8] nodename nor servname provided\n"
+        )
+        screen._apply_event(
+            ChatEvent(
+                kind="error",
+                text="ConnectError: [Errno 8] nodename nor servname provided",
+                detail=detail,
+            )
+        )
+        await pilot.pause()
+        block = screen.query_one(ErrorBlock)
+        fold = block.query_one(ErrorFold)
+        assert block.expanded is False
+        assert "ConnectError" in str(block._header.render())
+        assert "lines" in str(fold.render())
+        assert "nodename" not in str(block._body.render()) or not block._body.display
+        block.toggle()
+        await pilot.pause()
+        assert block.expanded is True
+        assert "nodename" in str(block._body.render())
+        assert "chat.py" in str(block._body.render())
+        fold.focus()
+        await pilot.press("c")
+        await pilot.pause()
+        assert app.clipboard == detail
+
+
+async def test_cancelled_stays_a_system_note(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._apply_event(ChatEvent(kind="error", text="cancelled"))
+        await pilot.pause()
+        notes = [str(n.render()) for n in screen.query(SystemNote)]
+        assert any("cancelled" in n for n in notes)
+        assert list(screen.query(ErrorBlock)) == []
 
 
 async def test_diff_fold_toggles_omitted_lines(tmp_path: Path):

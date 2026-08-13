@@ -13,6 +13,7 @@ from b3code.services.session import DisplayTurn
 from b3code.ui.widgets.messages import (
     AssistantMessage,
     DiffBlock,
+    ErrorBlock,
     PlanDoc,
     RoleLabel,
     SystemNote,
@@ -139,6 +140,22 @@ class ChatView:
         self.scroll.mount(SystemNote(text))
         self.scroll_end()
 
+    def mount_error(self, summary: str, detail: str = "") -> None:
+        self.hide_welcome()
+        self.discard_empty_assistant()
+        self.scroll.mount(ErrorBlock(summary, detail))
+        self.scroll_end()
+
+    def discard_empty_assistant(self) -> None:
+        if self._assistant is None or self._buffer:
+            return
+        kids = list(self.scroll.children)
+        idx = kids.index(self._assistant) if self._assistant in kids else -1
+        self._assistant.remove()
+        self._assistant = None
+        if idx > 0 and isinstance(kids[idx - 1], RoleLabel):
+            kids[idx - 1].remove()
+
     def upsert_tool(self, event: ChatEvent, status: str) -> None:
         row = self._tools.get(event.tool)
         if row is not None:
@@ -251,8 +268,11 @@ class ChatView:
 
     def _event_error(self, event: ChatEvent) -> None:
         self.stop_thinking()
-        self.mount_system(event.text)
-        self.fail_assistant()
+        if event.text == "cancelled" and not event.detail:
+            self.fail_assistant()
+            self.mount_system(event.text)
+        else:
+            self.mount_error(event.text, event.detail)
         self.scroll_end()
 
     def _event_done(self, event: ChatEvent) -> None:

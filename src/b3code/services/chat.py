@@ -29,6 +29,7 @@ from b3code.services.plan import PlanMode
 from b3code.services.planner import slim_plan_note
 from b3code.services.session import SessionStore
 from b3code.utils.diffview import FileChange
+from b3code.utils.errors import format_error
 
 __all__ = [
     "ChatEvent",
@@ -119,7 +120,8 @@ class ChatService:
         except RunCancelled:
             on_event(ChatEvent(kind="error", text="cancelled"))
         except Exception as exc:
-            on_event(ChatEvent(kind="error", text=str(exc)))
+            summary, detail = format_error(exc)
+            on_event(ChatEvent(kind="error", text=summary, detail=detail))
         finally:
             self._unbind_turn()
 

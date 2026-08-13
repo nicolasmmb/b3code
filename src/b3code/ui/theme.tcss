@@ -120,6 +120,39 @@ DiffFold:focus {
     text-style: bold;
 }
 
+ErrorBlock {
+    height: auto;
+    margin: 1 0;
+    padding: 0 1;
+    border: round #5a2a2a;
+    background: #221616;
+}
+
+ErrorBlock > Static {
+    height: auto;
+}
+
+.error-header {
+    color: #c45c5c;
+    text-style: bold;
+}
+
+.error-body {
+    color: #e0a3a3;
+    margin-top: 1;
+}
+
+ErrorFold {
+    color: #9a9a9a;
+    height: 1;
+    padding: 0;
+}
+
+ErrorFold:focus {
+    color: #e6e6e6;
+    text-style: bold;
+}
+
 SystemNote {
     color: #8a8a8a;
     padding: 0 1;

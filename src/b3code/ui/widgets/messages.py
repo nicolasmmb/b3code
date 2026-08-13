@@ -137,6 +137,95 @@ def _paint_line(line: DiffLine, width: int) -> Text:
     return painted
 
 
+class ErrorFold(Static, can_focus=True):
+    """Seta para expandir o dump e copiar o erro."""
+
+    def on_click(self, event: Click) -> None:
+        block = self.parent
+        if isinstance(block, ErrorBlock):
+            block.toggle()
+        event.stop()
+
+    def on_key(self, event: Key) -> None:
+        block = self.parent
+        if not isinstance(block, ErrorBlock):
+            return
+        if event.key in {"enter", "space"}:
+            block.toggle()
+        elif event.key in {"c", "y"}:
+            block.copy()
+        elif event.key == "escape" and block.expanded:
+            block.toggle()
+        else:
+            return
+        event.stop()
+        event.prevent_default()
+
+
+class ErrorBlock(Vertical, can_focus=False):
+    """Erro no chat: resumo fechado, traceback inteiro ao expandir, `c` copia."""
+
+    def __init__(self, summary: str, detail: str = "") -> None:
+        super().__init__()
+        self.summary = summary
+        self.detail = detail.rstrip() + "\n" if detail else ""
+        self.expanded = False
+        self._header = Static(render_error_header(summary), classes="error-header")
+        self._body = Static(Text(self.detail), markup=False, classes="error-body")
+        self._fold = ErrorFold(error_fold_label(self.detail, expanded=False))
+
+    def compose(self) -> ComposeResult:
+        yield self._header
+        yield self._body
+        yield self._fold
+
+    def on_mount(self) -> None:
+        self._paint()
+
+    def on_click(self, event: Click) -> None:
+        if self._expandable():
+            self.toggle()
+        event.stop()
+
+    def _expandable(self) -> bool:
+        return bool(self.detail) and self.detail.strip() != self.summary.strip()
+
+    def toggle(self) -> None:
+        if not self._expandable():
+            return
+        self.expanded = not self.expanded
+        self._paint()
+
+    def copy(self) -> None:
+        payload = self.detail or (self.summary + "\n")
+        self.app.copy_to_clipboard(payload)
+        self.app.notify("error copied")
+
+    def _paint(self) -> None:
+        can_open = self._expandable()
+        self._body.display = self.expanded and can_open
+        self._fold.update(
+            error_fold_label(self.detail, expanded=self.expanded, expandable=can_open)
+        )
+        self.refresh(layout=True)
+
+
+def render_error_header(summary: str) -> Text:
+    out = Text()
+    out.append("✗ ", style="#c45c5c")
+    out.append(summary, style="#c45c5c")
+    return out
+
+
+def error_fold_label(detail: str, *, expanded: bool, expandable: bool = True) -> str:
+    if not expandable:
+        return "  c copy"
+    if expanded:
+        return "▾  collapse  ·  c copy"
+    lines = detail.count("\n") or 1
+    return f"▸  {lines} lines  ·  c copy"
+
+
 class ToolRow(Static):
     def __init__(self, tool: str, detail: str = "", status: str = "running") -> None:
         self.tool = tool
@@ -151,7 +240,7 @@ class ToolRow(Static):
 
 
 class SystemNote(Static):
-    """Saída de comando `/` e erros — não é mensagem da LLM."""
+    """Saída de comando `/` e cancel — não é mensagem da LLM."""
 
 
 class RoleLabel(Static):
