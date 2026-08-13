@@ -82,8 +82,10 @@ class ChatService:
     def approve_plan(self) -> str:
         self.exit_plan()
         return (
-            "Implement the approved plan in .b3code/plan.md. "
-            "Follow every step; do not skip Files, Reuse, or Verify."
+            "Read .b3code/plan.md inside run_code via read_file first. "
+            "Implement every step with run_code file tools. "
+            "Do not write project files via the shell. "
+            "Do not skip Files, Reuse, or Verify."
         )
 
     def answer_permission(self, choice: str) -> None:

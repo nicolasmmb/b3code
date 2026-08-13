@@ -10,7 +10,6 @@ from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models import Model
 from pydantic_ai_harness import CodeMode, Shell
-from pydantic_ai_harness.planning import Planning
 from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS
 from pydantic_monty import MountDir
 
@@ -25,10 +24,14 @@ from b3code.utils.diffview import FileChange
 # Estático de propósito: mudar instructions a cada turno invalida o cache Azure.
 INSTRUCTIONS = (
     "You are b3code, a concise coding assistant. "
-    "Use run_code to batch file tools (paths under /work). "
+    "File tools exist only inside run_code (paths under /work): "
+    "read_file, list_dir, grep, write_file, replace_in_file, "
+    "delete_file, move_file. "
+    "Never call those names as top-level tools — they are not in the schema. "
     "Prefer replace_in_file for edits; write_file only to create files. "
-    "Use delete_file and move_file instead of rewriting. "
-    "Use run_command for git/tests/lint. Last expression is the run_code return."
+    "Use run_command only for git, tests, and lint — never to write "
+    "project files (no cat, heredoc, or echo redirects). "
+    "Last expression in run_code is the return value."
 )
 
 SHELL_TOOLS = frozenset(
@@ -89,7 +92,6 @@ def build_coder(
                 max_retries=3,
             ),
             hooks,
-            Planning(),
         ],
     )
 
