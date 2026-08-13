@@ -32,6 +32,10 @@ class AssistantMessage(Markdown):
     """Resposta da LLM. `update()` a cada delta do stream."""
 
 
+class PlanDoc(Markdown):
+    """Preview do plan.md (Grok: o plano inteiro, não uma linha)."""
+
+
 class DiffFold(Static, can_focus=True):
     """Seta para revelar o que o preview omitiu."""
 

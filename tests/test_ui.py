@@ -14,6 +14,7 @@ from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.messages import (
     DiffBlock,
     DiffFold,
+    PlanDoc,
     SystemNote,
     ToolRow,
     render_diff,
@@ -205,6 +206,49 @@ async def test_plan_badge_and_bar(tmp_path: Path):
         await pilot.pause()
         assert screen.c.chat.plan.active is False
         assert flag.display is False
+
+
+async def test_plan_ready_shows_full_doc(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        body = "# Add auth\n\n## Context\nwhy we need it\n"
+        screen._apply_event(ChatEvent(kind="plan_draft", text=body))
+        await pilot.pause()
+        doc = screen.query_one(PlanDoc)
+        assert "Add auth" in str(doc.source) or "auth" in str(doc.render())
+        screen._apply_event(ChatEvent(kind="plan_ready", text=body))
+        await pilot.pause()
+        bar = screen.query_one(PlanBar)
+        assert bar.display
+        summary = str(screen.query_one("#plan-summary", Static).render())
+        assert "Add auth" in summary
+        assert "sections" in summary
+
+
+async def test_plan_bar_arrows_and_keys(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.c.chat.enter_plan()
+        screen._apply_event(
+            ChatEvent(kind="plan_ready", text="# Add auth\n\n## Context\nx\n")
+        )
+        await pilot.pause()
+        bar = screen.query_one(PlanBar)
+        assert bar.display
+        assert bar.current() == "approve"
+        await pilot.press("down")
+        await pilot.pause()
+        assert bar.current() == "revise"
+        await pilot.press("s")
+        await pilot.pause()
+        assert screen.awaiting_plan is False
+        assert screen.c.chat.plan.active is True
 
 
 async def test_tool_events_reuse_the_same_row(tmp_path: Path):

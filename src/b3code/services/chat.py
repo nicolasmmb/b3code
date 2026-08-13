@@ -56,7 +56,7 @@ SHELL_TOOLS = frozenset(
 
 @dataclass
 class ChatEvent:
-    kind: str  # text_delta | tool_start | tool_end | done | error | diff | plan_ready
+    kind: str  # text_delta | tool_start | tool_end | done | error | diff | plan_ready | plan_draft
     text: str = ""
     tool: str = ""
     detail: str = ""
@@ -110,7 +110,10 @@ class ChatService:
 
     def approve_plan(self) -> str:
         self.exit_plan()
-        return "Implement the approved plan in .b3code/plan.md."
+        return (
+            "Implement the approved plan in .b3code/plan.md. "
+            "Follow every step; do not skip Files, Reuse, or Verify."
+        )
 
     def answer_permission(self, choice: str) -> None:
         if self.gate is not None:
@@ -217,7 +220,17 @@ class ChatService:
         model = self._injected_model or build_model(self.config)
         if self._injected_model is not None:
             return Agent(model, instructions="You are b3code's planner. Do not implement.")
-        return build_planner(model, self.cwd, self.plan, on_exit=self._emit_plan_ready)
+        return build_planner(
+            model,
+            self.cwd,
+            self.plan,
+            on_exit=self._emit_plan_ready,
+            on_write=self._emit_plan_draft,
+        )
+
+    def _emit_plan_draft(self, content: str) -> None:
+        if self._on_event is not None:
+            self._on_event(ChatEvent(kind="plan_draft", text=content))
 
     def _emit_plan_ready(self) -> None:
         if self._on_event is not None:

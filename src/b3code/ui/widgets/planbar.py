@@ -1,4 +1,4 @@
-"""Aprovação do plano: a / s / q. Mesmo desenho do PermissionPicker."""
+"""Aprovação do plano: a / s / q. Resumo estruturado (título + seções)."""
 
 from rich.text import Text
 from textual.app import ComposeResult
@@ -7,6 +7,7 @@ from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
 from b3code.config.schema import DEFAULT_ACCENT
+from b3code.services.planner import plan_meta
 from b3code.ui.widgets.permission import QuietOptions
 
 CHOICES = (
@@ -28,10 +29,19 @@ class PlanBar(Vertical):
     def show(self, preview: str, accent: str | None = None) -> None:
         if accent:
             self.accent = accent
-        line = preview.replace("\n", " ").strip() or "(plan ready)"
-        if len(line) > 72:
-            line = line[:71] + "…"
-        self.query_one("#plan-summary", Static).update(f"▸  plan  {line}")
+        if not preview.strip():
+            summary = "▸  plan  (no plan written yet)\n   a approve   s revise   q quit"
+        else:
+            title, heads, nlines = plan_meta(preview)
+            bits = " · ".join(heads) if heads else "no sections"
+            if len(bits) > 64:
+                bits = bits[:63] + "…"
+            summary = (
+                f"▸  {title}\n"
+                f"   {len(heads)} sections · {nlines} lines\n"
+                f"   {bits}"
+            )
+        self.query_one("#plan-summary", Static).update(summary)
         self.display = True
         self.paint(0)
 

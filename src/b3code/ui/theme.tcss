@@ -162,9 +162,15 @@ PlanBar {
     padding: 1 2;
 }
 
+PlanDoc {
+    margin: 0 0 1 0;
+    padding: 0 1;
+}
+
 #plan-summary {
     color: #9a9a9a;
     margin-bottom: 1;
+    height: auto;
 }
 
 #plan-options {

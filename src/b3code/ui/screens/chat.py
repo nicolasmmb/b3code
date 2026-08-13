@@ -13,7 +13,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import Key
 from textual.screen import Screen
 from textual.timer import Timer
-from textual.widgets import Input, Static
+from textual.widgets import Input, OptionList, Static
 
 from b3code.commands.apply import Decision, decide_submit
 from b3code.commands.types import Suggestion
@@ -25,6 +25,7 @@ from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.messages import (
     AssistantMessage,
     DiffBlock,
+    PlanDoc,
     RoleLabel,
     SystemNote,
     ToolRow,
@@ -42,6 +43,9 @@ class ChatScreen(Screen):
         Binding("ctrl+s", "resume", "Resume", show=False),
         Binding("ctrl+d", "quit", "Quit", show=False),
         Binding("escape", "escape", "Esc", show=False),
+        Binding("a", "plan_approve", "Approve", show=False, priority=True),
+        Binding("s", "plan_revise", "Revise", show=False, priority=True),
+        Binding("q", "plan_quit", "Quit plan", show=False, priority=True),
     ]
 
     def __init__(self, container: AppContainer) -> None:
@@ -58,6 +62,7 @@ class ChatScreen(Screen):
         self._pending_text_lock = threading.Lock()
         self._text_flush_scheduled = False
         self._ac_query: str | None = None
+        self._plan_doc: PlanDoc | None = None
 
     def compose(self) -> ComposeResult:
         cwd = _short_cwd(self.c.cwd)
@@ -107,14 +112,23 @@ class ChatScreen(Screen):
     def on_key(self, event: Key) -> None:
         if self.awaiting_plan:
             bar = self.query_one(PlanBar)
-            if event.key in {"a", "s", "q"}:
-                self.confirm_plan({"a": "approve", "s": "revise", "q": "quit"}[event.key])
+            if event.key in {"down"}:
+                bar.move(1)
                 event.stop()
                 event.prevent_default()
                 return
-            delta = {"down": 1, "up": -1}.get(event.key)
-            if delta is not None:
-                bar.move(delta)
+            if event.key in {"up"}:
+                bar.move(-1)
+                event.stop()
+                event.prevent_default()
+                return
+            if event.key in {"j", "pagedown"}:
+                self.query_one("#chat", VerticalScroll).scroll_down()
+                event.stop()
+                event.prevent_default()
+                return
+            if event.key in {"k", "pageup"}:
+                self.query_one("#chat", VerticalScroll).scroll_up()
                 event.stop()
                 event.prevent_default()
                 return
@@ -165,6 +179,13 @@ class ChatScreen(Screen):
             self._thinking.remove()
             self._thinking = None
 
+    @on(OptionList.OptionSelected, "#plan-options")
+    def on_plan_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if not self.awaiting_plan:
+            return
+        event.stop()
+        self.confirm_plan()
+
     def confirm_permission(self) -> None:
         picker = self.query_one(PermissionPicker)
         choice = picker.current()
@@ -172,11 +193,31 @@ class ChatScreen(Screen):
         picker.hide()
         self.c.chat.answer_permission(choice)
 
+    def action_plan_approve(self) -> None:
+        if self.awaiting_plan:
+            self.confirm_plan("approve")
+
+    def action_plan_revise(self) -> None:
+        if self.awaiting_plan:
+            self.confirm_plan("revise")
+
+    def action_plan_quit(self) -> None:
+        if self.awaiting_plan:
+            self.confirm_plan("quit")
+
+    def _lock_prompt(self, lock: bool) -> None:
+        inp = self.query_one("#prompt", Input)
+        inp.disabled = lock
+        if lock:
+            return
+        inp.focus()
+
     def confirm_plan(self, choice: str | None = None) -> None:
         bar = self.query_one(PlanBar)
         pick = choice or bar.current()
         self.awaiting_plan = False
         bar.hide()
+        self._lock_prompt(False)
         if pick == "approve":
             prompt = self.c.chat.approve_plan()
             self._set_plan_badge()
@@ -190,6 +231,18 @@ class ChatScreen(Screen):
             self._scroll_end()
             return
         self.query_one("#prompt", Input).focus()
+
+    def _show_plan_doc(self, markdown: str) -> None:
+        self._show_welcome(False)
+        chat = self.query_one("#chat")
+        if self._plan_doc is not None:
+            self._plan_doc.update(markdown)
+            self._scroll_end()
+            return
+        chat.mount(RoleLabel("plan"))
+        self._plan_doc = PlanDoc(markdown)
+        chat.mount(self._plan_doc)
+        self._scroll_end()
 
     def _set_plan_badge(self) -> None:
         flag = self.query_one("#mode-flag", Static)
@@ -252,12 +305,9 @@ class ChatScreen(Screen):
             self._set_plan_badge()
             self.awaiting_plan = False
             self.query_one(PlanBar).hide()
+            self._lock_prompt(False)
         if result.action == "view_plan":
-            self._show_welcome(False)
-            chat = self.query_one("#chat")
-            chat.mount(RoleLabel("plan"))
-            chat.mount(AssistantMessage(result.message))
-            self._scroll_end()
+            self._show_plan_doc(result.message)
             return
         if result.message:
             self._show_welcome(False)
@@ -353,10 +403,16 @@ class ChatScreen(Screen):
                     chat.mount(block, before=self._assistant)
             self._scroll_end()
             return
+        if event.kind == "plan_draft":
+            self._show_plan_doc(event.text)
+            return
         if event.kind == "plan_ready":
             self.awaiting_plan = True
             self.query_one(Autocomplete).set_suggestions([])
+            if event.text.strip():
+                self._show_plan_doc(event.text)
             self.query_one(PlanBar).show(event.text, self.c.config.accent)
+            self._lock_prompt(True)
             self._scroll_end()
             return
         if event.kind == "permission":
@@ -486,9 +542,11 @@ class ChatScreen(Screen):
         self._tools = {}
         self.awaiting_permission = False
         self.awaiting_plan = False
+        self._plan_doc = None
         self._thinking = None
         self.query_one(PermissionPicker).hide()
         self.query_one(PlanBar).hide()
+        self._lock_prompt(False)
 
     def _rebuild(self) -> None:
         chat = self.query_one("#chat", VerticalScroll)
