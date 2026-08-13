@@ -421,8 +421,9 @@ async def test_error_block_expands_and_copies(tmp_path: Path):
         block = screen.query_one(ErrorBlock)
         fold = block.query_one(ErrorFold)
         assert block.expanded is False
+        assert "Error" in str(block._header.render())
         assert "ConnectError" in str(block._header.render())
-        assert "lines" in str(fold.render())
+        assert "linhas" in str(fold.render())
         assert "nodename" not in str(block._body.render()) or not block._body.display
         block.toggle()
         await pilot.pause()
@@ -433,6 +434,25 @@ async def test_error_block_expands_and_copies(tmp_path: Path):
         await pilot.press("c")
         await pilot.pause()
         assert app.clipboard == detail
+
+
+async def test_short_error_has_no_fold(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._apply_event(
+            ChatEvent(
+                kind="error",
+                text="missing api_key or api_endpoint in .b3code/config.json",
+            )
+        )
+        await pilot.pause()
+        block = screen.query_one(ErrorBlock)
+        assert "Error" in str(block._header.render())
+        assert "missing api_key" in str(block._message.render())
+        assert block._fold.display is False
 
 
 async def test_cancelled_stays_a_system_note(tmp_path: Path):

@@ -1,5 +1,7 @@
 """Blocos do chat: user, assistant (markdown), tool, nota de sistema, diff."""
 
+from __future__ import annotations
+
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
@@ -13,6 +15,7 @@ from b3code.utils.diffview import (
     hidden_count,
     visible,
 )
+from b3code.utils.errors import split_error_summary
 
 # Grok-like: fundo na linha inteira, sem prefixo +/- no código.
 _ADD = "#b7d5b4 on #1c2b1e"
@@ -22,6 +25,8 @@ _CTX = "#d4d4d4"
 _HEAD = "#9a9a9a"
 _FILE = "#c9a227"
 _FOLD = "#9a9a9a"
+_ERR = "#c45c5c"
+_ERR_MSG = "#e0a3a3"
 
 
 class UserMessage(Markdown):
@@ -137,8 +142,24 @@ def _paint_line(line: DiffLine, width: int) -> Text:
     return painted
 
 
+def _handle_error_keys(block: ErrorBlock, event: Key) -> bool:
+    if event.key in {"enter", "space"}:
+        if block.expandable:
+            block.toggle()
+        else:
+            block.copy()
+        return True
+    if event.key in {"c", "y"}:
+        block.copy()
+        return True
+    if event.key == "escape" and block.expanded:
+        block.toggle()
+        return True
+    return False
+
+
 class ErrorFold(Static, can_focus=True):
-    """Seta para expandir o dump e copiar o erro."""
+    """Seta no mesmo idioma do DiffFold."""
 
     def on_click(self, event: Click) -> None:
         block = self.parent
@@ -150,32 +171,35 @@ class ErrorFold(Static, can_focus=True):
         block = self.parent
         if not isinstance(block, ErrorBlock):
             return
-        if event.key in {"enter", "space"}:
-            block.toggle()
-        elif event.key in {"c", "y"}:
-            block.copy()
-        elif event.key == "escape" and block.expanded:
-            block.toggle()
-        else:
+        if not _handle_error_keys(block, event):
             return
         event.stop()
         event.prevent_default()
 
 
 class ErrorBlock(Vertical, can_focus=False):
-    """Erro no chat: resumo fechado, traceback inteiro ao expandir, `c` copia."""
+    """Erro no chat, no mesmo recorte do Diff: header ◆, fold ▸, `c` copia."""
 
     def __init__(self, summary: str, detail: str = "") -> None:
         super().__init__()
         self.summary = summary
         self.detail = detail.rstrip() + "\n" if detail else ""
+        self.kind, self.message = split_error_summary(summary)
         self.expanded = False
-        self._header = Static(render_error_header(summary), classes="error-header")
+        self._header = Static(render_error_header(self.kind), classes="error-header")
+        self._message = Static(
+            Text(self.message, style=_ERR_MSG), classes="error-message"
+        )
         self._body = Static(Text(self.detail), markup=False, classes="error-body")
-        self._fold = ErrorFold(error_fold_label(self.detail, expanded=False))
+        self._fold = ErrorFold("")
+
+    @property
+    def expandable(self) -> bool:
+        return bool(self.detail) and self.detail.strip() != self.summary.strip()
 
     def compose(self) -> ComposeResult:
         yield self._header
+        yield self._message
         yield self._body
         yield self._fold
 
@@ -183,15 +207,14 @@ class ErrorBlock(Vertical, can_focus=False):
         self._paint()
 
     def on_click(self, event: Click) -> None:
-        if self._expandable():
+        if self.expandable:
             self.toggle()
+        else:
+            self.copy()
         event.stop()
 
-    def _expandable(self) -> bool:
-        return bool(self.detail) and self.detail.strip() != self.summary.strip()
-
     def toggle(self) -> None:
-        if not self._expandable():
+        if not self.expandable:
             return
         self.expanded = not self.expanded
         self._paint()
@@ -202,28 +225,28 @@ class ErrorBlock(Vertical, can_focus=False):
         self.app.notify("error copied")
 
     def _paint(self) -> None:
-        can_open = self._expandable()
+        can_open = self.expandable
         self._body.display = self.expanded and can_open
-        self._fold.update(
-            error_fold_label(self.detail, expanded=self.expanded, expandable=can_open)
-        )
+        self._fold.display = can_open
+        if can_open:
+            self._fold.update(error_fold_label(self.detail, expanded=self.expanded))
         self.refresh(layout=True)
 
 
-def render_error_header(summary: str) -> Text:
+def render_error_header(kind: str) -> Text:
     out = Text()
-    out.append("✗ ", style="#c45c5c")
-    out.append(summary, style="#c45c5c")
+    out.append("◆ ", style=_HEAD)
+    out.append("Error  ", style=_HEAD)
+    if kind:
+        out.append(kind, style=_ERR)
     return out
 
 
-def error_fold_label(detail: str, *, expanded: bool, expandable: bool = True) -> str:
-    if not expandable:
-        return "  c copy"
+def error_fold_label(detail: str, *, expanded: bool) -> str:
     if expanded:
-        return "▾  collapse  ·  c copy"
+        return "▾  recolher  ·  c"
     lines = detail.count("\n") or 1
-    return f"▸  {lines} lines  ·  c copy"
+    return f"▸  {lines} linhas  ·  c"
 
 
 class ToolRow(Static):

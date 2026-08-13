@@ -1,4 +1,10 @@
-from b3code.utils.errors import error_detail, error_summary, format_error, root_cause
+from b3code.utils.errors import (
+    error_detail,
+    error_summary,
+    format_error,
+    root_cause,
+    split_error_summary,
+)
 
 
 def test_format_error_keeps_cause_and_traceback():
@@ -35,6 +41,17 @@ def test_error_summary_truncates_long_message():
     assert summary.startswith("RuntimeError:")
     assert summary.endswith("…")
     assert len(summary) < 200
+
+
+def test_split_error_summary_type_and_plain():
+    assert split_error_summary("ConnectError: dns failed") == (
+        "ConnectError",
+        "dns failed",
+    )
+    assert split_error_summary("missing api_key or api_endpoint") == (
+        "",
+        "missing api_key or api_endpoint",
+    )
 
 
 def test_error_detail_ends_with_newline():

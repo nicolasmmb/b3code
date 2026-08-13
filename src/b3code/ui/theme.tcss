@@ -122,10 +122,9 @@ DiffFold:focus {
 
 ErrorBlock {
     height: auto;
-    margin: 1 0;
-    padding: 0 1;
-    border: round #5a2a2a;
-    background: #221616;
+    margin: 1 0 0 0;
+    padding: 0 0 1 1;
+    border-left: wide #c45c5c;
 }
 
 ErrorBlock > Static {
@@ -133,19 +132,25 @@ ErrorBlock > Static {
 }
 
 .error-header {
-    color: #c45c5c;
-    text-style: bold;
+    color: #9a9a9a;
+    height: 1;
+}
+
+.error-message {
+    color: #e0a3a3;
+    padding: 0 1;
 }
 
 .error-body {
-    color: #e0a3a3;
+    color: #8a8a8a;
+    padding: 0 1;
     margin-top: 1;
 }
 
 ErrorFold {
     color: #9a9a9a;
     height: 1;
-    padding: 0;
+    padding: 0 1;
 }
 
 ErrorFold:focus {

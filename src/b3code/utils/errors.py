@@ -27,6 +27,14 @@ def error_detail(exc: BaseException) -> str:
     return "".join(traceback.format_exception(exc)).rstrip() + "\n"
 
 
+def split_error_summary(summary: str) -> tuple[str, str]:
+    """Separa `Type: message` para o header no estilo ◆ Edit."""
+    kind, sep, rest = summary.partition(": ")
+    if sep and kind.isidentifier() and kind[:1].isupper():
+        return kind, rest
+    return "", summary
+
+
 def root_cause(exc: BaseException) -> BaseException:
     seen: set[int] = set()
     current = exc
