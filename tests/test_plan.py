@@ -45,6 +45,9 @@ def test_plan_read_empty(tmp_path: Path):
 def test_planner_has_no_write_or_shell(tmp_path: Path):
     names = planner_tool_names(tmp_path, PlanMode(tmp_path))
     assert "write_file" not in names
+    assert "replace_in_file" not in names
+    assert "delete_file" not in names
+    assert "move_file" not in names
     assert "run_command" not in names
     assert "write_plan_file" in names
     assert "exit_plan_mode" in names

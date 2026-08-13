@@ -44,6 +44,8 @@ from b3code.utils.diffview import FileChange, summary as diff_summary
 INSTRUCTIONS = (
     "You are b3code, a concise coding assistant. "
     "Use run_code to batch file tools (paths under /work). "
+    "Prefer replace_in_file for edits; write_file only to create files. "
+    "Use delete_file and move_file instead of rewriting. "
     "Use run_command for git/tests/lint. Last expression is the run_code return."
 )
 
