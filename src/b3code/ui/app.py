@@ -15,4 +15,4 @@ class B3App(App):
         self.container = container
 
     def on_mount(self) -> None:
-        self.push_screen(ChatScreen(self.container))
+        self.push_screen(ChatScreen(self.container.screen_deps()))

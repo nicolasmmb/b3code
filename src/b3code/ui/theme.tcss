@@ -126,9 +126,13 @@ SystemNote {
     margin: 1 0;
 }
 
-#prompt-row {
+#prompt-bar {
     height: auto;
     dock: bottom;
+}
+
+#prompt-row {
+    height: auto;
     border: solid #3a3a3a;
     padding: 0 1;
 }

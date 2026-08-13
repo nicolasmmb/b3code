@@ -5,17 +5,21 @@ from pathlib import Path
 
 from b3code.commands.registry import CommandRegistry
 from b3code.config.schema import AppConfig
+from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
+from b3code.services.catalog import ModelCatalog
 from b3code.services.chat import ChatService
 from b3code.services.files import FileIndex
 from b3code.services.permission import PermissionGate
 from b3code.services.session import SessionStore
+from b3code.ui.deps import ScreenDeps
 
 
 @dataclass
 class AppContainer:
     config: AppConfig
     config_store: ConfigStore
+    config_service: ConfigService
     session_store: SessionStore
     file_index: FileIndex
     commands: CommandRegistry
@@ -26,10 +30,25 @@ class AppContainer:
     def build(cls, cwd: Path | None = None) -> "AppContainer":
         cwd = (cwd or Path.cwd()).resolve()
         store = ConfigStore.for_cwd(cwd)
-        config = store.load()
+        catalog = ModelCatalog()
+        cfg_svc = ConfigService(store, catalog=catalog)
+        config = cfg_svc.config
         sessions = SessionStore.for_cwd(cwd)
         files = FileIndex(cwd)
-        gate = PermissionGate(store, config, cwd)
+        gate = PermissionGate(cfg_svc, cwd)
         chat = ChatService(config=config, session=sessions, cwd=cwd, gate=gate)
-        commands = CommandRegistry.build(store, config, sessions, chat)
-        return cls(config, store, sessions, files, commands, chat, cwd)
+        commands = CommandRegistry.build(
+            store, config, sessions, chat, catalog=catalog, config_service=cfg_svc
+        )
+        return cls(config, store, cfg_svc, sessions, files, commands, chat, cwd)
+
+    def screen_deps(self) -> ScreenDeps:
+        return ScreenDeps(
+            cwd=self.cwd,
+            config=self.config,
+            config_service=self.config_service,
+            sessions=self.session_store,
+            commands=self.commands,
+            chat=self.chat,
+            files=self.file_index,
+        )

@@ -33,4 +33,6 @@ class PlanMode:
         return self.plan_path.read_text(encoding="utf-8")
 
     def write(self, content: str) -> None:
-        atomic_write_text(self.plan_path, content if content.endswith("\n") else content + "\n")
+        atomic_write_text(
+            self.plan_path, content if content.endswith("\n") else content + "\n"
+        )

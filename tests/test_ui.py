@@ -19,10 +19,10 @@ from b3code.ui.widgets.messages import (
     ToolRow,
     render_diff,
 )
-from b3code.utils.diffview import diff_texts
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.planbar import PlanBar
 from b3code.ui.widgets.spinner import FRAMES, Spinner
+from b3code.utils.diffview import diff_texts
 
 
 async def test_app_opens_welcome(tmp_path: Path):
@@ -43,7 +43,7 @@ async def test_app_opens_welcome(tmp_path: Path):
         await pilot.pause()
         ac = screen.query_one(Autocomplete)
         assert ac.display
-        labels = [item.label for item in ac._items]
+        labels = [item.label for item in ac.suggestions]
         assert "/help" in labels
 
 
@@ -74,7 +74,7 @@ async def test_resume_lists_sessions_in_autocomplete(tmp_path: Path):
         await pilot.pause()
         ac = screen.query_one(Autocomplete)
         assert ac.display
-        ids = [item.value for item in ac._items]
+        ids = [item.value for item in ac.suggestions]
         assert sid in ids
 
 
@@ -123,18 +123,18 @@ async def test_spinner_mounted_and_removed_on_event(tmp_path: Path):
             await asyncio.sleep(0)
 
         # enqueue nunca emite eventos -> spinner fica montado
-        screen.c.chat.enqueue = noop
+        screen.deps.chat.enqueue = noop
         screen._send_chat("hi")
         await pilot.pause()
         spinner = screen.query_one(Spinner)
-        assert screen._thinking is spinner
+        assert screen.chat_view.thinking is spinner
         # texto no meio do run não tira o spinner — só done/error/plan_ready
         screen._apply_event(ChatEvent(kind="text_delta", text="Olá"))
         await pilot.pause(0.05)
-        assert screen._thinking is spinner
+        assert screen.chat_view.thinking is spinner
         screen._apply_event(ChatEvent(kind="done", text="Olá"))
         await pilot.pause()
-        assert screen._thinking is None
+        assert screen.chat_view.thinking is None
         with pytest.raises(Exception):
             screen.query_one(Spinner)
 
@@ -145,25 +145,25 @@ async def test_plan_mode_spinner_survives_tools_until_ready(tmp_path: Path):
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, ChatScreen)
-        screen.c.chat.enter_plan()
+        screen.deps.chat.enter_plan()
 
         async def noop(prompt: str, on_event) -> None:
             await asyncio.sleep(0)
 
-        screen.c.chat.enqueue = noop
+        screen.deps.chat.enqueue = noop
         screen._send_chat("desenha um plano")
         await pilot.pause()
-        assert screen._thinking is not None
-        assert "planning" in str(screen._thinking.render())
+        assert screen.chat_view.thinking is not None
+        assert "planning" in str(screen.chat_view.thinking.render())
         screen._apply_event(ChatEvent(kind="tool_start", tool="grep", detail="x"))
         await pilot.pause()
-        assert screen._thinking is not None
+        assert screen.chat_view.thinking is not None
         screen._apply_event(ChatEvent(kind="plan_draft", text="# Title\n"))
         await pilot.pause()
-        assert screen._thinking is not None
+        assert screen.chat_view.thinking is not None
         screen._apply_event(ChatEvent(kind="plan_ready", text="# Title\n"))
         await pilot.pause()
-        assert screen._thinking is None
+        assert screen.chat_view.thinking is None
 
 
 async def test_text_deltas_schedule_one_ui_callback(tmp_path: Path, monkeypatch):
@@ -182,7 +182,7 @@ async def test_text_deltas_schedule_one_ui_callback(tmp_path: Path, monkeypatch)
         screen._on_event(ChatEvent(kind="text_delta", text="two"))
         screen._on_event(ChatEvent(kind="text_delta", text="three"))
         assert len(scheduled) == 1
-        assert screen._pending_text == ["one", "two", "three"]
+        assert screen.text_buffer.pending == ["one", "two", "three"]
 
 
 def test_delta_burst_coalesces():
@@ -209,7 +209,7 @@ async def test_new_refused_while_busy(tmp_path: Path):
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, ChatScreen)
-        screen.c.chat.busy = True
+        screen.deps.chat.busy = True
         screen._run_command("/new")
         await pilot.pause()
         notes = [str(n.render()) for n in screen.query(SystemNote)]
@@ -234,7 +234,7 @@ async def test_plan_badge_and_bar(tmp_path: Path):
         assert bar.display
         screen.confirm_plan("quit")
         await pilot.pause()
-        assert screen.c.chat.plan.active is False
+        assert screen.deps.chat.plan.active is False
         assert flag.display is False
 
 
@@ -264,7 +264,7 @@ async def test_plan_bar_arrows_and_keys(tmp_path: Path):
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, ChatScreen)
-        screen.c.chat.enter_plan()
+        screen.deps.chat.enter_plan()
         screen._apply_event(
             ChatEvent(kind="plan_ready", text="# Add auth\n\n## Context\nx\n")
         )
@@ -278,7 +278,7 @@ async def test_plan_bar_arrows_and_keys(tmp_path: Path):
         await pilot.press("s")
         await pilot.pause()
         assert screen.awaiting_plan is False
-        assert screen.c.chat.plan.active is True
+        assert screen.deps.chat.plan.active is True
 
 
 async def test_tool_events_reuse_the_same_row(tmp_path: Path):
@@ -302,7 +302,9 @@ async def test_diff_event_mounts_block(tmp_path: Path):
         assert isinstance(screen, ChatScreen)
         change = diff_texts("a.py", "x = 1\n", "x = 2\n")
         screen._apply_event(
-            ChatEvent(kind="diff", tool="write_file", detail="a.py  +1 −1", change=change)
+            ChatEvent(
+                kind="diff", tool="write_file", detail="a.py  +1 −1", change=change
+            )
         )
         await pilot.pause()
         block = screen.query_one(DiffBlock)

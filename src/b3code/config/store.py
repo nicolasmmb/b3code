@@ -25,6 +25,6 @@ class ConfigStore:
     def save(self, cfg: AppConfig) -> None:
         atomic_write_text(self.path, cfg.model_dump_json(indent=2) + "\n")
 
-    async def asave(self, cfg: AppConfig) -> None:
+    async def save_async(self, cfg: AppConfig) -> None:
         text = cfg.model_dump_json(indent=2) + "\n"
         await asyncio.to_thread(atomic_write_text, self.path, text)

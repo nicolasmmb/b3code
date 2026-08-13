@@ -43,5 +43,3 @@ def expand_attachments(text: str, cwd: Path, read_file) -> str:
 def strip_file_blocks(text: str) -> str:
     """Tira blocos `<file>` na hora de *mostrar* o user turn."""
     return FILE_BLOCK.sub("", text).strip()
-
-

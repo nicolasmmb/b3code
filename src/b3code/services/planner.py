@@ -12,6 +12,16 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from b3code.services.plan import PlanMode
 from b3code.tools.workspace import workspace_toolset
+from b3code.utils.planmeta import plan_meta
+
+__all__ = [
+    "PLAN_INSTRUCTIONS",
+    "build_planner",
+    "plan_meta",
+    "planner_tool_names",
+    "planner_toolsets",
+    "slim_plan_note",
+]
 
 PLAN_INSTRUCTIONS = """You are b3code's planner — a specialist, not the implementer.
 
@@ -83,19 +93,6 @@ _HEADINGS = (
     "## Risks",
     "## Verify",
 )
-
-
-def plan_meta(content: str) -> tuple[str, list[str], int]:
-    """title, ## headings, line count — for the approval strip."""
-    title = "untitled"
-    heads: list[str] = []
-    lines = content.splitlines()
-    for line in lines:
-        if line.startswith("# ") and not line.startswith("##"):
-            title = line[2:].strip() or title
-        elif line.startswith("## "):
-            heads.append(line[3:].strip())
-    return title, heads, len(lines)
 
 
 def planner_toolsets(

@@ -166,7 +166,7 @@ async def _app_messages(store: SessionStore) -> list[Any]:
         result = fn()
         if asyncio.iscoroutine(result):
             return await result
-    if hasattr(store, "areplace"):
+    if hasattr(store, "replace_async"):
         return await asyncio.to_thread(lambda: store.messages)
     return store.messages
 

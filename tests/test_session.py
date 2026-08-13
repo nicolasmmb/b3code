@@ -50,10 +50,10 @@ def test_atomic_replace_writes_valid_json(tmp_path: Path):
     assert leftovers == []
 
 
-async def test_areplace_persists(tmp_path: Path):
+async def test_replace_async_persists(tmp_path: Path):
     path = tmp_path / "sessions.json"
     store = SessionStore(path)
-    await store.areplace([ModelRequest(parts=[UserPromptPart(content="async")])])
+    await store.replace_async([ModelRequest(parts=[UserPromptPart(content="async")])])
     reloaded = SessionStore(path)
     assert reloaded.messages[0].parts[0].content == "async"
 

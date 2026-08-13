@@ -21,7 +21,9 @@ def test_read_write_list_grep(tmp_path: Path):
     seen = []
     fns = {
         name: tool.function
-        for name, tool in workspace_toolset(tmp_path, on_change=seen.append).tools.items()
+        for name, tool in workspace_toolset(
+            tmp_path, on_change=seen.append
+        ).tools.items()
     }
     assert fns["write_file"]("n.txt", "hello world") == "wrote n.txt (+1 -0)"
     assert seen and seen[0].path == "n.txt"

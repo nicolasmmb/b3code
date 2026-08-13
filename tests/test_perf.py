@@ -23,12 +23,13 @@ from b3code.commands.registry import CommandRegistry
 from b3code.commands.types import Suggestion
 from b3code.config.schema import AppConfig
 from b3code.config.store import ConfigStore
+from b3code.services.agents import build_coder
 from b3code.services.catalog import list_models
 from b3code.services.chat import ChatService
 from b3code.services.files import FileIndex
+from b3code.services.plan import PlanMode
 from b3code.services.session import SessionStore
 from b3code.ui.widgets.messages import render_diff, render_lines
-from b3code.services.plan import PlanMode
 from b3code.utils.diffview import EXPAND_CAP, diff_texts, visible
 
 # teto na mediana. folgado o bastante pra CI, apertado pra regressão real.
@@ -89,10 +90,7 @@ def _sample(fn: Callable[[], object]) -> Sample:
             gc.enable()
 
     raw.sort()
-    if len(raw) >= 2:
-        p95 = statistics.quantiles(raw, n=20)[18]
-    else:
-        p95 = raw[-1]
+    p95 = statistics.quantiles(raw, n=20)[18] if len(raw) >= 2 else raw[-1]
     return Sample(raw[0], statistics.median(raw), p95, batch, ROUNDS)
 
 
@@ -150,7 +148,11 @@ def _plan_work(tmp_path: Path) -> dict[str, Callable[[], object]]:
     return {
         "can_write": lambda: mode.can_write(target),
         "plan_toggle": toggle,
-        "agent_build": lambda: chat._make_coder(),
+        "agent_build": lambda: build_coder(
+            config=chat.config,
+            cwd=tmp_path,
+            injected_model=TestModel(),
+        ),
     }
 
 

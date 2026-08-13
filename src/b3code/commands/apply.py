@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from b3code.commands.types import Suggestion
 from b3code.utils.prompt import current_token
 
+DecisionKind = Literal["apply", "execute", "chat", "empty"]
+
 
 @dataclass(frozen=True)
 class Decision:
-    kind: str  # apply | execute | chat | empty
+    kind: DecisionKind
     line: str = ""
     cursor: int = 0
     suggestion: Suggestion | None = None
@@ -23,7 +26,11 @@ def apply_suggestion(text: str, cursor: int, suggestion: Suggestion) -> tuple[st
         return stripped, len(stripped)
 
     if suggestion.kind == "file":
-        inserted = suggestion.value if suggestion.value.startswith("@") else f"@{suggestion.value}"
+        inserted = (
+            suggestion.value
+            if suggestion.value.startswith("@")
+            else f"@{suggestion.value}"
+        )
     elif suggestion.kind == "cmd":
         inserted = suggestion.value.rstrip()
         if not suggestion.consume:
@@ -37,9 +44,7 @@ def apply_suggestion(text: str, cursor: int, suggestion: Suggestion) -> tuple[st
     return new, start + len(inserted)
 
 
-def decide_submit(
-    line: str, cursor: int, suggestion: Suggestion | None
-) -> Decision:
+def decide_submit(line: str, cursor: int, suggestion: Suggestion | None) -> Decision:
     if suggestion is not None and not _already_applied(line, cursor, suggestion):
         new, cur = apply_suggestion(line, cursor, suggestion)
         return Decision("apply", new, cur, suggestion)

@@ -55,19 +55,8 @@ def workspace_toolset(
         target = safe_workspace_path(path, cwd)
         text = _read_text(target)
         if start_line is None and end_line is None:
-            if len(text) > max_file_chars:
-                return text[:max_file_chars] + "\n...[truncated]"
-            return text
-        lines = text.splitlines()
-        start = max(1, start_line or 1)
-        end = min(len(lines), end_line or len(lines))
-        if start > end or start > len(lines):
-            raise ModelRetry(f"empty range {start}-{end} in {path} ({len(lines)} lines)")
-        chunk = [f"{i}|{lines[i - 1]}" for i in range(start, end + 1)]
-        body = "\n".join(chunk)
-        if len(body) > max_file_chars:
-            return body[:max_file_chars] + "\n...[truncated]"
-        return body
+            return _truncate(text, max_file_chars)
+        return _truncate(_line_range(text, start_line, end_line, path), max_file_chars)
 
     def list_dir(path: str = ".") -> list[str]:
         """List files in a directory. Directories end with /."""
@@ -122,13 +111,7 @@ def workspace_toolset(
         if not target.is_file():
             raise ModelRetry(f"not a file: {path}")
         text = _read_text(target)
-        n = text.count(old)
-        if n == 0:
-            raise ModelRetry(f"old not found in {path}")
-        if n > 1 and not replace_all:
-            raise ModelRetry(
-                f"old matches {n} times in {path} — pass replace_all=True or more context"
-            )
+        n = _require_unique_span(text, old, path, replace_all)
         updated = text.replace(old, new) if replace_all else text.replace(old, new, 1)
         change = _commit(target, text, updated)
         return f"replaced {n} in {_rel(target)} (+{change.added} -{change.removed})"
@@ -169,7 +152,35 @@ def workspace_toolset(
     tools = [read_file, list_dir, grep]
     if include_write:
         tools.extend([write_file, replace_in_file, delete_file, move_file])
-    return FunctionToolset(tools=tools)
+    return FunctionToolset(tools=tools)  # type: ignore[arg-type]
+
+
+def _truncate(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "\n...[truncated]"
+
+
+def _line_range(
+    text: str, start_line: int | None, end_line: int | None, path: str
+) -> str:
+    lines = text.splitlines()
+    start = max(1, start_line or 1)
+    end = min(len(lines), end_line or len(lines))
+    if start > end or start > len(lines):
+        raise ModelRetry(f"empty range {start}-{end} in {path} ({len(lines)} lines)")
+    return "\n".join(f"{i}|{lines[i - 1]}" for i in range(start, end + 1))
+
+
+def _require_unique_span(text: str, old: str, path: str, replace_all: bool) -> int:
+    count = text.count(old)
+    if count == 0:
+        raise ModelRetry(f"old not found in {path}")
+    if count > 1 and not replace_all:
+        raise ModelRetry(
+            f"old matches {count} times in {path} — pass replace_all=True or more context"
+        )
+    return count
 
 
 def _iter_text_files(root: Path):

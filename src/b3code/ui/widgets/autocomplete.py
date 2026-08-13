@@ -21,6 +21,10 @@ class Autocomplete(OptionList, can_focus=False):
         self.add_options([Option(f"{item.label}  {item.hint}") for item in items])
         self.highlighted = 0
 
+    @property
+    def suggestions(self) -> list[Suggestion]:
+        return self._items
+
     def current(self) -> Suggestion | None:
         idx = self.highlighted
         if idx is None or idx >= len(self._items):

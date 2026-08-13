@@ -4,20 +4,27 @@ from pathlib import Path
 import pytest
 
 from b3code.config.schema import AppConfig
+from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 
 
-def test_select_model_moves_to_front():
+def test_select_model_moves_to_front(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(api_models=["a", "b", "c"])
-    cfg.select_model("c")
+    store.save(cfg)
+    service = ConfigService(store, cfg)
+    service.select_model("c")
     assert cfg.api_models == ["c", "a", "b"]
     assert cfg.selected_model == "c"
 
 
-def test_select_unknown_model():
+def test_select_unknown_model(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(api_models=["a"])
+    store.save(cfg)
+    service = ConfigService(store, cfg)
     with pytest.raises(ValueError):
-        cfg.select_model("nope")
+        service.select_model("nope")
 
 
 def test_legacy_json_defaults_gateway(tmp_path: Path):

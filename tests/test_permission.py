@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from b3code.config.schema import AppConfig
+from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 from b3code.services.permission import PermissionDenied, PermissionGate
 
@@ -11,7 +12,7 @@ def make_gate(tmp_path: Path, allowed: list[str] | None = None) -> PermissionGat
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(shell_allowed_paths=allowed or [])
     store.save(cfg)
-    return PermissionGate(store, cfg, tmp_path)
+    return PermissionGate(ConfigService(store, cfg), tmp_path)
 
 
 async def test_local_command_does_not_ask(tmp_path: Path):
@@ -37,14 +38,14 @@ async def test_always_persists(tmp_path: Path):
     gate.on_ask = auto
     await gate.ensure("ls /tmp")
     saved = Path("/tmp").expanduser().resolve()
-    assert str(saved) in gate.store.load().shell_allowed_paths
+    assert str(saved) in gate.config_service.store.load().shell_allowed_paths
 
 
 async def test_once_does_not_persist(tmp_path: Path):
     gate = make_gate(tmp_path)
     gate.on_ask = lambda req: gate.answer("once")
     await gate.ensure("ls /tmp")
-    assert gate.store.load().shell_allowed_paths == []
+    assert gate.config_service.store.load().shell_allowed_paths == []
 
 
 async def test_deny_raises(tmp_path: Path):

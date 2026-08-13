@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from textual.timer import Timer
 from textual.widgets import Static
 
 FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -14,7 +15,7 @@ class Spinner(Static):
         super().__init__(**kwargs)
         self._label = label
         self._frame = 0
-        self._timer = None
+        self._timer: Timer | None = None
 
     def on_mount(self) -> None:
         self.update(f"{FRAMES[0]} {self._label}")

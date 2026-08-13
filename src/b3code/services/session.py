@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -26,6 +26,7 @@ from pydantic_ai.messages import (
 
 from b3code.utils.paths import atomic_write_text
 from b3code.utils.prompt import strip_file_blocks
+from b3code.utils.text import ellipsize
 
 
 class Session(BaseModel):
@@ -44,7 +45,7 @@ class SessionFile(BaseModel):
 class DisplayTurn:
     """O que a UI precisa pintar. Sem tipos do pydantic_ai."""
 
-    role: str  # user | assistant | tool
+    role: Literal["user", "assistant", "tool"]
     text: str
     tool: str = ""
     detail: str = ""
@@ -57,7 +58,7 @@ class SessionStore:
         self._messages: list[ModelMessage] | None = None
 
     @classmethod
-    def for_cwd(cls, cwd: Path) -> "SessionStore":
+    def for_cwd(cls, cwd: Path) -> SessionStore:
         return cls(cwd / ".b3code" / "sessions.json")
 
     @property
@@ -81,7 +82,7 @@ class SessionStore:
         self._install(messages)
         self._save()
 
-    async def areplace(self, messages: list[ModelMessage]) -> None:
+    async def replace_async(self, messages: list[ModelMessage]) -> None:
         self._install(messages)
         payload = self._file.model_dump_json(indent=2) + "\n"
         await asyncio.to_thread(atomic_write_text, self.path, payload)
@@ -135,45 +136,55 @@ class SessionStore:
 def _blank_session() -> Session:
     return Session(
         id=uuid4().hex[:8],
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
     )
 
 
 def turns_from_messages(messages: list[ModelMessage]) -> list[DisplayTurn]:
     turns: list[DisplayTurn] = []
     for msg in messages:
-        if isinstance(msg, ModelRequest):
-            for part in msg.parts:
-                if isinstance(part, UserPromptPart):
-                    text = (
-                        part.content
-                        if isinstance(part.content, str)
-                        else str(part.content)
-                    )
-                    cleaned = strip_file_blocks(text)
-                    if cleaned:
-                        turns.append(DisplayTurn(role="user", text=cleaned))
-        elif isinstance(msg, ModelResponse):
-            for part in msg.parts:
-                if isinstance(part, ToolCallPart):
-                    args = (
-                        part.args_as_json_str()
-                        if hasattr(part, "args_as_json_str")
-                        else str(part.args)
-                    )
-                    turns.append(
-                        DisplayTurn(
-                            role="tool",
-                            text=args,
-                            tool=part.tool_name,
-                            detail=_short(args),
-                        )
-                    )
-                elif isinstance(part, TextPart) and part.content:
-                    turns.append(DisplayTurn(role="assistant", text=part.content))
+        turns.extend(_turns_from_message(msg))
     return turns
 
 
-def _short(value: str, n: int = 80) -> str:
-    value = " ".join(value.split())
-    return value if len(value) <= n else value[: n - 1] + "…"
+def _turns_from_message(msg: ModelMessage) -> list[DisplayTurn]:
+    if isinstance(msg, ModelRequest):
+        return _turns_from_request(msg)
+    if isinstance(msg, ModelResponse):
+        return _turns_from_response(msg)
+    return []
+
+
+def _turns_from_request(msg: ModelRequest) -> list[DisplayTurn]:
+    turns: list[DisplayTurn] = []
+    for part in msg.parts:
+        if not isinstance(part, UserPromptPart):
+            continue
+        text = part.content if isinstance(part.content, str) else str(part.content)
+        cleaned = strip_file_blocks(text)
+        if cleaned:
+            turns.append(DisplayTurn(role="user", text=cleaned))
+    return turns
+
+
+def _turns_from_response(msg: ModelResponse) -> list[DisplayTurn]:
+    turns: list[DisplayTurn] = []
+    for part in msg.parts:
+        if isinstance(part, ToolCallPart):
+            args = (
+                part.args_as_json_str()
+                if hasattr(part, "args_as_json_str")
+                else str(part.args)
+            )
+            turns.append(
+                DisplayTurn(
+                    role="tool",
+                    text=args,
+                    tool=part.tool_name,
+                    detail=ellipsize(args),
+                )
+            )
+            continue
+        if isinstance(part, TextPart) and part.content:
+            turns.append(DisplayTurn(role="assistant", text=part.content))
+    return turns

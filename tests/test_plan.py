@@ -29,7 +29,9 @@ def test_write_file_blocked_in_plan_mode(tmp_path: Path):
     mode.enter()
     fns = {
         name: tool.function
-        for name, tool in workspace_toolset(tmp_path, can_write=mode.can_write).tools.items()
+        for name, tool in workspace_toolset(
+            tmp_path, can_write=mode.can_write
+        ).tools.items()
     }
     with pytest.raises(ModelRetry, match="plan mode"):
         fns["write_file"]("a.py", "nope")

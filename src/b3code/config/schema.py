@@ -36,16 +36,3 @@ class AppConfig(BaseModel):
     @property
     def model(self) -> str:
         return self.selected_model
-
-    def select_model(self, name: str) -> None:
-        """Valida contra o catálogo do modo atual e grava selected_model."""
-        from b3code.services.catalog import list_models
-
-        allowed = list_models(self)
-        if name not in allowed:
-            raise ValueError(f"model {name!r} not in catalog")
-        self.selected_model = name
-        # No gateway, o primeiro de api_models continua sendo o ativo.
-        if self.use_provider_gateway and name in self.api_models:
-            self.api_models.remove(name)
-            self.api_models.insert(0, name)

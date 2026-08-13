@@ -32,3 +32,13 @@ Config (`.b3code/config.json`):
 ```bash
 uv run pytest
 ```
+
+## Arquitetura
+
+Composition root manual (`AppContainer`) monta os services e entrega um `ScreenDeps` concreto à UI — sem Protocol e sem framework de DI.
+
+- `config/service.py` — único escritor de `AppConfig`
+- `commands/builtin/` — um arquivo por família de `/comando`
+- `services/events.py` + `services/agents.py` — stream e factories; `ChatService` só orquestra
+- `ui/chat_view.py`, `ui/prompt_bar.py`, `ui/plan_controller.py`, `ui/permission_controller.py` — a tela só roteia
+

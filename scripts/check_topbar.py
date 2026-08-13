@@ -1,8 +1,8 @@
 import asyncio
-from pathlib import Path
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "src")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from textual.widgets import Static
 
@@ -19,13 +19,13 @@ async def main():
         assert isinstance(screen, ChatScreen)
         bar = screen.query_one("#top-bar")
         print("top-bar region:", bar.region)
-        for w in screen.query(Static):
-            print(getattr(w, "id", None), repr(w.render()))
+        for widget in screen.query(Static):
+            print(getattr(widget, "id", None), repr(widget.render()))
         try:
             svg = app.export_screenshot()
             print("screenshot ok, len", len(svg))
-        except Exception as e:
-            print("screenshot falhou:", type(e).__name__, e)
+        except Exception as exc:
+            print("screenshot falhou:", type(exc).__name__, exc)
 
 
 asyncio.run(main())

@@ -1,4 +1,4 @@
-"""Gate de path do Shell. Único writer de `shell_allowed_paths`."""
+"""Gate de path do Shell. Único writer de `shell_allowed_paths` via ConfigService."""
 
 from __future__ import annotations
 
@@ -7,8 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from b3code.config.schema import AppConfig
-from b3code.config.store import ConfigStore
+from b3code.config.service import ConfigService
 from b3code.utils.paths import escaped_paths
 
 
@@ -18,21 +17,24 @@ class PermissionRequest:
     paths: list[str]
 
 
-class PermissionDenied(Exception):
+class PermissionDenied(Exception):  # noqa: N818
     pass
 
 
 class PermissionGate:
-    def __init__(self, store: ConfigStore, config: AppConfig, cwd: Path) -> None:
-        self.store = store
-        self.config = config
+    def __init__(self, config_service: ConfigService, cwd: Path) -> None:
+        self.config_service = config_service
         self.cwd = cwd
         self.pending: asyncio.Future[str] | None = None
         self.on_ask: Callable[[PermissionRequest], None] | None = None
 
+    @property
+    def config(self):
+        return self.config_service.config
+
     def is_allowed(self, path: Path) -> bool:
         path = path.resolve()
-        for raw in self.config.shell_allowed_paths:
+        for raw in self.config_service.config.shell_allowed_paths:
             allowed = Path(raw).expanduser().resolve()
             if path == allowed or path.is_relative_to(allowed):
                 return True
@@ -66,7 +68,4 @@ class PermissionGate:
             self.pending = None
 
     async def persist(self, path: Path) -> None:
-        text = str(path.resolve())
-        if text not in self.config.shell_allowed_paths:
-            self.config.shell_allowed_paths.append(text)
-            await self.store.asave(self.config)
+        self.config_service.persist_allowed_path(path)

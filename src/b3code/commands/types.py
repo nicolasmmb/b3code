@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from b3code.commands.effects import CommandEffect
+
 
 @dataclass(frozen=True)
 class Suggestion:
@@ -18,5 +20,4 @@ class Suggestion:
 @dataclass
 class CommandResult:
     message: str
-    action: str | None = None  # quit | refresh | new
-    payload: str | None = None
+    effect: CommandEffect | None = None

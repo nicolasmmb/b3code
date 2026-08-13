@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from b3code.services.files import FileIndex
 from b3code.commands.apply import apply_suggestion
 from b3code.commands.types import Suggestion
+from b3code.services.files import FileIndex
 from b3code.utils.prompt import expand_attachments
 
 

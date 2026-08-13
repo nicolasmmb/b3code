@@ -9,10 +9,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from b3code.commands.parse import slash_tokens
 from b3code.commands.types import CommandResult, Suggestion
 from b3code.config.schema import AppConfig
 from b3code.config.store import ConfigStore
-from b3code.services.catalog import complete_models
 from b3code.services.chat import ChatService
 from b3code.services.session import SessionStore
 
@@ -38,161 +38,63 @@ class CommandRegistry:
         config: AppConfig,
         sessions: SessionStore,
         chat: ChatService,
-    ) -> "CommandRegistry":
-        def help_cmd(*_: str) -> CommandResult:
-            lines = [f"/{c.name}  {c.help}" for c in roots.values()]
-            return CommandResult("\n".join(lines))
+        catalog=None,
+        config_service=None,
+    ) -> CommandRegistry:
+        from b3code.commands.builtin import CommandServices, build_all
+        from b3code.config.service import ConfigService
+        from b3code.services.catalog import ModelCatalog
 
-        def new_cmd(*_: str) -> CommandResult:
-            sessions.new()
-            return CommandResult("new session", action="new")
-
-        def quit_cmd(*_: str) -> CommandResult:
-            return CommandResult("bye", action="quit")
-
-        def resume_cmd(*args: str) -> CommandResult:
-            if not args:
-                rows = []
-                for session in sessions.list_sessions():
-                    mark = "*" if session.id == sessions.current_id else " "
-                    rows.append(
-                        f"{mark} {session.id}  {session.created_at}  {len(session.messages)} msgs"
-                    )
-                return CommandResult("sessions:\n" + "\n".join(rows) or "(none)")
-            sessions.activate(args[0])
-            return CommandResult(f"resumed {args[0]}", action="refresh")
-
-        def resume_complete(prefix: str) -> list[Suggestion]:
-            needle = prefix.lower()
-            out: list[Suggestion] = []
-            for session in sessions.list_sessions():
-                if needle and needle not in session.id.lower():
-                    continue
-                mark = "* " if session.id == sessions.current_id else ""
-                date = session.created_at[:10] if session.created_at else ""
-                out.append(
-                    Suggestion(
-                        value=session.id,
-                        label=session.id,
-                        hint=f"{mark}{date}  {len(session.messages)} msgs".strip(),
-                        kind="arg",
-                        consume=True,
-                    )
-                )
-            return out
-
-        def model_cmd(*args: str) -> CommandResult:
-            if not args:
-                mode = "gateway" if config.use_provider_gateway else "catalog"
-                return CommandResult(
-                    f"model: {config.selected_model}  ({mode})\n"
-                    "type /model <name> or search in the autocomplete"
-                )
-            name = " ".join(args)
-            config.select_model(name)
-            store.save(config)
-            chat.reload(config)
-            return CommandResult(f"model → {config.selected_model}", action="refresh")
-
-        def model_complete(prefix: str) -> list[Suggestion]:
-            hint = "gateway" if config.use_provider_gateway else "catalog"
-            return [
-                Suggestion(value=name, label=name, hint=hint, kind="arg", consume=True)
-                for name in complete_models(config, prefix)
-            ]
-
-        def gateway_cmd(*args: str) -> CommandResult:
-            if not args:
-                state = "on" if config.use_provider_gateway else "off"
-                return CommandResult(f"gateway: {state}")
-            token = args[0].lower()
-            if token not in {"on", "off", "true", "false"}:
-                return CommandResult("usage: /gateway on|off")
-            config.use_provider_gateway = token in {"on", "true"}
-            if (
-                config.use_provider_gateway
-                and config.api_models
-                and config.selected_model not in config.api_models
-            ):
-                config.selected_model = config.api_models[0]
-            store.save(config)
-            chat.reload(config)
-            state = "on" if config.use_provider_gateway else "off"
-            return CommandResult(f"gateway: {state}", action="refresh")
-
-        def gateway_complete(prefix: str) -> list[Suggestion]:
-            return [
-                Suggestion(value=v, label=v, hint="toggle", kind="arg", consume=True)
-                for v in ("on", "off")
-                if v.startswith(prefix)
-            ]
-
-        def plan_cmd(*args: str) -> CommandResult:
-            if chat.busy:
-                return CommandResult("busy — press esc to cancel first")
-            token = args[0].lower() if args else ""
-            if token in {"off", "false"}:
-                chat.exit_plan()
-                return CommandResult("plan mode off", action="plan_off")
-            chat.enter_plan()
-            rest = " ".join(args[1:] if token == "on" else args).strip()
-            return CommandResult("plan mode on", action="plan", payload=rest or None)
-
-        def plan_complete(prefix: str) -> list[Suggestion]:
-            return [
-                Suggestion(value=v, label=v, hint="plan", kind="arg", consume=True)
-                for v in ("on", "off")
-                if v.startswith(prefix)
-            ]
-
-        def view_plan_cmd(*_: str) -> CommandResult:
-            body = chat.plan.read()
-            if not body:
-                return CommandResult("(no plan.md yet)")
-            return CommandResult(body, action="view_plan")
-
-        roots = {
-            "help": Command("help", "list commands", help_cmd),
-            "new": Command("new", "start a new session", new_cmd),
-            "resume": Command(
-                "resume", "list or resume a session", resume_cmd, resume_complete
-            ),
-            "quit": Command("quit", "quit the app", quit_cmd),
-            "exit": Command("exit", "quit the app", quit_cmd),
-            "model": Command("model", "list or switch model", model_cmd, model_complete),
-            "gateway": Command(
-                "gateway", "toggle Azure gateway", gateway_cmd, gateway_complete
-            ),
-            "plan": Command("plan", "enter or leave plan mode", plan_cmd, plan_complete),
-            "view-plan": Command("view-plan", "show the current plan.md", view_plan_cmd),
-        }
-        return cls(roots, config)
+        cfg_svc = config_service or ConfigService(store, config)
+        services = CommandServices(
+            config_service=cfg_svc,
+            sessions=sessions,
+            chat=chat,
+            catalog=catalog or ModelCatalog(),
+        )
+        roots = {cmd.name: cmd for cmd in build_all(services)}
+        return cls(roots, cfg_svc.config)
 
     def complete(self, line: str) -> list[Suggestion]:
         if not line.startswith("/"):
             return []
-        tokens = _slash_tokens(line)
+        tokens = slash_tokens(line)
         head = tokens[0] if tokens else ""
         exact = self.roots.get(head)
-        if exact is not None and exact.completer is not None:
-            if len(tokens) >= 2 or head == exact.name:
-                prefix = tokens[1] if len(tokens) >= 2 else ""
-                return exact.completer(prefix)
+        arg_hits = self._complete_args(exact, tokens)
+        if arg_hits is not None:
+            return arg_hits
         if len(tokens) <= 1:
-            return [
-                Suggestion(
-                    value=f"/{cmd.name}",
-                    label=f"/{cmd.name}",
-                    hint=cmd.help,
-                    kind="cmd",
-                    consume=cmd.completer is None and not cmd.children,
-                )
-                for cmd in self.roots.values()
-                if cmd.name.startswith(head)
-            ]
+            return self._complete_roots(head)
         if exact is None:
             return []
-        prefix = tokens[1]
+        return self._complete_children(exact, tokens[1])
+
+    def _complete_args(
+        self, exact: Command | None, tokens: list[str]
+    ) -> list[Suggestion] | None:
+        if exact is None or exact.completer is None:
+            return None
+        head = tokens[0] if tokens else ""
+        if len(tokens) < 2 and head != exact.name:
+            return None
+        prefix = tokens[1] if len(tokens) >= 2 else ""
+        return exact.completer(prefix)
+
+    def _complete_roots(self, head: str) -> list[Suggestion]:
+        return [
+            Suggestion(
+                value=f"/{cmd.name}",
+                label=f"/{cmd.name}",
+                hint=cmd.help,
+                kind="cmd",
+                consume=cmd.completer is None and not cmd.children,
+            )
+            for cmd in self.roots.values()
+            if cmd.name.startswith(head)
+        ]
+
+    def _complete_children(self, exact: Command, prefix: str) -> list[Suggestion]:
         return [
             Suggestion(
                 value=f"/{exact.name} {child.name}",
@@ -219,12 +121,3 @@ class CommandRegistry:
             return cmd.handler(*rest)
         except Exception as exc:
             return CommandResult(str(exc))
-
-
-def _slash_tokens(line: str) -> list[str]:
-    """`/model ` (espaço no fim) = próximo token vazio, para listar subcomandos."""
-    body = line[1:]
-    parts = body.split()
-    if body.endswith(" ") or body == "":
-        return parts + [""]
-    return parts

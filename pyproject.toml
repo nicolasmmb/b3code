@@ -31,7 +31,25 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM", "C4", "C90", "N"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8
+
+[tool.ruff.lint.isort]
+known-first-party = ["b3code"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802", "N806", "B017"]
+"src/b3code/utils/diffview.py" = ["C901"]
+"src/b3code/utils/paths.py" = ["C901"]
+"src/b3code/tools/workspace.py" = ["C901"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = false
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]
@@ -39,6 +57,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "mypy>=1.14",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.14.13",

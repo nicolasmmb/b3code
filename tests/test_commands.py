@@ -3,6 +3,7 @@ from pathlib import Path
 from pydantic_ai.models.test import TestModel
 
 from b3code.commands.apply import apply_suggestion, decide_submit
+from b3code.commands.effects import PlanOff, Refresh, RunPrompt, ShowPlanDoc
 from b3code.commands.registry import CommandRegistry
 from b3code.commands.types import Suggestion
 from b3code.config.schema import AppConfig
@@ -48,7 +49,7 @@ def test_execute_model_switch(tmp_path: Path):
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
     reg = CommandRegistry.build(store, cfg, sessions, chat)
     result = reg.execute("/model gpt-4o-mini")
-    assert result.action == "refresh"
+    assert isinstance(result.effect, Refresh)
     assert cfg.selected_model == "gpt-4o-mini"
     assert store.load().selected_model == "gpt-4o-mini"
 
@@ -62,7 +63,7 @@ def test_gateway_toggle(tmp_path: Path):
     reg = CommandRegistry.build(store, cfg, sessions, chat)
     assert cfg.use_provider_gateway is True
     result = reg.execute("/gateway off")
-    assert result.action == "refresh"
+    assert isinstance(result.effect, Refresh)
     assert cfg.use_provider_gateway is False
     assert store.load().use_provider_gateway is False
 
@@ -155,14 +156,17 @@ def test_plan_on_off_and_view(tmp_path: Path):
     reg = CommandRegistry.build(store, cfg, sessions, chat)
     assert "/plan" in [s.label for s in reg.complete("/")]
     on = reg.execute("/plan")
-    assert on.action == "plan"
+    assert on.effect is None
     assert chat.plan.active is True
     empty = reg.execute("/view-plan")
     assert "no plan" in empty.message
     chat.plan.write("# hello\n")
     shown = reg.execute("/view-plan")
-    assert shown.action == "view_plan"
+    assert isinstance(shown.effect, ShowPlanDoc)
     assert "hello" in shown.message
+    with_prompt = reg.execute("/plan implement it")
+    assert isinstance(with_prompt.effect, RunPrompt)
+    assert with_prompt.effect.text == "implement it"
     off = reg.execute("/plan off")
-    assert off.action == "plan_off"
+    assert isinstance(off.effect, PlanOff)
     assert chat.plan.active is False
