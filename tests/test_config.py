@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -60,3 +61,13 @@ def test_load_creates_default(tmp_path: Path):
     cfg = store.load()
     assert cfg.api_models
     assert store.path.exists()
+
+
+def test_first_run_creates_project_settings_with_all_fields(tmp_path: Path):
+    store = ConfigStore.for_cwd(tmp_path)
+    cfg = store.load()
+    settings = tmp_path / ".b3code" / "config.json"
+    assert settings.exists()
+    payload = json.loads(settings.read_text())
+    assert payload == cfg.model_dump(mode="json")
+    assert set(payload) == set(AppConfig.model_fields)
