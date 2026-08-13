@@ -22,13 +22,15 @@ def workspace_toolset(
     can_write: Callable[[Path], bool] | None = None,
     *,
     include_write: bool = True,
+    max_file_chars: int = _MAX_FILE_CHARS,
+    max_hits: int = _MAX_HITS,
 ) -> FunctionToolset:
     def read_file(path: str) -> str:
         """Read a UTF-8 text file relative to the workspace (or /work/...)."""
         target = safe_workspace_path(path, cwd)
         text = target.read_text(encoding="utf-8")
-        if len(text) > _MAX_FILE_CHARS:
-            return text[:_MAX_FILE_CHARS] + "\n...[truncated]"
+        if len(text) > max_file_chars:
+            return text[:max_file_chars] + "\n...[truncated]"
         return text
 
     def list_dir(path: str = ".") -> list[str]:
@@ -56,7 +58,7 @@ def workspace_toolset(
                 if not rx.search(line):
                     continue
                 hits.append(f"{rel}:{i}:{line}")
-                if len(hits) >= _MAX_HITS:
+                if len(hits) >= max_hits:
                     return "\n".join(hits)
         return "\n".join(hits) or "(no matches)"
 

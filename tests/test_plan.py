@@ -4,6 +4,7 @@ import pytest
 from pydantic_ai.exceptions import ModelRetry
 
 from b3code.services.plan import PlanMode
+from b3code.services.planner import planner_tool_names
 from b3code.tools.workspace import workspace_toolset
 
 
@@ -39,3 +40,13 @@ def test_write_file_blocked_in_plan_mode(tmp_path: Path):
 
 def test_plan_read_empty(tmp_path: Path):
     assert PlanMode(tmp_path).read() == ""
+
+
+def test_planner_has_no_write_or_shell(tmp_path: Path):
+    names = planner_tool_names(tmp_path, PlanMode(tmp_path))
+    assert "write_file" not in names
+    assert "run_command" not in names
+    assert "write_plan_file" in names
+    assert "exit_plan_mode" in names
+    assert "read_file" in names
+    assert "grep" in names

@@ -150,7 +150,7 @@ def _plan_work(tmp_path: Path) -> dict[str, Callable[[], object]]:
     return {
         "can_write": lambda: mode.can_write(target),
         "plan_toggle": toggle,
-        "agent_build": lambda: chat._make_agent(),
+        "agent_build": lambda: chat._make_coder(),
     }
 
 

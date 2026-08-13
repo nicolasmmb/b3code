@@ -35,6 +35,7 @@ from b3code.services.permission import (
     PermissionRequest,
 )
 from b3code.services.plan import PlanMode
+from b3code.services.planner import build_planner, slim_plan_note
 from b3code.services.session import SessionStore
 from b3code.tools.workspace import workspace_toolset
 from b3code.utils.diffview import FileChange, summary as diff_summary
@@ -44,14 +45,6 @@ INSTRUCTIONS = (
     "You are b3code, a concise coding assistant. "
     "Use run_code to batch file tools (paths under /work). "
     "Use run_command for git/tests/lint. Last expression is the run_code return."
-)
-
-PLAN_INSTRUCTIONS = (
-    "You are b3code in plan mode. Explore the workspace and write a plan. "
-    "Do not implement. The only writable file is .b3code/plan.md via write_plan_file. "
-    "Plan sections: Context, Approach, Files, Reuse, Verify. "
-    "When the plan is ready call exit_plan_mode. "
-    "Use delegate_task with explore for extra read-only research."
 )
 
 SHELL_TOOLS = frozenset(
@@ -87,7 +80,9 @@ class ChatService:
         self.plan = PlanMode(cwd)
         # Testes injetam TestModel e pulam o Azure.
         self._injected_model = model
-        self._agent: Agent[None, str] | None = None
+        self._coder: Agent[None, str] | None = None
+        self._planner: Agent[None, str] | None = None
+        self._plan_history: list[Any] = []
         # Lock = fila FIFO. Dois enqueue() ao mesmo tempo: o segundo espera.
         self._lock = asyncio.Lock()
         self._cancel: CancellationToken | None = None
@@ -97,17 +92,19 @@ class ChatService:
     def reload(self, config: AppConfig) -> None:
         """Recria o agent no próximo run (ex.: /model). Histórico fica no store."""
         self.config = config
-        self._agent = None
+        self._coder = None
+        self._planner = None
         if self.gate is not None:
             self.gate.config = config
 
     def enter_plan(self) -> None:
         self.plan.enter()
-        self._agent = None
+        self._planner = None
 
     def exit_plan(self) -> None:
         self.plan.exit()
-        self._agent = None
+        self._plan_history = []
+        self._planner = None
 
     def approve_plan(self) -> str:
         self.exit_plan()
@@ -156,18 +153,10 @@ class ChatService:
                     on_event(mapped)
 
         try:
-            result = await self._get_agent().run(
-                prompt,
-                message_history=self.session.messages,
-                event_stream_handler=handler,
-                cancellation_token=token,
-            )
-            # Persistir o acumulado (user + llm + tools) para o próximo turno
-            # reusar o mesmo prefixo e acertar o cache.
-            await self.session.areplace(result.all_messages())
-            on_event(ChatEvent(kind="done", text=result.output or ""))
-            if self.plan.active and self.plan.read():
-                on_event(ChatEvent(kind="plan_ready", text=self.plan.read()))
+            if self.plan.active:
+                await self._run_planner(prompt, handler, token, on_event)
+            else:
+                await self._run_coder(prompt, handler, token, on_event)
         except Exception as exc:
             on_event(ChatEvent(kind="error", text=str(exc)))
         finally:
@@ -176,23 +165,66 @@ class ChatService:
             if self.gate is not None:
                 self.gate.on_ask = None
 
-    def _get_agent(self) -> Agent[None, str]:
-        if self._agent is None:
-            self._agent = self._make_agent()
-        return self._agent
-
-    def _make_agent(self) -> Agent[None, str]:
-        model = self._injected_model or build_model(self.config)
-        instructions = PLAN_INSTRUCTIONS if self.plan.active else INSTRUCTIONS
-        files = workspace_toolset(
-            self.cwd,
-            on_change=self._emit_change,
-            can_write=self.plan.can_write,
+    async def _run_coder(
+        self, prompt: str, handler: Any, token: CancellationToken, on_event: OnEvent
+    ) -> None:
+        result = await self._get_coder().run(
+            prompt,
+            message_history=self.session.messages,
+            event_stream_handler=handler,
+            cancellation_token=token,
         )
-        extras = _plan_toolset(self)
-        # TestModel/FunctionModel não precisam de tools/CodeMode — só geram retries.
+        await self.session.areplace(result.all_messages())
+        on_event(ChatEvent(kind="done", text=result.output or ""))
+
+    async def _run_planner(
+        self, prompt: str, handler: Any, token: CancellationToken, on_event: OnEvent
+    ) -> None:
+        result = await self._get_planner().run(
+            prompt,
+            message_history=self._plan_history,
+            event_stream_handler=handler,
+            cancellation_token=token,
+        )
+        self._plan_history = list(result.all_messages())
+        await self._persist_plan_turn(prompt)
+        on_event(ChatEvent(kind="done", text=result.output or ""))
+        if self.plan.read():
+            on_event(ChatEvent(kind="plan_ready", text=self.plan.read()))
+
+    async def _persist_plan_turn(self, prompt: str) -> None:
+        from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
+
+        msgs = list(self.session.messages) + [
+            ModelRequest(parts=[UserPromptPart(content=prompt)]),
+            ModelResponse(parts=[TextPart(content=slim_plan_note(self.plan))]),
+        ]
+        await self.session.areplace(msgs)
+
+    def _get_coder(self) -> Agent[None, str]:
+        if self._coder is None:
+            self._coder = self._make_coder()
+        return self._coder
+
+    def _get_planner(self) -> Agent[None, str]:
+        if self._planner is None:
+            self._planner = self._make_planner()
+        return self._planner
+
+    def _make_planner(self) -> Agent[None, str]:
+        model = self._injected_model or build_model(self.config)
         if self._injected_model is not None:
-            return Agent(model, instructions=instructions)
+            return Agent(model, instructions="You are b3code's planner. Do not implement.")
+        return build_planner(model, self.cwd, self.plan, on_exit=self._emit_plan_ready)
+
+    def _emit_plan_ready(self) -> None:
+        if self._on_event is not None:
+            self._on_event(ChatEvent(kind="plan_ready", text=self.plan.read()))
+
+    def _make_coder(self) -> Agent[None, str]:
+        model = self._injected_model or build_model(self.config)
+        if self._injected_model is not None:
+            return Agent(model, instructions=INSTRUCTIONS)
         hooks = Hooks()
 
         @hooks.on.before_tool_execute(tools=["run_command", "start_command"])
@@ -210,78 +242,38 @@ class ChatService:
                 raise ModelRetry(str(exc)) from exc
             return args
 
-        mount_mode = "read-only" if self.plan.active else "read-write"
-        capabilities: list[Any] = [
-            Shell(
-                cwd=self.cwd,
-                persist_cwd=True,
-                default_timeout=120,
-                denied_env_patterns=LLM_API_KEY_ENV_PATTERNS,
-            ),
-            CodeMode(
-                tools=lambda ctx, td: td.name not in SHELL_TOOLS,
-                mount=MountDir(
-                    virtual_path="/work",
-                    host_path=str(self.cwd),
-                    mode=mount_mode,
-                ),
-                max_retries=3,
-            ),
-            hooks,
-        ]
-        if self.plan.active:
-            capabilities.append(_explore_capability(model, self.cwd))
-        else:
-            from pydantic_ai_harness.planning import Planning
+        from pydantic_ai_harness.planning import Planning
 
-            capabilities.append(Planning())
         return Agent(
             model,
-            instructions=instructions,
-            toolsets=[files, extras],
-            capabilities=capabilities,
+            instructions=INSTRUCTIONS,
+            toolsets=[
+                workspace_toolset(self.cwd, on_change=self._emit_change),
+            ],
+            capabilities=[
+                Shell(
+                    cwd=self.cwd,
+                    persist_cwd=True,
+                    default_timeout=120,
+                    denied_env_patterns=LLM_API_KEY_ENV_PATTERNS,
+                ),
+                CodeMode(
+                    tools=lambda ctx, td: td.name not in SHELL_TOOLS,
+                    mount=MountDir(
+                        virtual_path="/work",
+                        host_path=str(self.cwd),
+                        mode="read-write",
+                    ),
+                    max_retries=3,
+                ),
+                hooks,
+                Planning(),
+            ],
         )
 
     def _emit_change(self, change: FileChange) -> None:
         if self._on_event is not None:
             self._on_event(_diff_event(change))
-
-
-def _plan_toolset(chat: ChatService) -> Any:
-    from pydantic_ai.toolsets import FunctionToolset
-
-    def write_plan_file(content: str) -> str:
-        """Write the markdown plan to .b3code/plan.md (the only writable file in plan mode)."""
-        chat.plan.write(content)
-        return f"wrote {chat.plan.plan_path.name}"
-
-    def exit_plan_mode() -> str:
-        """Present the current plan.md for human approval. Stay in plan mode until they accept."""
-        body = chat.plan.read()
-        if chat._on_event is not None:
-            chat._on_event(ChatEvent(kind="plan_ready", text=body))
-        return "plan ready for approval" if body else "no plan.md yet"
-
-    return FunctionToolset(tools=[write_plan_file, exit_plan_mode])
-
-
-def _explore_capability(model: Model, cwd: Path) -> Any:
-    from pydantic_ai import Agent
-    from pydantic_ai_harness.subagents import SubAgent, SubAgents
-
-    explorer = Agent(
-        model,
-        name="explore",
-        description="Read-only codebase research. Do not edit files.",
-        instructions="Search and read files. Report findings. Never write.",
-        toolsets=[workspace_toolset(cwd, include_write=False)],
-    )
-    return SubAgents(
-        agents=[SubAgent(explorer, name="explore")],
-        agent_folders=None,
-        inherit_tools=False,
-        contain_errors=True,
-    )
 
 
 def _diff_event(change: FileChange) -> ChatEvent:

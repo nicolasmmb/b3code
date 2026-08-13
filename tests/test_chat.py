@@ -60,3 +60,9 @@ async def test_enqueue_in_plan_mode(tmp_path: Path):
     assert any(e.kind == "done" for e in events)
     assert chat.plan.active is True
     assert chat.busy is False
+    dumped = (tmp_path / "sessions.json").read_text()
+    assert "sketch a plan" in dumped
+    assert "plan mode" in dumped or "plan.md" in dumped
+    assert chat._plan_history
+    chat.exit_plan()
+    assert chat._plan_history == []
