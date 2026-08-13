@@ -24,6 +24,7 @@ from b3code.ui.coalesce import FLUSH_INTERVAL
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.messages import (
     AssistantMessage,
+    DiffBlock,
     RoleLabel,
     SystemNote,
     ToolRow,
@@ -266,6 +267,15 @@ class ChatScreen(Screen):
             return
         if event.kind == "tool_end":
             self._upsert_tool(chat, event, "done")
+            self._scroll_end()
+            return
+        if event.kind == "diff":
+            if event.change is not None:
+                block = DiffBlock(event.change)
+                if self._assistant is None:
+                    chat.mount(block)
+                else:
+                    chat.mount(block, before=self._assistant)
             self._scroll_end()
             return
         if event.kind == "permission":

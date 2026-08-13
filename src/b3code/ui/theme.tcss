@@ -95,6 +95,11 @@ ToolRow.error {
     color: #c45c5c;
 }
 
+DiffBlock {
+    padding: 0 0 1 1;
+    height: auto;
+}
+
 SystemNote {
     color: #8a8a8a;
     padding: 0 1;

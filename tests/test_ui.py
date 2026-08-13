@@ -11,7 +11,8 @@ from b3code.ui.app import B3App
 from b3code.ui.coalesce import count_markdown_updates
 from b3code.ui.screens.chat import ChatScreen, Welcome
 from b3code.ui.widgets.autocomplete import Autocomplete
-from b3code.ui.widgets.messages import SystemNote, ToolRow
+from b3code.ui.widgets.messages import DiffBlock, SystemNote, ToolRow, render_diff
+from b3code.utils.diffview import diff_texts
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.spinner import FRAMES, Spinner
 
@@ -188,3 +189,29 @@ async def test_tool_events_reuse_the_same_row(tmp_path: Path):
         rows = list(screen.query(ToolRow))
         assert len(rows) == 1
         assert rows[0].detail == "two"
+
+
+async def test_diff_event_mounts_block(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        change = diff_texts("a.py", "x = 1\n", "x = 2\n")
+        screen._apply_event(
+            ChatEvent(kind="diff", tool="write_file", detail="a.py  +1 −1", change=change)
+        )
+        await pilot.pause()
+        block = screen.query_one(DiffBlock)
+        rendered = str(block.render())
+        assert "Edit" in rendered
+        assert "a.py" in rendered
+        assert "x = 2" in rendered
+        assert "+x = 2" not in rendered
+
+
+def test_render_diff_uses_line_numbers_and_bands():
+    change = diff_texts("a.py", "x = 1\n", "x = 2\n")
+    painted = render_diff(change, width=40)
+    assert "Edit" in painted.plain
+    assert any(span.style and "on #" in str(span.style) for span in painted.spans)

@@ -36,6 +36,7 @@ from b3code.services.permission import (
 )
 from b3code.services.session import SessionStore
 from b3code.tools.workspace import workspace_toolset
+from b3code.utils.diffview import FileChange, summary as diff_summary
 
 # Estático de propósito: mudar instructions a cada turno invalida o cache Azure.
 INSTRUCTIONS = (
@@ -51,10 +52,11 @@ SHELL_TOOLS = frozenset(
 
 @dataclass
 class ChatEvent:
-    kind: str  # text_delta | tool_start | tool_end | done | error
+    kind: str  # text_delta | tool_start | tool_end | done | error | diff
     text: str = ""
     tool: str = ""
     detail: str = ""
+    change: FileChange | None = None
 
 
 OnEvent = Callable[[ChatEvent], None]
@@ -80,6 +82,7 @@ class ChatService:
         self._lock = asyncio.Lock()
         self._cancel: CancellationToken | None = None
         self.busy = False
+        self._on_event: OnEvent | None = None
 
     def reload(self, config: AppConfig) -> None:
         """Recria o agent no próximo run (ex.: /model). Histórico fica no store."""
@@ -121,6 +124,7 @@ class ChatService:
 
         token = CancellationToken()
         self._cancel = token
+        self._on_event = on_event
         if self.gate is not None:
             self.gate.on_ask = lambda req: on_event(_permission_event(req))
 
@@ -144,6 +148,7 @@ class ChatService:
             on_event(ChatEvent(kind="error", text=str(exc)))
         finally:
             self._cancel = None
+            self._on_event = None
             if self.gate is not None:
                 self.gate.on_ask = None
 
@@ -177,7 +182,7 @@ class ChatService:
         return Agent(
             model,
             instructions=INSTRUCTIONS,
-            toolsets=[workspace_toolset(self.cwd)],
+            toolsets=[workspace_toolset(self.cwd, on_change=self._emit_change)],
             capabilities=[
                 Shell(
                     cwd=self.cwd,
@@ -197,6 +202,19 @@ class ChatService:
                 hooks,
             ],
         )
+
+    def _emit_change(self, change: FileChange) -> None:
+        if self._on_event is not None:
+            self._on_event(_diff_event(change))
+
+
+def _diff_event(change: FileChange) -> ChatEvent:
+    return ChatEvent(
+        kind="diff",
+        tool="write_file",
+        detail=diff_summary(change),
+        change=change,
+    )
 
 
 def _permission_event(req: PermissionRequest) -> ChatEvent:

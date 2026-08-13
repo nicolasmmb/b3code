@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 from pydantic_ai.toolsets import FunctionToolset
 
+from b3code.utils.diffview import FileChange, diff_texts
 from b3code.utils.paths import SKIP_DIRS, iter_workspace_files, safe_workspace_path
 
 _MAX_HITS = 50
 _MAX_FILE_CHARS = 200_000
 
 
-def workspace_toolset(cwd: Path) -> FunctionToolset:
+def workspace_toolset(
+    cwd: Path, on_change: Callable[[FileChange], None] | None = None
+) -> FunctionToolset:
     def read_file(path: str) -> str:
         """Read a UTF-8 text file relative to the workspace (or /work/...)."""
         target = safe_workspace_path(path, cwd)
@@ -55,8 +59,18 @@ def workspace_toolset(cwd: Path) -> FunctionToolset:
         """Write UTF-8 content to a workspace file, creating parents."""
         target = safe_workspace_path(path, cwd)
         target.parent.mkdir(parents=True, exist_ok=True)
+        old = ""
+        if target.exists():
+            try:
+                old = target.read_text(encoding="utf-8")
+            except OSError:
+                old = ""
+        rel = str(target.relative_to(cwd.resolve()))
+        change = diff_texts(rel, old, content)
         target.write_text(content, encoding="utf-8")
-        return f"wrote {target.relative_to(cwd.resolve())}"
+        if on_change is not None:
+            on_change(change)
+        return f"wrote {rel} (+{change.added} -{change.removed})"
 
     return FunctionToolset(tools=[read_file, list_dir, grep, write_file])
 
