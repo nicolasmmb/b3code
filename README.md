@@ -1,14 +1,61 @@
 # b3code
 
-TUI minimalista de chat (Textual + Pydantic AI + CodeMode + Azure).
+TUI minimalista de coding assistant — um chat de terminal que conversa com um
+modelo de linguagem e **implementa de verdade**: lê o workspace, edita arquivos
+(com diff visual), roda comandos de shell com gate de permissão e persiste as
+sessões entre execuções. Construído com **Textual** (interface), **Pydantic AI**
+(agentes e ferramentas), **CodeMode** (sandbox de arquivos) e **Azure**
+(backend de modelo opcional via gateway).
+
+## 2. Funcionalidades
+
+- Chat com **streaming** e renderização de markdown (uma atualização por frame, 30 fps).
+- Anexo de arquivos com `@caminho` — o conteúdo entra no turno do usuário como um bloco `<file>`.
+- Comandos `/` com **autocomplete** (comandos, argumentos e arquivos).
+- **Dois backends de modelo**: gateway Azure (configurado no JSON) ou catálogo nativo do Pydantic AI.
+- **Plan mode**: um agente planejador explora o repo e escreve `.b3code/plan.md`; você aprova, revisa ou sai antes de qualquer implementação.
+- **Gate de permissão de shell**: comandos dentro do workspace rodam livres; caminhos fora pedem `once / always / deny`.
+- **Sessões persistentes**: índice + mensagens em `.b3code/`, com retomada (`/resume`).
+- **Diffs coloridos** com número de linha à esquerda, bandas verde/vermelha na linha inteira e *fold* (`▸`) para recolher/expandir linhas omitidas.
+
+## 3. Stack e requisitos
+
+- **Python ≥ 3.12** (ver `.python-version`) e **uv** como gerenciador.
+- Dependências principais (`pyproject.toml`):
+  - `textual>=1.0` — a TUI.
+  - `pydantic-ai-harness[codemode]>=0.18.1` — Shell, CodeMode (mount `/work`) e Planning.
+  - `pydantic-ai-slim[openai]>=2.28.0` — agentes e modelos.
+  - `pydantic>=2.10` — schema de config e modelos de dados.
+  - `rapidfuzz>=3.14.5` — fuzzy match do autocomplete de arquivos.
+  - `pathspec>=1.1.1` — respeito ao `.gitignore` no índice de arquivos.
+
+## 4. Instalação e primeiro run
 
 ```bash
 uv sync
-# edite .b3code/config.json (criado no primeiro run)
 uv run b3code
 ```
 
-Config (`.b3code/config.json`):
+No primeiro run, o app cria o arquivo de config no diretório de trabalho
+(`.b3code/config.json`). Edite-o com sua chave e endpoint antes de conversar
+(ou use o catálogo de modelos do Pydantic AI — veja [Backends de modelo](#6-backends-de-modelo)).
+
+## 5. Configuração
+
+Arquivo: `.b3code/config.json` (criado automaticamente se não existir, gravado
+com escrita atômica). Campos espelhando o schema `AppConfig`:
+
+| Campo | Tipo | Default | Descrição |
+|---|---|---|---|
+| `use_provider_gateway` | bool | `true` | `true` = usa o Azure do JSON (gateway); `false` = catálogo do Pydantic AI. |
+| `api_key` | string | `""` | Chave da API do Azure. |
+| `api_endpoint` | string | `""` | Endpoint do recurso Azure (ex.: `https://SEU-RECURSO.openai.azure.com/openai/v1/`). |
+| `api_models` | list | `["gpt-4o"]` | Modelos listados pelo `/model` quando o gateway está ligado. |
+| `selected_model` | string | primeiro de `api_models` | Modelo ativo. No gateway é um item de `api_models`; no catálogo é `provider:model`. |
+| `shell_allowed_paths` | list | `[]` | Paths absolutos que o shell pode usar sem perguntar de novo. |
+| `accent` | string | `#c9a227` | Cor de destaque da UI (hex de 3 ou 6 dígitos; valor inválido volta ao default). |
+
+Exemplo:
 
 ```json
 {
@@ -17,28 +64,272 @@ Config (`.b3code/config.json`):
   "api_endpoint": "https://SEU-RECURSO.openai.azure.com/openai/v1/",
   "api_models": ["gpt-4o"],
   "selected_model": "gpt-4o",
+  "shell_allowed_paths": [],
   "accent": "#c9a227"
 }
 ```
 
-- `use_provider_gateway: true` — Azure do JSON (o gateway). `/model` lista `api_models`.
-- `false` — catálogo do Pydantic AI (`openai:gpt-5.2`, `anthropic:claude-sonnet-4-6`, …). O provider lê a env dele (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …). Extra atual: `[openai]`; outros pedem `uv add "pydantic-ai-slim[anthropic]"` etc.
-- `/gateway on|off` — persiste a flag
-- `@arquivo` — anexa o conteúdo no turno
-- `/help` `/new` `/resume` `/model` `/gateway` `/quit`
-- Shell (`run_command`) no cwd é livre. Path fora (`/tmp`, `../`) pede `[y] once  [a] always  [n] deny`. `always` grava em `shell_allowed_paths`.
-- sessão: índice em `.b3code/sessions.json`, mensagens em `.b3code/sessions/{id}.json` (gitignore)
+## 6. Backends de modelo
+
+Há dois modos, trocáveis em runtime com `/gateway on|off` (a flag é persistida
+no JSON) e `/model <nome>`:
+
+- **Gateway (default)** — usa `api_key` + `api_endpoint` do JSON e monta um
+  `OpenAIChatModel` com `AzureProvider`. `/model` lista apenas `api_models`.
+- **Catálogo Pydantic AI** — o modelo é um id nativo `provider:model`
+  (ex.: `openai:gpt-5.2`, `anthropic:claude-sonnet-4-6`). O provider lê a
+  credencial dele do ambiente (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …).
+  O extra instalado hoje é `[openai]`; outros providers exigem, por exemplo,
+  `uv add "pydantic-ai-slim[anthropic]"`.
+
+A escolha de backend vive em `libs/models.py` (`build_model`) e o catálogo de
+nomes disponíveis em `services/catalog.py`.
+
+## 7. Uso da TUI
+
+Layout da tela: topbar (cwd + modelo + badge de plan mode), área de chat,
+barra de permissão, barra de aprovação do plano e prompt com autocomplete.
+
+### Atalhos
+
+| Atalho | Ação |
+|---|---|
+| `ctrl+n` | Nova sessão (`/new`) |
+| `ctrl+s` | Retomar sessão (`/resume`) |
+| `ctrl+d` | Sair do app |
+| `escape` | Cancela a request em andamento, nega a permissão pendente ou desliga o plan mode |
+| `a` / `s` / `q` | Na barra do plano: `a` aprovar, `s` revisar (voltar a planejar), `q` quit (sair do plan mode) |
+
+### Comandos
+
+| Comando | Ação |
+|---|---|
+| `/help` | Lista os comandos disponíveis |
+| `/new` | Começa uma nova sessão |
+| `/resume` | Lista sessões; `/resume <id>` ativa uma |
+| `/model` | Mostra o modelo ativo; `/model <nome>` troca (com autocomplete) |
+| `/gateway on\|off` | Liga/desliga o gateway Azure (persistido) |
+| `/plan on\|off` | Entra/sai do plan mode |
+| `/view-plan` | Mostra o `.b3code/plan.md` atual |
+| `/quit` / `/exit` | Sai do app |
+
+Linhas que não começam com `/` vão para o chat. Digite `@` para anexar um
+arquivo: o autocomplete busca no workspace (fuzzy, respeitando `.gitignore`) e
+o conteúdo é expandido em um bloco `<file>` dentro do turno do usuário — isso
+mantém o prefixo do prompt estático, preservando o cache do Azure.
+
+## 8. Shell e permissões
+
+O agente **coder** tem acesso a um shell (`run_command` e afins) via a
+capacidade `Shell` do harness:
+
+- Comandos dentro do cwd rodam **livres** (timeout de 120 s).
+- Caminhos que escapam do workspace (`/tmp/...`, `../...`, `~/...`) disparam o
+  **PermissionGate**: uma barra pergunta `[y] once  [a] always  [n] deny`.
+  - `always` persiste o path em `shell_allowed_paths` (via `ConfigService`),
+    então não pergunta de novo na sessão atual nem nas próximas.
+- O **CodeMode** monta o cwd em `/work` (mesmo disco) e **proíbe** as tools de
+  shell dentro do sandbox — o modelo edita arquivos pelas tools do workspace.
+- Variáveis de ambiente com segredos de API (`LLM_API_KEY_ENV_PATTERNS`) são
+  bloqueadas para o shell.
+
+## 9. Plan mode
+
+`/plan on` ativa o modo e envia o prompt ao **agente planejador**, um
+especialista que:
+
+1. Explora o repositório (lê e faz grep, **sem** executar shell e sem editar nada além do plano);
+2. Escreve `.b3code/plan.md` com 8 seções obrigatórias (`Context`, `Current`,
+   `Approach`, `Steps`, `Files`, `Reuse`, `Risks`, `Verify`) e no mínimo 1200 caracteres
+   — planos finos são rejeitados com `ModelRetry`;
+3. Chama `exit_plan_mode` e a barra de aprovação aparece: **`a` approve** (envia
+   o prompt de implementação), **`s` revise** (o planejador continua), **`q` quit** (sai do modo).
+
+Enquanto o plan mode está ativo, **só `.b3code/plan.md` é gravável** — qualquer
+tentativa de escrever em outro arquivo falha com um retry orientando a usar
+`write_plan_file`. Aprovar envia o prompt *"Implement the approved plan in
+.b3code/plan.md…"* para o agente coder, que executa cada passo.
+
+## 10. Sessões e persistência
+
+- Índice em **`.b3code/sessions.json`** (id, data, contagem de mensagens, sessão ativa).
+- Mensagens de cada sessão em **`.b3code/sessions/{id}.json`**.
+- A sessão ativa grava `all_messages()` — os **objetos nativos do Pydantic AI**,
+  não um `{"role": "user"}` reconstruído. Isso é importante porque reconstruir
+  mensagens quebraria o pairing de tools e o prefixo idêntico que o cache do
+  Azure exige.
+- `.b3code/` é gitignored.
+
+## 11. Arquitetura
+
+Composition root manual: `AppContainer.build()` (`container.py`) instancia os
+services na ordem e entrega um `ScreenDeps` concreto à tela — sem Protocol e
+sem framework de DI. A fronteira com o mundo Pydantic AI fica nos services:
+a UI só conhece `ChatEvent`.
+
+| Camada | Papel |
+|---|---|
+| `config/` | Schema (`AppConfig`), load/save atômico (`ConfigStore`), único escritor (`ConfigService`), checagem de credencial. |
+| `commands/` | Registry de comandos `/`, parser de decisão do Enter (`apply.py`), efeitos puros que a UI aplica (`effects.py`). |
+| `services/` | `ChatService` (orquestra 1 request por vez, lock FIFO), `agents.py` (factories), `events.py` (fronteira de eventos), `session.py`, `permission.py`, `plan.py`, `planner.py`, `files.py`, `catalog.py`. |
+| `tools/` | `workspace_toolset`: `read_file`, `list_dir`, `grep`, `write_file`, `replace_in_file`, `delete_file`, `move_file`, com guard de escrita e recorte de saída. |
+| `ui/` | `B3App` + `ChatScreen` (wiring), `ChatView`, `PromptBar`, controllers de plano/permissão, stream com coalesce, widgets (`topbar`, `messages`, `planbar`, `permission`, `spinner`, `autocomplete`). |
+| `utils/` | Paths seguros (`/work` → cwd), expansão de `@arquivo`, diff unificado, fuzzy, helpers de texto. |
+| `libs/` | `models.py` — escolha do backend de modelo (gateway vs catálogo). |
+
+Os widgets de mensagem montam `UserMessage` / `AssistantMessage` (markdown) /
+`ToolRow` / `DiffBlock` / `SystemNote` / `PlanDoc` / `Spinner`, com janela de
+visibilidade de 100 turnos.
+
+## 12. Fluxo de um turno
+
+O usuário digita no **PromptBar** e o `decide_submit` decide o destino: se
+começa com `/`, vira comando (registry → efeito → tela); senão, vira chat. O
+**ChatService** enfileira com um lock FIFO (uma request por vez), escolhe entre
+agente **coder** e **planner**, que usam tools do workspace, shell com gate de
+permissão e plan mode. Todos os eventos do agente passam por `map_agent_event`
+→ `ChatEvent`; deltas de texto vão para o `TextBuffer` com flush a 30 fps e o
+resto é despachado para a `ChatView`. Ao final, o histórico nativo
+(`all_messages()`) é persistido pelo `SessionStore`.
+
+```mermaid
+flowchart TB
+    PROMPT["PromptBar (Input + Autocomplete)"]
+    APPLY["commands/apply.py · decide_submit"]
+    REG["CommandRegistry + commands/builtin/"]
+    DISP["ui/effects.py · dispatch_command"]
+    SCREEN["ChatScreen · _send_chat"]
+    CHAT["ChatService · enqueue (lock FIFO)"]
+    PLANQ{"plan.active?"}
+    CODER["build_coder · INSTRUCTIONS"]
+    PLANNER["build_planner_agent · PLAN_INSTRUCTIONS"]
+    TOOLS["tools/workspace.py: read_file, list_dir, grep, write_file, replace_in_file, delete_file, move_file"]
+    SHELL["Shell (run_command) + CodeMode (/work)"]
+    GATE["PermissionGate · once / always / deny"]
+    PLANMD[".b3code/plan.md"]
+    PB["PlanBar · approve / revise / quit"]
+    EVENTS["services/events.py · map_agent_event → ChatEvent"]
+    STREAM["ChatStreamMixin · TextBuffer + FlushScheduler (30 fps)"]
+    VIEW["ChatView · UserMessage / AssistantMessage / ToolRow / DiffBlock / PlanDoc"]
+    SESS["SessionStore · all_messages()"]
+    IDX[".b3code/sessions.json"]
+    BLOBS[".b3code/sessions/{id}.json"]
+
+    PROMPT -->|submit| APPLY
+    APPLY -->|"/comando"| REG
+    REG -->|CommandResult + efeito| DISP
+    DISP -->|efeito: quit / new / refresh / plan| SCREEN
+    APPLY -->|chat| SCREEN
+    SCREEN -->|prompt com @ expandido| CHAT
+    CHAT --> PLANQ
+    PLANQ -->|não| CODER
+    PLANQ -->|sim| PLANNER
+    CODER --> TOOLS
+    CODER --> SHELL
+    SHELL -->|path fora do cwd| GATE
+    GATE -->|pergunta once / always / deny| SCREEN
+    PLANNER -->|write_plan_file| PLANMD
+    PLANMD -->|plan_ready| PB
+    PB -->|approve| CHAT
+    CODER -->|eventos pydantic_ai| EVENTS
+    PLANNER -->|eventos pydantic_ai| EVENTS
+    EVENTS -->|ChatEvent| SCREEN
+    EVENTS -->|text_delta| STREAM
+    STREAM -->|flush 30 fps| VIEW
+    CHAT -->|all_messages| SESS
+    SESS --> IDX
+    SESS --> BLOBS
+```
+
+## 13. Testes
 
 ```bash
 uv run pytest
 ```
 
-## Arquitetura
+Suíte com `asyncio_mode = "auto"` e `testpaths = ["tests"]` (19 arquivos). O que
+cada família cobre:
 
-Composition root manual (`AppContainer`) monta os services e entrega um `ScreenDeps` concreto à UI — sem Protocol e sem framework de DI.
+- **UI** (`test_ui.py`, `test_choicebar.py`, `test_stream.py`) — Pilot do Textual, flush/coalesce de stream, barras de escolha.
+- **Chat** (`test_chat.py`) — turnos com `TestModel` do Pydantic AI (sem Azure), fila FIFO, cancel.
+- **Plan mode** (`test_plan.py`, `test_plan_cancel.py`) — validação do plano, aprovação, cancelamento em plan mode.
+- **Permissão** (`test_permission.py`) — detecção de path fora do cwd e respostas once/always/deny.
+- **Sessão** (`test_session.py`) — round-trip de mensagens nativas e retomada.
+- **Tools / paths** (`test_tools.py`, `test_paths.py`, `test_files.py`) — guard de escrita, escape do workspace, índice de arquivos.
+- **Config** (`test_config.py`, `test_config_service.py`, `test_catalog.py`) — schema, persistência, catálogo de modelos.
+- **Comandos** (`test_commands.py`, `test_effects.py`) — registry, decisão do Enter, efeitos.
+- **Diff** (`test_diffview.py`) — diff unificado, recorte e fold.
+- **Memória/perf** (`test_mem_gains.py`, `test_perf.py`) — regressões de pico de memória e tempo.
 
-- `config/service.py` — único escritor de `AppConfig`
-- `commands/builtin/` — um arquivo por família de `/comando`
-- `services/events.py` + `services/agents.py` — stream e factories; `ChatService` só orquestra
-- `ui/chat_view.py`, `ui/prompt_bar.py`, `ui/plan_controller.py`, `ui/permission_controller.py` — a tela só roteia
+## 14. Scripts de dev
 
+| Script | Uso |
+|---|---|
+| `scripts/bench_loop.py` | Benchmark de wall-clock + stall do event loop nos caminhos quentes da TUI. `uv run python scripts/bench_loop.py --out .b3code/bench.json` |
+| `scripts/mem_hotspots.py` | RSS + tracemalloc dos hotspots (scan, sessão, `@`, grep, diff). `uv run python scripts/mem_hotspots.py --out .b3code/mem.txt` |
+| `scripts/check_topbar.py` | Inspeção visual da topbar via Pilot (abre a TUI sem LLM). `uv run python scripts/check_topbar.py` |
+| `scripts/repro_plan_cancel.py` | Reproduz cancel no plan mode contra a LLM real. `uv run python scripts/repro_plan_cancel.py` |
+
+## 15. Estrutura de diretórios
+
+```
+src/b3code/
+├── __main__.py            # entry point (uv run b3code)
+├── container.py           # composition root (AppContainer)
+├── commands/
+│   ├── apply.py           # decide_submit / apply_suggestion
+│   ├── effects.py         # efeitos puros dos comandos
+│   ├── registry.py        # CommandRegistry
+│   └── builtin/           # help, model, plan, session
+├── config/
+│   ├── schema.py          # AppConfig
+│   ├── store.py           # ConfigStore (.b3code/config.json)
+│   ├── service.py         # ConfigService (único escritor)
+│   └── credentials.py     # checagem de credencial
+├── libs/
+│   └── models.py          # gateway Azure vs catálogo
+├── services/
+│   ├── chat.py            # ChatService (lock FIFO, eventos)
+│   ├── agents.py          # build_coder / build_planner_agent
+│   ├── events.py          # map_agent_event → ChatEvent
+│   ├── session.py         # SessionStore
+│   ├── permission.py      # PermissionGate
+│   ├── plan.py            # PlanMode (só plan.md gravável)
+│   ├── planner.py         # agente especialista de plan
+│   ├── files.py           # FileIndex (@arquivo)
+│   └── catalog.py         # ModelCatalog
+├── tools/
+│   └── workspace.py       # workspace_toolset
+├── ui/
+│   ├── app.py             # B3App (Textual)
+│   ├── screens/chat.py    # ChatScreen (wiring, bindings)
+│   ├── chat_view.py       # ChatView + widgets de mensagem
+│   ├── prompt_bar.py      # PromptBar + Autocomplete
+│   ├── plan_controller.py # barra de aprovação do plano
+│   ├── permission_controller.py
+│   ├── stream.py          # TextBuffer + FlushScheduler
+│   ├── stream_host.py     # ChatStreamMixin (_on_event)
+│   ├── coalesce.py        # 1 update de markdown por frame
+│   └── widgets/           # topbar, messages, planbar, permission, choicebar, spinner, autocomplete
+└── utils/
+    ├── paths.py           # paths seguros, /work, escrita atômica
+    ├── prompt.py          # @arquivo → bloco <file>
+    ├── diffview.py        # diff unificado + fold
+    ├── fuzzy.py           # rapidfuzz
+    ├── planmeta.py        # metadados do plan.md
+    └── text.py            # ellipsize / truncate
+```
+
+## 16. Notas / troubleshooting
+
+- **Credencial faltando**: sem `api_key`/`api_endpoint` no JSON (com o gateway
+  ligado), o turno não roda e a UI mostra `missing api_key or api_endpoint in
+  .b3code/config.json`. Desligue o gateway (`/gateway off`) ou preencha o JSON.
+- **Busy**: só uma request roda por vez (lock FIFO). Se a barra de input está
+  travada com um turno em andamento, `escape` cancela.
+- **Cache do Azure**: o system prompt é estático de propósito (mudá-lo a cada
+  turno invalidaria o cache); anexos vão no turno do usuário, não no system prompt.
+- **Limites de leitura**: `read_file` trunca em 200 mil caracteres e `grep`
+  retorna no máximo 50 hits; anexos `@` são limitados a 80 mil caracteres.
+- **Diff**: o recorte visual (40 linhas, expandível até 250) é da UI — o diff
+  calculado é sempre completo.
