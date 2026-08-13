@@ -96,6 +96,25 @@ async def test_spinner_mounted_and_removed_on_event(tmp_path: Path):
             screen.query_one(Spinner)
 
 
+async def test_text_deltas_schedule_one_ui_callback(tmp_path: Path, monkeypatch):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        scheduled = []
+        monkeypatch.setattr(
+            screen,
+            "call_later",
+            lambda callback, *args: scheduled.append((callback, args)),
+        )
+        screen._on_event(ChatEvent(kind="text_delta", text="one"))
+        screen._on_event(ChatEvent(kind="text_delta", text="two"))
+        screen._on_event(ChatEvent(kind="text_delta", text="three"))
+        assert len(scheduled) == 1
+        assert screen._pending_text == ["one", "two", "three"]
+
+
 def test_delta_burst_coalesces():
     assert count_markdown_updates(200) == 1
     assert count_markdown_updates(200, duration_s=1.0) < 100

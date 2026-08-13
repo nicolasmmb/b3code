@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 
 from textual import on, work
@@ -49,7 +50,9 @@ class ChatScreen(Screen):
         self.awaiting_permission = False
         self._thinking: Spinner | None = None
         self._flush_timer: Timer | None = None
-        self._text_dirty = False
+        self._pending_text: list[str] = []
+        self._pending_text_lock = threading.Lock()
+        self._text_flush_scheduled = False
         self._ac_query: str | None = None
 
     def compose(self) -> ComposeResult:
@@ -226,13 +229,32 @@ class ChatScreen(Screen):
 
     def _on_event(self, event: ChatEvent) -> None:
         # O handler do agent pode disparar fora de um callback Textual.
+        if event.kind == "text_delta":
+            self._queue_text(event.text)
+            return
         self.call_later(self._apply_event, event)
+
+    def _queue_text(self, text: str) -> None:
+        with self._pending_text_lock:
+            self._pending_text.append(text)
+            if self._text_flush_scheduled:
+                return
+            self._text_flush_scheduled = True
+        self.call_later(self._schedule_text_flush)
+
+    def _schedule_text_flush(self) -> None:
+        if self._flush_timer is None:
+            self._flush_timer = self.set_timer(FLUSH_INTERVAL, self._flush_text)
 
     def _flush_text(self) -> None:
         self._flush_timer = None
-        if not self._text_dirty:
+        with self._pending_text_lock:
+            text = "".join(self._pending_text)
+            self._pending_text.clear()
+            self._text_flush_scheduled = False
+        if not text:
             return
-        self._text_dirty = False
+        self._buffer += text
         if self._assistant is not None:
             self._assistant.update(self._buffer)
         self._stop_thinking()
@@ -240,10 +262,7 @@ class ChatScreen(Screen):
 
     def _apply_event(self, event: ChatEvent) -> None:
         if event.kind == "text_delta":
-            self._buffer += event.text
-            self._text_dirty = True
-            if self._flush_timer is None:
-                self._flush_timer = self.set_timer(FLUSH_INTERVAL, self._flush_text)
+            self._queue_text(event.text)
             return
         self._flush_text()
         chat = self.query_one("#chat")
@@ -355,7 +374,9 @@ class ChatScreen(Screen):
         if self._flush_timer is not None:
             self._flush_timer.stop()
             self._flush_timer = None
-        self._text_dirty = False
+        with self._pending_text_lock:
+            self._pending_text.clear()
+            self._text_flush_scheduled = False
         self._assistant = None
         self._buffer = ""
         self._tools = {}
