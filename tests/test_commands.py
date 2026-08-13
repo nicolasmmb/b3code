@@ -144,3 +144,25 @@ def test_complete_partial_still_lists_command(tmp_path: Path):
     labels = [s.label for s in reg.complete("/mo")]
     assert labels == ["/model"]
     assert all(not s.consume for s in reg.complete("/mo"))
+
+
+def test_plan_on_off_and_view(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(api_models=["gpt-4o"])
+    store.save(cfg)
+    sessions = SessionStore(tmp_path / "sessions.json")
+    chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
+    reg = CommandRegistry.build(store, cfg, sessions, chat)
+    assert "/plan" in [s.label for s in reg.complete("/")]
+    on = reg.execute("/plan")
+    assert on.action == "plan"
+    assert chat.plan.active is True
+    empty = reg.execute("/view-plan")
+    assert "no plan" in empty.message
+    chat.plan.write("# hello\n")
+    shown = reg.execute("/view-plan")
+    assert shown.action == "view_plan"
+    assert "hello" in shown.message
+    off = reg.execute("/plan off")
+    assert off.action == "plan_off"
+    assert chat.plan.active is False

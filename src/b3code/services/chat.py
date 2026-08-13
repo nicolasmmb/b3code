@@ -34,6 +34,7 @@ from b3code.services.permission import (
     PermissionGate,
     PermissionRequest,
 )
+from b3code.services.plan import PlanMode
 from b3code.services.session import SessionStore
 from b3code.tools.workspace import workspace_toolset
 from b3code.utils.diffview import FileChange, summary as diff_summary
@@ -45,6 +46,14 @@ INSTRUCTIONS = (
     "Use run_command for git/tests/lint. Last expression is the run_code return."
 )
 
+PLAN_INSTRUCTIONS = (
+    "You are b3code in plan mode. Explore the workspace and write a plan. "
+    "Do not implement. The only writable file is .b3code/plan.md via write_plan_file. "
+    "Plan sections: Context, Approach, Files, Reuse, Verify. "
+    "When the plan is ready call exit_plan_mode. "
+    "Use delegate_task with explore for extra read-only research."
+)
+
 SHELL_TOOLS = frozenset(
     {"run_command", "start_command", "check_command", "stop_command"}
 )
@@ -52,7 +61,7 @@ SHELL_TOOLS = frozenset(
 
 @dataclass
 class ChatEvent:
-    kind: str  # text_delta | tool_start | tool_end | done | error | diff
+    kind: str  # text_delta | tool_start | tool_end | done | error | diff | plan_ready
     text: str = ""
     tool: str = ""
     detail: str = ""
@@ -75,6 +84,7 @@ class ChatService:
         self.session = session
         self.cwd = cwd
         self.gate = gate
+        self.plan = PlanMode(cwd)
         # Testes injetam TestModel e pulam o Azure.
         self._injected_model = model
         self._agent: Agent[None, str] | None = None
@@ -90,6 +100,18 @@ class ChatService:
         self._agent = None
         if self.gate is not None:
             self.gate.config = config
+
+    def enter_plan(self) -> None:
+        self.plan.enter()
+        self._agent = None
+
+    def exit_plan(self) -> None:
+        self.plan.exit()
+        self._agent = None
+
+    def approve_plan(self) -> str:
+        self.exit_plan()
+        return "Implement the approved plan in .b3code/plan.md."
 
     def answer_permission(self, choice: str) -> None:
         if self.gate is not None:
@@ -144,6 +166,8 @@ class ChatService:
             # reusar o mesmo prefixo e acertar o cache.
             await self.session.areplace(result.all_messages())
             on_event(ChatEvent(kind="done", text=result.output or ""))
+            if self.plan.active and self.plan.read():
+                on_event(ChatEvent(kind="plan_ready", text=self.plan.read()))
         except Exception as exc:
             on_event(ChatEvent(kind="error", text=str(exc)))
         finally:
@@ -159,9 +183,16 @@ class ChatService:
 
     def _make_agent(self) -> Agent[None, str]:
         model = self._injected_model or build_model(self.config)
-        # TestModel/FunctionModel não precisam de CodeMode — ele só gera retries.
+        instructions = PLAN_INSTRUCTIONS if self.plan.active else INSTRUCTIONS
+        files = workspace_toolset(
+            self.cwd,
+            on_change=self._emit_change,
+            can_write=self.plan.can_write,
+        )
+        extras = _plan_toolset(self)
+        # TestModel/FunctionModel não precisam de tools/CodeMode — só geram retries.
         if self._injected_model is not None:
-            return Agent(model, instructions=INSTRUCTIONS)
+            return Agent(model, instructions=instructions)
         hooks = Hooks()
 
         @hooks.on.before_tool_execute(tools=["run_command", "start_command"])
@@ -179,33 +210,78 @@ class ChatService:
                 raise ModelRetry(str(exc)) from exc
             return args
 
+        mount_mode = "read-only" if self.plan.active else "read-write"
+        capabilities: list[Any] = [
+            Shell(
+                cwd=self.cwd,
+                persist_cwd=True,
+                default_timeout=120,
+                denied_env_patterns=LLM_API_KEY_ENV_PATTERNS,
+            ),
+            CodeMode(
+                tools=lambda ctx, td: td.name not in SHELL_TOOLS,
+                mount=MountDir(
+                    virtual_path="/work",
+                    host_path=str(self.cwd),
+                    mode=mount_mode,
+                ),
+                max_retries=3,
+            ),
+            hooks,
+        ]
+        if self.plan.active:
+            capabilities.append(_explore_capability(model, self.cwd))
+        else:
+            from pydantic_ai_harness.planning import Planning
+
+            capabilities.append(Planning())
         return Agent(
             model,
-            instructions=INSTRUCTIONS,
-            toolsets=[workspace_toolset(self.cwd, on_change=self._emit_change)],
-            capabilities=[
-                Shell(
-                    cwd=self.cwd,
-                    persist_cwd=True,
-                    default_timeout=120,
-                    denied_env_patterns=LLM_API_KEY_ENV_PATTERNS,
-                ),
-                CodeMode(
-                    tools=lambda ctx, td: td.name not in SHELL_TOOLS,
-                    mount=MountDir(
-                        virtual_path="/work",
-                        host_path=str(self.cwd),
-                        mode="read-write",
-                    ),
-                    max_retries=3,
-                ),
-                hooks,
-            ],
+            instructions=instructions,
+            toolsets=[files, extras],
+            capabilities=capabilities,
         )
 
     def _emit_change(self, change: FileChange) -> None:
         if self._on_event is not None:
             self._on_event(_diff_event(change))
+
+
+def _plan_toolset(chat: ChatService) -> Any:
+    from pydantic_ai.toolsets import FunctionToolset
+
+    def write_plan_file(content: str) -> str:
+        """Write the markdown plan to .b3code/plan.md (the only writable file in plan mode)."""
+        chat.plan.write(content)
+        return f"wrote {chat.plan.plan_path.name}"
+
+    def exit_plan_mode() -> str:
+        """Present the current plan.md for human approval. Stay in plan mode until they accept."""
+        body = chat.plan.read()
+        if chat._on_event is not None:
+            chat._on_event(ChatEvent(kind="plan_ready", text=body))
+        return "plan ready for approval" if body else "no plan.md yet"
+
+    return FunctionToolset(tools=[write_plan_file, exit_plan_mode])
+
+
+def _explore_capability(model: Model, cwd: Path) -> Any:
+    from pydantic_ai import Agent
+    from pydantic_ai_harness.subagents import SubAgent, SubAgents
+
+    explorer = Agent(
+        model,
+        name="explore",
+        description="Read-only codebase research. Do not edit files.",
+        instructions="Search and read files. Report findings. Never write.",
+        toolsets=[workspace_toolset(cwd, include_write=False)],
+    )
+    return SubAgents(
+        agents=[SubAgent(explorer, name="explore")],
+        agent_folders=None,
+        inherit_tools=False,
+        contain_errors=True,
+    )
 
 
 def _diff_event(change: FileChange) -> ChatEvent:

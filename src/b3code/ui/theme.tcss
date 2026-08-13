@@ -32,6 +32,15 @@ Screen {
     content-align: right middle;
 }
 
+#mode-flag {
+    display: none;
+    width: auto;
+    height: 1;
+    color: #c9a227;
+    padding: 0 0 0 1;
+    content-align: right middle;
+}
+
 #chat {
     height: 1fr;
     padding: 0 2;
@@ -143,6 +152,31 @@ Autocomplete {
 Autocomplete > .option-list--option-highlighted {
     background: #2a2a2a;
     color: #e6e6e6;
+}
+
+PlanBar {
+    display: none;
+    height: auto;
+    background: #1a1b1e;
+    border-top: solid #2a2a2e;
+    padding: 1 2;
+}
+
+#plan-summary {
+    color: #9a9a9a;
+    margin-bottom: 1;
+}
+
+#plan-options {
+    height: auto;
+    max-height: 5;
+    border: none;
+    background: #1a1b1e;
+    padding: 0;
+}
+
+#plan-options > .option-list--option-highlighted {
+    background: #1a1b1e;
 }
 
 PermissionPicker {

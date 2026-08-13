@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
+from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.toolsets import FunctionToolset
 
 from b3code.utils.diffview import FileChange, diff_texts
@@ -16,7 +17,11 @@ _MAX_FILE_CHARS = 200_000
 
 
 def workspace_toolset(
-    cwd: Path, on_change: Callable[[FileChange], None] | None = None
+    cwd: Path,
+    on_change: Callable[[FileChange], None] | None = None,
+    can_write: Callable[[Path], bool] | None = None,
+    *,
+    include_write: bool = True,
 ) -> FunctionToolset:
     def read_file(path: str) -> str:
         """Read a UTF-8 text file relative to the workspace (or /work/...)."""
@@ -58,6 +63,10 @@ def workspace_toolset(
     def write_file(path: str, content: str) -> str:
         """Write UTF-8 content to a workspace file, creating parents."""
         target = safe_workspace_path(path, cwd)
+        if can_write is not None and not can_write(target):
+            raise ModelRetry(
+                "plan mode: only .b3code/plan.md is writable — use write_plan_file"
+            )
         target.parent.mkdir(parents=True, exist_ok=True)
         old = ""
         if target.exists():
@@ -72,7 +81,10 @@ def workspace_toolset(
             on_change(change)
         return f"wrote {rel} (+{change.added} -{change.removed})"
 
-    return FunctionToolset(tools=[read_file, list_dir, grep, write_file])
+    tools = [read_file, list_dir, grep]
+    if include_write:
+        tools.append(write_file)
+    return FunctionToolset(tools=tools)
 
 
 def _iter_text_files(root: Path):

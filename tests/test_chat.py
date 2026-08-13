@@ -50,3 +50,13 @@ async def test_serial_requests(tmp_path: Path):
     assert "one" in texts
     assert "two" in texts
     assert chat.busy is False
+
+
+async def test_enqueue_in_plan_mode(tmp_path: Path):
+    chat = _service(tmp_path)
+    chat.enter_plan()
+    events: list[ChatEvent] = []
+    await chat.enqueue("sketch a plan", events.append)
+    assert any(e.kind == "done" for e in events)
+    assert chat.plan.active is True
+    assert chat.busy is False

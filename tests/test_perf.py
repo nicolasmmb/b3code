@@ -28,6 +28,7 @@ from b3code.services.chat import ChatService
 from b3code.services.files import FileIndex
 from b3code.services.session import SessionStore
 from b3code.ui.widgets.messages import render_diff, render_lines
+from b3code.services.plan import PlanMode
 from b3code.utils.diffview import EXPAND_CAP, diff_texts, visible
 
 # teto na mediana. folgado o bastante pra CI, apertado pra regressão real.
@@ -42,6 +43,9 @@ BUDGET_MS = {
     "render_collapsed": 4.0,
     "render_expanded": 20.0,
     "toggle_expand": 20.0,
+    "can_write": 0.05,
+    "plan_toggle": 5.0,
+    "agent_build": 40.0,
 }
 
 ROUNDS = 9
@@ -129,6 +133,27 @@ def _diff_work() -> dict[str, Callable[[], object]]:
     }
 
 
+def _plan_work(tmp_path: Path) -> dict[str, Callable[[], object]]:
+    mode = PlanMode(tmp_path)
+    target = tmp_path / "a.py"
+    chat = ChatService(
+        AppConfig(api_models=["gpt-4o"]),
+        SessionStore(tmp_path / "perf-sessions.json"),
+        tmp_path,
+        model=TestModel(),
+    )
+
+    def toggle() -> None:
+        chat.enter_plan()
+        chat.exit_plan()
+
+    return {
+        "can_write": lambda: mode.can_write(target),
+        "plan_toggle": toggle,
+        "agent_build": lambda: chat._make_agent(),
+    }
+
+
 def test_hot_paths_stay_under_budget(tmp_path: Path):
     reg = _registry(tmp_path, sessions=80)
     list_models(reg.config)
@@ -154,6 +179,7 @@ def test_hot_paths_stay_under_budget(tmp_path: Path):
         "complete_resume": lambda: reg.complete("/resume"),
         "index_search": lambda: idx.search("mod"),
         **_diff_work(),
+        **_plan_work(tmp_path),
     }
 
     print("\nhot path                  min     median      p95   budget  batch")

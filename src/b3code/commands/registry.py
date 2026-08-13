@@ -127,6 +127,30 @@ class CommandRegistry:
                 if v.startswith(prefix)
             ]
 
+        def plan_cmd(*args: str) -> CommandResult:
+            if chat.busy:
+                return CommandResult("busy — press esc to cancel first")
+            token = args[0].lower() if args else ""
+            if token in {"off", "false"}:
+                chat.exit_plan()
+                return CommandResult("plan mode off", action="plan_off")
+            chat.enter_plan()
+            rest = " ".join(args[1:] if token == "on" else args).strip()
+            return CommandResult("plan mode on", action="plan", payload=rest or None)
+
+        def plan_complete(prefix: str) -> list[Suggestion]:
+            return [
+                Suggestion(value=v, label=v, hint="plan", kind="arg", consume=True)
+                for v in ("on", "off")
+                if v.startswith(prefix)
+            ]
+
+        def view_plan_cmd(*_: str) -> CommandResult:
+            body = chat.plan.read()
+            if not body:
+                return CommandResult("(no plan.md yet)")
+            return CommandResult(body, action="view_plan")
+
         roots = {
             "help": Command("help", "list commands", help_cmd),
             "new": Command("new", "start a new session", new_cmd),
@@ -139,6 +163,8 @@ class CommandRegistry:
             "gateway": Command(
                 "gateway", "toggle Azure gateway", gateway_cmd, gateway_complete
             ),
+            "plan": Command("plan", "enter or leave plan mode", plan_cmd, plan_complete),
+            "view-plan": Command("view-plan", "show the current plan.md", view_plan_cmd),
         }
         return cls(roots, config)
 

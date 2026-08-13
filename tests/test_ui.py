@@ -20,6 +20,7 @@ from b3code.ui.widgets.messages import (
 )
 from b3code.utils.diffview import diff_texts
 from b3code.ui.widgets.permission import PermissionPicker
+from b3code.ui.widgets.planbar import PlanBar
 from b3code.ui.widgets.spinner import FRAMES, Spinner
 
 
@@ -182,6 +183,28 @@ async def test_new_refused_while_busy(tmp_path: Path):
         await pilot.pause()
         notes = [str(n.render()) for n in screen.query(SystemNote)]
         assert any("busy" in n for n in notes)
+
+
+async def test_plan_badge_and_bar(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._run_command("/plan")
+        await pilot.pause()
+        flag = screen.query_one("#mode-flag", Static)
+        assert flag.display
+        assert "plan" in str(flag.render())
+        bar = screen.query_one(PlanBar)
+        screen.awaiting_plan = True
+        bar.show("# Context\nhello")
+        await pilot.pause()
+        assert bar.display
+        screen.confirm_plan("quit")
+        await pilot.pause()
+        assert screen.c.chat.plan.active is False
+        assert flag.display is False
 
 
 async def test_tool_events_reuse_the_same_row(tmp_path: Path):
