@@ -8,11 +8,26 @@ from __future__ import annotations
 
 import os
 import shlex
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 SKIP_DIRS = frozenset(
-    {".git", ".venv", ".b3code", "node_modules", "__pycache__", "dist"}
+    {
+        ".git",
+        ".venv",
+        ".b3code",
+        "node_modules",
+        "__pycache__",
+        "dist",
+        "target",
+        "build",
+        "vendor",
+        ".tox",
+        ".mypy_cache",
+        ".ruff_cache",
+        "coverage",
+        ".pytest_cache",
+    }
 )
 
 
@@ -58,6 +73,7 @@ def iter_workspace_files(
     *,
     skip_dirs: frozenset[str] = SKIP_DIRS,
     max_size: int | None = None,
+    skip_rel: Callable[[Path], bool] | None = None,
 ) -> Iterator[Path]:
     """Walk files under `root`, pruning skip_dirs at each level (no post-filter rglob)."""
     root = root.resolve()
@@ -74,6 +90,9 @@ def iter_workspace_files(
                         continue
                     try:
                         if entry.is_dir(follow_symlinks=False):
+                            rel = Path(entry.path).relative_to(root)
+                            if skip_rel is not None and skip_rel(rel):
+                                continue
                             stack.append(Path(entry.path))
                             continue
                         if not entry.is_file(follow_symlinks=False):

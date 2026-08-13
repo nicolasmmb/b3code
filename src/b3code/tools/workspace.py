@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -11,6 +12,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from b3code.utils.diffview import FileChange, diff_texts
 from b3code.utils.paths import SKIP_DIRS, iter_workspace_files, safe_workspace_path
+from b3code.utils.text import truncate_chars
 
 _MAX_HITS = 50
 _MAX_FILE_CHARS = 200_000
@@ -74,15 +76,12 @@ def workspace_toolset(
         root = safe_workspace_path(path, cwd)
         hits: list[str] = []
         for file in _iter_text_files(root):
-            try:
-                lines = file.read_text(encoding="utf-8", errors="ignore").splitlines()
-            except OSError:
-                continue
             rel = file.relative_to(cwd.resolve())
-            for i, line in enumerate(lines, 1):
+            for i, line in enumerate(_iter_grep_lines(file), 1):
                 if not rx.search(line):
                     continue
-                hits.append(f"{rel}:{i}:{line}")
+                shown = line if len(line) <= 240 else line[:239] + "…"
+                hits.append(f"{rel}:{i}:{shown}")
                 if len(hits) >= max_hits:
                     return "\n".join(hits)
         return "\n".join(hits) or "(no matches)"
@@ -156,9 +155,8 @@ def workspace_toolset(
 
 
 def _truncate(text: str, max_chars: int) -> str:
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars] + "\n...[truncated]"
+    body, _truncated = truncate_chars(text, max_chars)
+    return body
 
 
 def _line_range(
@@ -185,3 +183,17 @@ def _require_unique_span(text: str, old: str, path: str, replace_all: bool) -> i
 
 def _iter_text_files(root: Path):
     yield from iter_workspace_files(root, max_size=1_000_000)
+
+
+def _iter_grep_lines(path: Path):
+    try:
+        with path.open("rb") as raw:
+            head = raw.read(8192)
+            if b"\0" in head:
+                return
+            raw.seek(0)
+            wrapped = io.TextIOWrapper(raw, encoding="utf-8", errors="ignore")
+            for line in wrapped:
+                yield line.rstrip("\n\r")
+    except OSError:
+        return

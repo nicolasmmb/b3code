@@ -1,4 +1,4 @@
-"""Sessões em `.b3code/sessions.json`.
+"""Sessões: índice em `sessions.json`, mensagens em `sessions/{id}.json`.
 
 Gravamos `result.all_messages()` (objetos nativos do Pydantic AI), não
 `{"role":"user"}` reconstruído — isso quebra pairing de tools e o
@@ -8,6 +8,7 @@ prefixo idêntico que o cache Azure exige.
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,8 +33,9 @@ from b3code.utils.text import ellipsize
 class Session(BaseModel):
     id: str
     created_at: str
-    # dump JSON-friendly do adapter — validado na leitura, não aqui
+    # dump JSON-friendly do adapter — só carregado na sessão ativa
     messages: list[Any] = Field(default_factory=list)
+    message_count: int = 0
 
 
 class SessionFile(BaseModel):
@@ -54,12 +56,16 @@ class DisplayTurn:
 class SessionStore:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._dir = path.parent / "sessions"
         self._file, self._current = self._load()
         self._messages: list[ModelMessage] | None = None
 
     @classmethod
     def for_cwd(cls, cwd: Path) -> SessionStore:
         return cls(cwd / ".b3code" / "sessions.json")
+
+    def _blob_path(self, session_id: str) -> Path:
+        return self._dir / f"{session_id}.json"
 
     @property
     def current_id(self) -> str:
@@ -84,8 +90,7 @@ class SessionStore:
 
     async def replace_async(self, messages: list[ModelMessage]) -> None:
         self._install(messages)
-        payload = self._file.model_dump_json(indent=2) + "\n"
-        await asyncio.to_thread(atomic_write_text, self.path, payload)
+        await asyncio.to_thread(self._save)
 
     def new(self) -> Session:
         session = _blank_session()
@@ -105,7 +110,8 @@ class SessionStore:
                 self._file.active_id = session.id
                 self._current = session
                 self._messages = None
-                self._save()
+                self._current.messages = self._read_blob(session.id)
+                self._save_index()
                 return session
         raise ValueError(f"unknown session {session_id!r}")
 
@@ -113,7 +119,9 @@ class SessionStore:
         return turns_from_messages(self.messages)
 
     def _install(self, messages: list[ModelMessage]) -> None:
-        self._current.messages = ModelMessagesTypeAdapter.dump_python(messages)
+        dumped = ModelMessagesTypeAdapter.dump_python(messages)
+        self._current.messages = dumped
+        self._current.message_count = len(messages)
         self._messages = list(messages)
 
     def _load(self) -> tuple[SessionFile, Session]:
@@ -121,16 +129,52 @@ class SessionStore:
             session = _blank_session()
             data = SessionFile(active_id=session.id, sessions=[session])
             return data, session
-        data = SessionFile.model_validate_json(self.path.read_text(encoding="utf-8"))
-        current = next((s for s in data.sessions if s.id == data.active_id), None)
+        payload = SessionFile.model_validate_json(self.path.read_text(encoding="utf-8"))
+        current = next((s for s in payload.sessions if s.id == payload.active_id), None)
         if current is None:
             current = _blank_session()
-            data.sessions.append(current)
-            data.active_id = current.id
-        return data, current
+            payload.sessions.append(current)
+            payload.active_id = current.id
+        current.messages = self._read_blob(current.id)
+        return payload, current
+
+    def _read_blob(self, session_id: str) -> list[Any]:
+        blob = self._blob_path(session_id)
+        if not blob.exists():
+            return []
+        data = Session.model_validate_json(blob.read_text(encoding="utf-8"))
+        return data.messages
+
+    def _write_blob(self, session: Session) -> None:
+        self._dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(
+            self._blob_path(session.id),
+            Session(
+                id=session.id,
+                created_at=session.created_at,
+                messages=session.messages,
+                message_count=session.message_count,
+            ).model_dump_json(indent=2)
+            + "\n",
+        )
+
+    def _save_index(self) -> None:
+        slim = {
+            "active_id": self._file.active_id,
+            "sessions": [
+                {
+                    "id": item.id,
+                    "created_at": item.created_at,
+                    "message_count": item.message_count,
+                }
+                for item in self._file.sessions
+            ],
+        }
+        atomic_write_text(self.path, json.dumps(slim, indent=2) + "\n")
 
     def _save(self) -> None:
-        atomic_write_text(self.path, self._file.model_dump_json(indent=2) + "\n")
+        self._write_blob(self._current)
+        self._save_index()
 
 
 def _blank_session() -> Session:
@@ -179,7 +223,7 @@ def _turns_from_response(msg: ModelResponse) -> list[DisplayTurn]:
             turns.append(
                 DisplayTurn(
                     role="tool",
-                    text=args,
+                    text="",
                     tool=part.tool_name,
                     detail=ellipsize(args),
                 )

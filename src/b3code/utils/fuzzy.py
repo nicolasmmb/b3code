@@ -5,12 +5,14 @@ from pathlib import Path
 from rapidfuzz import fuzz, process
 
 
-def rank_paths(query: str, paths: list[Path], limit: int = 20) -> list[Path]:
+def rank_paths(
+    query: str, paths: list[Path] | list[str], limit: int = 20
+) -> list[Path]:
     if not paths:
         return []
     if not query:
-        return paths[:limit]
-    choices = {str(p): p for p in paths}
+        return [Path(p) for p in paths[:limit]]
+    choices = {str(p): Path(p) for p in paths}
     hits = process.extract(
         query,
         choices.keys(),

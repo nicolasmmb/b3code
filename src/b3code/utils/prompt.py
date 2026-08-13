@@ -11,6 +11,7 @@ from pathlib import Path
 
 AT_TOKEN = re.compile(r"(?<!\S)@([^\s]+)")
 FILE_BLOCK = re.compile(r'<file path="[^"]+">.*?</file>\s*', re.DOTALL)
+ATTACH_CHAR_LIMIT = 80_000
 
 
 def current_token(text: str, cursor: int) -> tuple[int, int, str]:

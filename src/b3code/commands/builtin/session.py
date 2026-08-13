@@ -1,7 +1,11 @@
 from b3code.commands.effects import NewSession, Quit, Refresh
 from b3code.commands.registry import Command
 from b3code.commands.types import CommandResult, Suggestion
-from b3code.services.session import SessionStore
+from b3code.services.session import Session, SessionStore
+
+
+def _session_count(session: Session) -> int:
+    return session.message_count or len(session.messages)
 
 
 def build_new(sessions: SessionStore) -> Command:
@@ -30,7 +34,7 @@ def build_resume(sessions: SessionStore) -> Command:
             for session in sessions.list_sessions():
                 mark = "*" if session.id == sessions.current_id else " "
                 rows.append(
-                    f"{mark} {session.id}  {session.created_at}  {len(session.messages)} msgs"
+                    f"{mark} {session.id}  {session.created_at}  {_session_count(session)} msgs"
                 )
             return CommandResult("sessions:\n" + "\n".join(rows) or "(none)")
         sessions.activate(args[0])
@@ -48,7 +52,7 @@ def build_resume(sessions: SessionStore) -> Command:
                 Suggestion(
                     value=session.id,
                     label=session.id,
-                    hint=f"{mark}{date}  {len(session.messages)} msgs".strip(),
+                    hint=f"{mark}{date}  {_session_count(session)} msgs".strip(),
                     kind="arg",
                     consume=True,
                 )

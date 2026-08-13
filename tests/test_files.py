@@ -45,6 +45,15 @@ def test_expand_attachments(tmp_path: Path):
     assert "print(1)" in out
 
 
+def test_expand_attachments_truncates_large_file(tmp_path: Path):
+    from b3code.utils.prompt import ATTACH_CHAR_LIMIT
+
+    (tmp_path / "big.txt").write_text("z" * (ATTACH_CHAR_LIMIT + 50))
+    out = expand_attachments("veja @big.txt", tmp_path, FileIndex(tmp_path).read)
+    assert "...[truncated]" in out
+    assert "z" * (ATTACH_CHAR_LIMIT + 50) not in out
+
+
 def test_apply_file_suggestion():
     item = Suggestion(value="app.py", label="app.py", hint="file", kind="file")
     text, cursor = apply_suggestion("veja @ap", 8, item)

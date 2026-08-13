@@ -26,6 +26,7 @@ class FileChange:
     removed: int
     lines: tuple[DiffLine, ...]
     truncated: bool = False
+    line_count: int = 0
 
 
 def summary(change: FileChange) -> str:
@@ -38,7 +39,8 @@ def visible(change: FileChange, *, expanded: bool) -> tuple[DiffLine, ...]:
 
 
 def hidden_count(change: FileChange, *, expanded: bool) -> int:
-    return max(0, len(change.lines) - len(visible(change, expanded=expanded)))
+    total = change.line_count or len(change.lines)
+    return max(0, total - len(visible(change, expanded=expanded)))
 
 
 def fold_label(change: FileChange, *, expanded: bool) -> str:
@@ -58,12 +60,22 @@ def diff_texts(
     new_lines = new.splitlines()
     if not old_lines and new_lines:
         added = len(new_lines)
-        shown = tuple(DiffLine("+", line, i) for i, line in enumerate(new_lines, 1))
-        return FileChange(path, added, 0, shown, truncated=added > COLLAPSE)
+        shown = tuple(
+            DiffLine("+", line, i) for i, line in enumerate(new_lines[:EXPAND_CAP], 1)
+        )
+        return FileChange(
+            path,
+            added,
+            0,
+            shown,
+            truncated=added > COLLAPSE,
+            line_count=added,
+        )
 
     parsed: list[DiffLine] = []
     added = 0
     removed = 0
+    line_count = 0
     old_i = 1
     new_i = 1
     for line in difflib.unified_diff(old_lines, new_lines, lineterm="", n=3):
@@ -75,23 +87,31 @@ def diff_texts(
                 old_i = int(match.group(1))
                 new_i = int(match.group(2))
             continue
-        if line.startswith("+"):
-            added += 1
-            parsed.append(DiffLine("+", line[1:], new_i))
-            new_i += 1
-            continue
-        if line.startswith("-"):
-            removed += 1
-            parsed.append(DiffLine("-", line[1:], old_i))
-            old_i += 1
-            continue
         if line.startswith("\\"):
             continue
-        body = line[1:] if line.startswith(" ") else line
-        parsed.append(DiffLine(" ", body, new_i))
-        old_i += 1
-        new_i += 1
+        if line.startswith("+"):
+            added += 1
+            kind, body, number = "+", line[1:], new_i
+            new_i += 1
+        elif line.startswith("-"):
+            removed += 1
+            kind, body, number = "-", line[1:], old_i
+            old_i += 1
+        else:
+            kind = " "
+            body = line[1:] if line.startswith(" ") else line
+            number = new_i
+            old_i += 1
+            new_i += 1
+        line_count += 1
+        if len(parsed) < EXPAND_CAP:
+            parsed.append(DiffLine(kind, body, number))
 
     return FileChange(
-        path, added, removed, tuple(parsed), truncated=len(parsed) > COLLAPSE
+        path,
+        added,
+        removed,
+        tuple(parsed),
+        truncated=line_count > COLLAPSE,
+        line_count=line_count,
     )

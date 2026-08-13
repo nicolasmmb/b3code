@@ -54,6 +54,8 @@ def test_keeps_full_hunk_and_slices_for_display():
 def test_expand_cap_limits_visible_lines():
     new = "\n".join(f"line {i}" for i in range(EXPAND_CAP + 40))
     change = diff_texts("huge.py", "", new)
-    assert len(change.lines) == EXPAND_CAP + 40
+    assert change.added == EXPAND_CAP + 40
+    assert change.line_count == EXPAND_CAP + 40
+    assert len(change.lines) == EXPAND_CAP
     assert len(visible(change, expanded=True)) == EXPAND_CAP
     assert hidden_count(change, expanded=True) == 40

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic_ai import Agent, CancellationToken
+from pydantic_ai.exceptions import RunCancelled
 from pydantic_ai.models import Model
 
 from b3code.config.credentials import missing_gateway_credentials
@@ -113,6 +114,8 @@ class ChatService:
         self._bind_permission(on_event)
         try:
             await self._dispatch_turn(prompt, token, on_event)
+        except RunCancelled:
+            on_event(ChatEvent(kind="error", text="cancelled"))
         except Exception as exc:
             on_event(ChatEvent(kind="error", text=str(exc)))
         finally:

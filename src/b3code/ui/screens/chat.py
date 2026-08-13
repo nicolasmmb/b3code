@@ -33,7 +33,7 @@ class ChatScreen(ChatStreamMixin, Screen):
         Binding("ctrl+n", "new_session", "New", show=False),
         Binding("ctrl+s", "resume", "Resume", show=False),
         Binding("ctrl+d", "quit", "Quit", show=False),
-        Binding("escape", "escape", "Esc", show=False),
+        Binding("escape", "escape", "Esc", show=False, priority=True),
         Binding("a", "plan_approve", "Approve", show=False, priority=True),
         Binding("s", "plan_revise", "Revise", show=False, priority=True),
         Binding("q", "plan_quit", "Quit plan", show=False, priority=True),
@@ -158,6 +158,12 @@ class ChatScreen(ChatStreamMixin, Screen):
     def action_plan_quit(self) -> None:
         if self.awaiting_plan:
             self.confirm_plan("quit")
+            return
+        if self.deps.chat.busy and self.deps.chat.plan.active:
+            self.deps.chat.cancel_current()
+            return
+        if self.deps.chat.plan.active:
+            self._run_command("/plan off")
 
     def action_escape(self) -> None:
         if self.awaiting_plan:
@@ -172,6 +178,9 @@ class ChatScreen(ChatStreamMixin, Screen):
             return
         if self.deps.chat.busy:
             self.deps.chat.cancel_current()
+            return
+        if self.deps.chat.plan.active:
+            self._run_command("/plan off")
 
     def action_new_session(self) -> None:
         self._run_command("/new")
@@ -217,7 +226,16 @@ class ChatScreen(ChatStreamMixin, Screen):
         self.chat_view.stop_thinking()
         self.chat_view.ensure_thinking()
         self.chat_view.scroll_end()
+        self.query_one(PromptBar).disable_input()
         self._enqueue_prompt(user_text)
+
+    def _apply_event(self, event) -> None:
+        super()._apply_event(event)
+        if event.kind not in {"done", "error"}:
+            return
+        if self.awaiting_plan or self.awaiting_permission:
+            return
+        self.query_one(PromptBar).enable_input()
 
     @work(exclusive=False)
     async def _enqueue_prompt(self, user_text: str) -> None:

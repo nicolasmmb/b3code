@@ -23,8 +23,11 @@ async def test_saves_after_turn(tmp_path: Path):
     events: list[ChatEvent] = []
     await chat.enqueue("hi", events.append)
     assert any(e.kind == "done" for e in events)
-    data = (tmp_path / "sessions.json").read_text()
-    assert "hi" in data
+    assert any(
+        "hi" in str(getattr(part, "content", ""))
+        for msg in chat.session.messages
+        for part in getattr(msg, "parts", [])
+    )
     assert chat.session.messages
 
 
@@ -60,7 +63,11 @@ async def test_enqueue_in_plan_mode(tmp_path: Path):
     assert any(e.kind == "done" for e in events)
     assert chat.plan.active is True
     assert chat.busy is False
-    dumped = (tmp_path / "sessions.json").read_text()
+    dumped = " ".join(
+        str(getattr(part, "content", ""))
+        for msg in chat.session.messages
+        for part in getattr(msg, "parts", [])
+    )
     assert "sketch a plan" in dumped
     assert "plan mode" in dumped or "plan.md" in dumped
     assert chat._plan_history

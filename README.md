@@ -27,7 +27,7 @@ Config (`.b3code/config.json`):
 - `@arquivo` — anexa o conteúdo no turno
 - `/help` `/new` `/resume` `/model` `/gateway` `/quit`
 - Shell (`run_command`) no cwd é livre. Path fora (`/tmp`, `../`) pede `[y] once  [a] always  [n] deny`. `always` grava em `shell_allowed_paths`.
-- sessão em `.b3code/sessions.json` (gitignore)
+- sessão: índice em `.b3code/sessions.json`, mensagens em `.b3code/sessions/{id}.json` (gitignore)
 
 ```bash
 uv run pytest

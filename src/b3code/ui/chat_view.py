@@ -23,6 +23,14 @@ from b3code.ui.widgets.spinner import Spinner
 from b3code.utils.diffview import FileChange
 
 
+def visible_turns(
+    turns: list[DisplayTurn], window: int = 100
+) -> tuple[int, list[DisplayTurn]]:
+    if len(turns) <= window:
+        return 0, list(turns)
+    return len(turns) - window, list(turns[-window:])
+
+
 class Welcome(Vertical):
     def compose(self) -> ComposeResult:
         yield Static("b3code  0.1.0", id="welcome-title")
@@ -75,7 +83,7 @@ class ChatView:
         self._plan_doc = None
         self._thinking = None
 
-    def rebuild(self, turns: Iterable[DisplayTurn]) -> None:
+    def rebuild(self, turns: Iterable[DisplayTurn], *, window: int = 100) -> None:
         self.scroll.remove_children()
         turns = list(turns)
         if not turns:
@@ -83,7 +91,10 @@ class ChatView:
             self.show_welcome()
             return
         self.hide_welcome()
-        for turn in turns:
+        hidden, shown = visible_turns(turns, window)
+        if hidden:
+            self.scroll.mount(SystemNote(f"… {hidden} earlier turns"))
+        for turn in shown:
             self.mount_turn(turn)
         self.scroll_end()
 
