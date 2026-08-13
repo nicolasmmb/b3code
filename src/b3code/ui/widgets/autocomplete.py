@@ -3,7 +3,7 @@
 from textual.widgets import OptionList
 from textual.widgets.option_list import Option
 
-from b3code.commands.registry import Suggestion
+from b3code.commands.types import Suggestion
 
 
 class Autocomplete(OptionList, can_focus=False):

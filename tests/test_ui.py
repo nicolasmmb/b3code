@@ -38,6 +38,37 @@ async def test_app_opens_welcome(tmp_path: Path):
         assert "/help" in labels
 
 
+async def test_enter_on_help_executes(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        await pilot.press("/")
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        notes = [str(n.render()) for n in screen.query(SystemNote)]
+        assert any("/help" in n for n in notes)
+
+
+async def test_resume_lists_sessions_in_autocomplete(tmp_path: Path):
+    container = AppContainer.build(tmp_path)
+    sid = container.session_store.current_id
+    app = B3App(container)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        for ch in "/resume":
+            await pilot.press(ch)
+        await pilot.pause()
+        ac = screen.query_one(Autocomplete)
+        assert ac.display
+        ids = [item.value for item in ac._items]
+        assert sid in ids
+
+
 async def test_permission_picker_arrows(tmp_path: Path):
     app = B3App(AppContainer.build(tmp_path))
     async with app.run_test() as pilot:

@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from b3code.services.files import FileIndex
-from b3code.utils.prompt import apply_suggestion, expand_attachments
+from b3code.commands.apply import apply_suggestion
+from b3code.commands.types import Suggestion
+from b3code.utils.prompt import expand_attachments
 
 
 def test_constructor_does_not_scan(tmp_path: Path):
@@ -44,11 +46,15 @@ def test_expand_attachments(tmp_path: Path):
 
 
 def test_apply_file_suggestion():
-    text, cursor = apply_suggestion("veja @ap", 8, "app.py", "file")
+    item = Suggestion(value="app.py", label="app.py", hint="file", kind="file")
+    text, cursor = apply_suggestion("veja @ap", 8, item)
     assert text == "veja @app.py"
     assert cursor == len(text)
 
 
 def test_apply_cmd_suggestion():
-    text, _ = apply_suggestion("/he", 3, "/help", "cmd")
-    assert text == "/help "
+    item = Suggestion(
+        value="/help", label="/help", hint="list", kind="cmd", consume=True
+    )
+    text, _ = apply_suggestion("/he", 3, item)
+    assert text == "/help"

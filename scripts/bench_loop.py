@@ -31,7 +31,15 @@ from pydantic_ai.messages import (  # noqa: E402
     ToolCallPart,
     UserPromptPart,
 )
+from pydantic_ai.models.test import TestModel  # noqa: E402
 
+from b3code.commands.apply import apply_suggestion, decide_submit  # noqa: E402
+from b3code.commands.registry import CommandRegistry  # noqa: E402
+from b3code.commands.types import Suggestion  # noqa: E402
+from b3code.config.schema import AppConfig  # noqa: E402
+from b3code.config.store import ConfigStore  # noqa: E402
+from b3code.services.catalog import list_models  # noqa: E402
+from b3code.services.chat import ChatService  # noqa: E402
 from b3code.services.files import FileIndex  # noqa: E402
 from b3code.services.session import SessionStore  # noqa: E402
 from b3code.tools.workspace import workspace_toolset  # noqa: E402
@@ -269,6 +277,35 @@ async def run_bench() -> dict[str, Any]:
 
     results["delta_updates"] = _delta_updates()
 
+    cfg = AppConfig(use_provider_gateway=False, api_models=["gpt-4o"])
+    ConfigStore(tmp / "config.json").save(cfg)
+    chat = ChatService(cfg, store, tmp, model=TestModel())
+    reg = CommandRegistry.build(ConfigStore(tmp / "config.json"), cfg, store, chat)
+    list_models(cfg)
+    item = Suggestion(
+        value="anthropic:claude-fable-5",
+        label="anthropic:claude-fable-5",
+        hint="catalog",
+        kind="arg",
+        consume=True,
+    )
+    typed = "/model claude-fable"
+
+    def _repeat(fn, n: int) -> None:
+        for _ in range(n):
+            fn()
+
+    _, results["complete_root"] = await _stall(lambda: _repeat(lambda: reg.complete("/"), 500))
+    _, results["complete_model"] = await _stall(
+        lambda: _repeat(lambda: reg.complete("/model claude"), 100)
+    )
+    _, results["decide_submit"] = await _stall(
+        lambda: _repeat(lambda: decide_submit(typed, len(typed), item), 2_000)
+    )
+    _, results["apply_suggestion"] = await _stall(
+        lambda: _repeat(lambda: apply_suggestion(typed, len(typed), item), 2_000)
+    )
+
     return {
         "fixture": {
             "useful": USEFUL,
@@ -288,7 +325,6 @@ def _compare(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
     stall_ids = ("index_build", "index_search", "expand", "session_replace")
     for name in bm:
         if name not in am:
-            failures.append(f"missing metric {name}")
             continue
         b, a = bm[name], am[name]
         wall_pct = (

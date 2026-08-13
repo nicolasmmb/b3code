@@ -45,14 +45,3 @@ def strip_file_blocks(text: str) -> str:
     return FILE_BLOCK.sub("", text).strip()
 
 
-def apply_suggestion(text: str, cursor: int, value: str, kind: str) -> tuple[str, int]:
-    start, end, _token = current_token(text, cursor)
-    if kind == "file":
-        inserted = value if value.startswith("@") else f"@{value}"
-    elif value.startswith("/"):
-        inserted = value if value.endswith(" ") else value + " "
-    else:
-        # subcomando ou nome de modelo — só o último token
-        inserted = value + " "
-    new = text[:start] + inserted + text[end:]
-    return new, start + len(inserted)

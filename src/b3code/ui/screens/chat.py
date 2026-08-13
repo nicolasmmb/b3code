@@ -15,7 +15,8 @@ from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import Input, Static
 
-from b3code.commands.registry import Suggestion
+from b3code.commands.apply import Decision, decide_submit
+from b3code.commands.types import Suggestion
 from b3code.container import AppContainer
 from b3code.services.chat import ChatEvent
 from b3code.services.session import DisplayTurn
@@ -30,7 +31,7 @@ from b3code.ui.widgets.messages import (
 )
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.spinner import Spinner
-from b3code.utils.prompt import apply_suggestion, current_token, expand_attachments
+from b3code.utils.prompt import current_token, expand_attachments
 
 
 class ChatScreen(Screen):
@@ -89,18 +90,9 @@ class ChatScreen(Screen):
             self.confirm_permission()
             return
         ac = self.query_one(Autocomplete)
-        if ac.display and ac.current() is not None:
-            self._apply(ac.current())
-            return
-        text = event.value.strip()
-        if not text:
-            return
-        event.input.clear()
-        ac.set_suggestions([])
-        if text.startswith("/"):
-            self._run_command(text)
-            return
-        self._send_chat(text)
+        suggestion = ac.current() if ac.display else None
+        decision = decide_submit(event.value, event.input.cursor_position, suggestion)
+        self._fulfill(decision, event.input, ac, execute=True)
 
     def on_key(self, event: Key) -> None:
         if self.awaiting_permission:
@@ -133,7 +125,9 @@ class ChatScreen(Screen):
         item = ac.current()
         if item is None:
             return
-        self._apply(item)
+        inp = self.query_one("#prompt", Input)
+        decision = decide_submit(inp.value, inp.cursor_position, item)
+        self._fulfill(decision, inp, ac, execute=False)
         event.stop()
         event.prevent_default()
 
@@ -343,15 +337,34 @@ class ChatScreen(Screen):
             ]
         )
 
-    def _apply(self, item: Suggestion) -> None:
-        inp = self.query_one("#prompt", Input)
-        new, cursor = apply_suggestion(
-            inp.value, inp.cursor_position, item.value, item.kind
-        )
-        inp.value = new
-        inp.cursor_position = cursor
-        self.query_one(Autocomplete).set_suggestions([])
-        self._refresh_autocomplete(new, cursor)
+    def _fulfill(
+        self,
+        decision: Decision,
+        inp: Input,
+        ac: Autocomplete,
+        *,
+        execute: bool,
+    ) -> None:
+        if decision.kind == "apply":
+            inp.value = decision.line
+            inp.cursor_position = decision.cursor
+            consume = bool(decision.suggestion and decision.suggestion.consume)
+            if execute and consume:
+                ac.set_suggestions([])
+                inp.clear()
+                self._run_command(decision.line.strip())
+                return
+            self._refresh_autocomplete(decision.line, decision.cursor)
+            return
+        if not execute or decision.kind == "empty":
+            return
+        inp.clear()
+        ac.set_suggestions([])
+        if decision.kind == "execute":
+            self._run_command(decision.line)
+            return
+        if decision.kind == "chat":
+            self._send_chat(decision.line)
 
     def _mount_turn(self, turn: DisplayTurn) -> None:
         chat = self.query_one("#chat")
