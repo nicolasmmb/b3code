@@ -1,12 +1,19 @@
-"""Teto de latência nos caminhos que o TUI chama a cada tecla / Enter.
+"""Teto de latência com amostragem estável (mediana / p95, GC pausado).
 
-Não precisa de baseline JSON: falha se um hot path ficar lento demais.
-Rode com `uv run pytest tests/test_perf.py -s` para ver a tabela.
+Um único burst + média pega ruído de GC e de relógio. Aqui: aquece,
+calibra o lote pra cada round durar ~30ms, tira vários rounds e
+julga pela **mediana**. `p95` só aparece na tabela.
+
+    uv run pytest tests/test_perf.py -s
 """
 
 from __future__ import annotations
 
+import gc
+import statistics
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic_ai.models.test import TestModel
@@ -23,7 +30,7 @@ from b3code.services.session import SessionStore
 from b3code.ui.widgets.messages import render_diff, render_lines
 from b3code.utils.diffview import EXPAND_CAP, diff_texts, visible
 
-# tetos folgados: pegam regressão real, não ruído de CI
+# teto na mediana. folgado o bastante pra CI, apertado pra regressão real.
 BUDGET_MS = {
     "apply_suggestion": 0.05,
     "decide_submit": 0.05,
@@ -37,14 +44,52 @@ BUDGET_MS = {
     "toggle_expand": 20.0,
 }
 
+ROUNDS = 9
+WARMUP = 3
+TARGET_ROUND_S = 0.03
 
-def _ms_per_op(fn, n: int, *, warmup: int = 20) -> float:
-    for _ in range(warmup):
-        fn()
+
+@dataclass(frozen=True)
+class Sample:
+    minimum: float
+    median: float
+    p95: float
+    batch: int
+    rounds: int
+
+
+def _sample(fn: Callable[[], object]) -> Sample:
+    """ms/op: warmup + N rounds com lote calibrado; GC desligado na medição."""
+    fn()
     t0 = time.perf_counter()
-    for _ in range(n):
-        fn()
-    return (time.perf_counter() - t0) * 1000 / n
+    fn()
+    one = max(time.perf_counter() - t0, 1e-9)
+    batch = max(1, min(20_000, int(TARGET_ROUND_S / one)))
+
+    for _ in range(WARMUP):
+        for _ in range(batch):
+            fn()
+
+    gc.collect()
+    was_enabled = gc.isenabled()
+    gc.disable()
+    raw: list[float] = []
+    try:
+        for _ in range(ROUNDS):
+            start = time.perf_counter()
+            for _ in range(batch):
+                fn()
+            raw.append((time.perf_counter() - start) * 1000 / batch)
+    finally:
+        if was_enabled:
+            gc.enable()
+
+    raw.sort()
+    if len(raw) >= 2:
+        p95 = statistics.quantiles(raw, n=20)[18]
+    else:
+        p95 = raw[-1]
+    return Sample(raw[0], statistics.median(raw), p95, batch, ROUNDS)
 
 
 def _registry(tmp_path: Path, *, sessions: int = 1) -> CommandRegistry:
@@ -58,9 +103,35 @@ def _registry(tmp_path: Path, *, sessions: int = 1) -> CommandRegistry:
     return CommandRegistry.build(store, cfg, sess, chat)
 
 
+def _diff_work() -> dict[str, Callable[[], object]]:
+    old = [f"line {i} keep" for i in range(2000)]
+    new = list(old)
+    for i in range(100, 180):
+        new[i] = f"line {i} changed"
+    old_s = "\n".join(old)
+    new_s = "\n".join(new)
+    change = diff_texts("big.py", old_s, new_s)
+    huge = diff_texts(
+        "huge.py",
+        "",
+        "\n".join(f"row {i}" for i in range(EXPAND_CAP + 10)),
+    )
+
+    def toggle() -> None:
+        render_lines(visible(change, expanded=False), 80)
+        render_lines(visible(change, expanded=True), 80)
+
+    return {
+        "diff_2k": lambda: diff_texts("big.py", old_s, new_s),
+        "render_collapsed": lambda: render_diff(change, 80, expanded=False),
+        "render_expanded": lambda: render_lines(visible(huge, expanded=True), 80),
+        "toggle_expand": toggle,
+    }
+
+
 def test_hot_paths_stay_under_budget(tmp_path: Path):
     reg = _registry(tmp_path, sessions=80)
-    list_models(reg.config)  # aquece known_model_names
+    list_models(reg.config)
 
     item = Suggestion(
         value="anthropic:claude-fable-5",
@@ -70,63 +141,35 @@ def test_hot_paths_stay_under_budget(tmp_path: Path):
         consume=True,
     )
     line = "/model claude-fable"
-
     for i in range(30):
         (tmp_path / f"mod_{i:03d}.py").write_text("x", encoding="utf-8")
     idx = FileIndex(tmp_path)
     idx.scan()
 
-    measured = {
-        "apply_suggestion": _ms_per_op(
-            lambda: apply_suggestion(line, len(line), item), 4_000
-        ),
-        "decide_submit": _ms_per_op(
-            lambda: decide_submit(line, len(line), item), 4_000
-        ),
-        "complete_root": _ms_per_op(lambda: reg.complete("/"), 2_000),
-        "complete_model": _ms_per_op(lambda: reg.complete("/model claude"), 200),
-        "complete_resume": _ms_per_op(lambda: reg.complete("/resume"), 1_000),
-        "index_search": _ms_per_op(lambda: idx.search("mod"), 200),
-        **_diff_metrics(),
+    jobs: dict[str, Callable[[], object]] = {
+        "apply_suggestion": lambda: apply_suggestion(line, len(line), item),
+        "decide_submit": lambda: decide_submit(line, len(line), item),
+        "complete_root": lambda: reg.complete("/"),
+        "complete_model": lambda: reg.complete("/model claude"),
+        "complete_resume": lambda: reg.complete("/resume"),
+        "index_search": lambda: idx.search("mod"),
+        **_diff_work(),
     }
 
-    print("\nhot path                  ms/op    budget")
+    print("\nhot path                  min     median      p95   budget  batch")
     failed: list[str] = []
-    for name, got in measured.items():
+    noisy: list[str] = []
+    for name, fn in jobs.items():
+        sample = _sample(fn)
         budget = BUDGET_MS[name]
-        print(f"  {name:<22} {got:7.3f}    {budget:6.2f}")
-        if got > budget:
-            failed.append(f"{name} {got:.3f}ms > {budget:.2f}ms")
+        print(
+            f"  {name:<20} {sample.minimum:7.3f}  {sample.median:7.3f}  "
+            f"{sample.p95:7.3f}  {budget:6.2f}  x{sample.batch}"
+        )
+        if sample.median > budget:
+            failed.append(f"{name} median {sample.median:.3f}ms > {budget:.2f}ms")
+        if sample.median > 0 and sample.p95 / sample.median > 4:
+            noisy.append(name)
+    if noisy:
+        print("  (p95 instável em: " + ", ".join(noisy) + " — máquina ocupada)")
     assert not failed, "slowdown: " + "; ".join(failed)
-
-
-def _diff_metrics() -> dict[str, float]:
-    old = [f"line {i} keep" for i in range(2000)]
-    new = list(old)
-    for i in range(100, 180):
-        new[i] = f"line {i} changed"
-    old_s = "\n".join(old)
-    new_s = "\n".join(new)
-    change = diff_texts("big.py", old_s, new_s)
-
-    def toggle_paint() -> None:
-        collapsed = visible(change, expanded=False)
-        render_lines(collapsed, 80)
-        expanded = visible(change, expanded=True)
-        render_lines(expanded, 80)
-
-    huge = diff_texts(
-        "huge.py",
-        "",
-        "\n".join(f"row {i}" for i in range(EXPAND_CAP + 10)),
-    )
-    return {
-        "diff_2k": _ms_per_op(lambda: diff_texts("big.py", old_s, new_s), 8, warmup=2),
-        "render_collapsed": _ms_per_op(
-            lambda: render_diff(change, 80, expanded=False), 40
-        ),
-        "render_expanded": _ms_per_op(
-            lambda: render_lines(visible(huge, expanded=True), 80), 20
-        ),
-        "toggle_expand": _ms_per_op(toggle_paint, 20),
-    }
