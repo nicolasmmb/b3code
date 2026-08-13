@@ -128,12 +128,42 @@ async def test_spinner_mounted_and_removed_on_event(tmp_path: Path):
         await pilot.pause()
         spinner = screen.query_one(Spinner)
         assert screen._thinking is spinner
-        # delta só agenda o flush (~30fps); o spinner some no timer
+        # texto no meio do run não tira o spinner — só done/error/plan_ready
         screen._apply_event(ChatEvent(kind="text_delta", text="Olá"))
         await pilot.pause(0.05)
+        assert screen._thinking is spinner
+        screen._apply_event(ChatEvent(kind="done", text="Olá"))
+        await pilot.pause()
         assert screen._thinking is None
         with pytest.raises(Exception):
             screen.query_one(Spinner)
+
+
+async def test_plan_mode_spinner_survives_tools_until_ready(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.c.chat.enter_plan()
+
+        async def noop(prompt: str, on_event) -> None:
+            await asyncio.sleep(0)
+
+        screen.c.chat.enqueue = noop
+        screen._send_chat("desenha um plano")
+        await pilot.pause()
+        assert screen._thinking is not None
+        assert "planning" in str(screen._thinking.render())
+        screen._apply_event(ChatEvent(kind="tool_start", tool="grep", detail="x"))
+        await pilot.pause()
+        assert screen._thinking is not None
+        screen._apply_event(ChatEvent(kind="plan_draft", text="# Title\n"))
+        await pilot.pause()
+        assert screen._thinking is not None
+        screen._apply_event(ChatEvent(kind="plan_ready", text="# Title\n"))
+        await pilot.pause()
+        assert screen._thinking is None
 
 
 async def test_text_deltas_schedule_one_ui_callback(tmp_path: Path, monkeypatch):

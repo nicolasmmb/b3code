@@ -179,6 +179,21 @@ class ChatScreen(Screen):
             self._thinking.remove()
             self._thinking = None
 
+    def _ensure_thinking(self, label: str | None = None) -> None:
+        name = label or ("planning" if self.c.chat.plan.active else "thinking")
+        chat = self.query_one("#chat")
+        kids = list(chat.children)
+        at_end = bool(self._thinking is not None and kids and kids[-1] is self._thinking)
+        if self._thinking is not None and at_end:
+            if self._thinking._label != name:
+                self._thinking.set_label(name)
+            return
+        if self._thinking is not None:
+            self._thinking.remove()
+            self._thinking = None
+        self._thinking = Spinner(name)
+        chat.mount(self._thinking)
+
     @on(OptionList.OptionSelected, "#plan-options")
     def on_plan_option_selected(self, event: OptionList.OptionSelected) -> None:
         if not self.awaiting_plan:
@@ -325,8 +340,7 @@ class ChatScreen(Screen):
         chat.mount(RoleLabel("assistant"))
         chat.mount(self._assistant)
         self._stop_thinking()
-        self._thinking = Spinner("thinking")
-        chat.mount(self._thinking)
+        self._ensure_thinking()
         self._scroll_end()
         self._run_agent(typed)
 
@@ -377,7 +391,6 @@ class ChatScreen(Screen):
         self._buffer += text
         if self._assistant is not None:
             self._assistant.update(self._buffer)
-        self._stop_thinking()
         self._scroll_end()
 
     def _apply_event(self, event: ChatEvent) -> None:
@@ -387,10 +400,12 @@ class ChatScreen(Screen):
         self._flush_text()
         chat = self.query_one("#chat")
         if event.kind == "tool_start":
+            self._ensure_thinking()
             self._upsert_tool(chat, event, "running")
             self._scroll_end()
             return
         if event.kind == "tool_end":
+            self._ensure_thinking()
             self._upsert_tool(chat, event, "done")
             self._scroll_end()
             return
@@ -404,9 +419,11 @@ class ChatScreen(Screen):
             self._scroll_end()
             return
         if event.kind == "plan_draft":
+            self._ensure_thinking("planning")
             self._show_plan_doc(event.text)
             return
         if event.kind == "plan_ready":
+            self._stop_thinking()
             self.awaiting_plan = True
             self.query_one(Autocomplete).set_suggestions([])
             if event.text.strip():

@@ -20,6 +20,10 @@ class Spinner(Static):
         self.update(f"{FRAMES[0]} {self._label}")
         self._timer = self.set_interval(0.08, self._tick)
 
+    def set_label(self, label: str) -> None:
+        self._label = label
+        self.update(f"{FRAMES[self._frame]} {self._label}")
+
     def _tick(self) -> None:
         self._frame = (self._frame + 1) % len(FRAMES)
         self.update(f"{FRAMES[self._frame]} {self._label}")
