@@ -7,6 +7,8 @@ from textual.app import App
 from textual.events import Paste
 from textual.widgets import Static
 
+from b3code.config.schema import AppConfig, ThemeColors
+from b3code.config.store import ConfigStore
 from b3code.container import AppContainer
 from b3code.services.chat import ChatEvent
 from b3code.ui.app import B3App
@@ -52,6 +54,35 @@ async def test_app_opens_welcome(tmp_path: Path):
         assert ac.display
         labels = [item.label for item in ac.suggestions]
         assert "/help" in labels
+
+
+async def test_app_applies_saved_theme(tmp_path: Path):
+    ConfigStore.for_cwd(tmp_path).save(
+        AppConfig(
+            themes=[
+                ThemeColors(name="crimson", background="#111111", accent="#DC143C")
+            ],
+            selected_theme="crimson",
+        )
+    )
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.theme == "crimson"
+        assert app.theme_variables["background"].lower() == "#111111"
+        assert app.theme_variables["accent"].lower() == "#dc143c"
+
+
+async def test_theme_command_updates_css(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._run_command("/theme background #101010")
+        await pilot.pause()
+        assert app.container.config.theme.background == "#101010"
+        assert app.theme_variables["background"].lower() == "#101010"
 
 
 async def test_paste_preserves_newlines(tmp_path: Path):
@@ -426,7 +457,7 @@ async def test_error_block_expands_and_copies(tmp_path: Path):
         assert block.expanded is False
         assert "Error" in str(block._header.render())
         assert "ConnectError" in str(block._header.render())
-        assert "linhas" in str(fold.render())
+        assert "Lines" in str(fold.render())
         assert "nodename" not in str(block._body.render()) or not block._body.display
         block.toggle()
         await pilot.pause()

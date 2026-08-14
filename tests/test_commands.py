@@ -68,6 +68,24 @@ def test_gateway_toggle(tmp_path: Path):
     assert store.load().use_provider_gateway is False
 
 
+def test_theme_list_and_set(tmp_path: Path):
+    reg = _registry(tmp_path)
+    listed = reg.execute("/theme")
+    assert "b3code" in listed.message
+    assert "accent" in listed.message
+    result = reg.execute("/theme accent #DC143C")
+    assert isinstance(result.effect, Refresh)
+    assert "#DC143C" in result.message
+    saved = reg.execute("/theme save crimson")
+    assert isinstance(saved.effect, Refresh)
+    switched = reg.execute("/theme crimson")
+    assert "crimson" in switched.message
+    names = [s.value for s in reg.complete("/theme ")]
+    assert "crimson" in names
+    assert "accent" in names
+    assert "save" in names
+
+
 def test_complete_catalog_models(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(use_provider_gateway=False, api_models=["gpt-4o"])

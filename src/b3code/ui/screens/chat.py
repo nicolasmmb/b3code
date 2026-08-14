@@ -224,6 +224,14 @@ class ChatScreen(ChatStreamMixin, Screen):
         )
 
     def _rebuild_after_command(self) -> None:
+        app = self.app
+        apply = getattr(app, "apply_theme", None)
+        if callable(apply):
+            apply()
+        if self.plan_controller is not None:
+            self.plan_controller.set_accent(self.deps.config.accent)
+        if self.permission_controller is not None:
+            self.permission_controller.set_accent(self.deps.config.accent)
         self.chat_view.rebuild(self.deps.sessions.display_turns())
         self.query_one(TopBar).set_model(self.deps.config.selected_model)
 

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from b3code.config.schema import AppConfig
+from b3code.config.schema import AppConfig, github_dark_theme
 from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 
@@ -36,14 +36,52 @@ def test_legacy_json_defaults_gateway(tmp_path: Path):
     assert loaded.use_provider_gateway is True
     assert loaded.selected_model == "m1"
     assert loaded.shell_allowed_paths == []
-    assert loaded.accent == "#c9a227"
+    assert loaded.accent == "#00b0e6"
+    assert loaded.selected_theme == "b3code"
+    assert loaded.theme.name == "b3code"
     assert loaded.multiline is True
 
 
 def test_accent_rejects_bad_hex():
-    assert AppConfig(accent="red").accent == "#c9a227"
+    assert AppConfig(accent="red").accent == "#00b0e6"
     assert AppConfig(accent="#fff").accent == "#fff"
     assert AppConfig(accent="#c9a227").accent == "#c9a227"
+
+
+def test_legacy_accent_migrates_into_default_theme():
+    cfg = AppConfig(accent="#DC143C")
+    assert cfg.theme.name == "b3code"
+    assert cfg.theme.accent == "#DC143C"
+    assert "accent" not in cfg.model_dump()
+    assert cfg.themes[0].accent == "#DC143C"
+
+
+def test_theme_color_rejects_bad_hex():
+    theme = AppConfig(themes=[{"name": "x", "background": "blue"}]).theme
+    assert theme.background == "#1c1d1f"
+    assert AppConfig(themes=[{"name": "x", "background": "#111"}]).theme.background == (
+        "#111"
+    )
+
+
+def test_default_themes_include_github_dark():
+    cfg = AppConfig()
+    names = [item.name for item in cfg.themes]
+    assert names == ["b3code", "github-dark"]
+    github = github_dark_theme()
+    saved = next(item for item in cfg.themes if item.name == "github-dark")
+    assert saved.background == "#0d1117"
+    assert saved.accent == "#58a6ff"
+    assert saved.model_dump() == github.model_dump()
+
+
+def test_unknown_selected_theme_snaps_to_first():
+    cfg = AppConfig(
+        selected_theme="missing",
+        themes=[{"name": "crimson", "accent": "#DC143C"}],
+    )
+    assert cfg.selected_theme == "crimson"
+    assert cfg.theme.accent == "#DC143C"
 
 
 def test_shell_allowed_paths_roundtrip(tmp_path: Path):

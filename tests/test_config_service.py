@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from b3code.config.schema import AppConfig
+import pytest
+
+from b3code.config.schema import AppConfig, ThemeColors
 from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 
@@ -43,6 +45,47 @@ def test_set_multiline(tmp_path: Path):
     service.set_multiline(False)
     assert service.config.multiline is False
     assert service.store.load().multiline is False
+
+
+def test_select_theme_persists(tmp_path: Path):
+    service = _service(
+        tmp_path,
+        themes=[
+            ThemeColors(name="b3code"),
+            ThemeColors(name="crimson", accent="#DC143C"),
+        ],
+        selected_theme="b3code",
+    )
+    service.select_theme("crimson")
+    assert service.config.selected_theme == "crimson"
+    assert service.config.accent == "#DC143C"
+    assert service.store.load().selected_theme == "crimson"
+
+
+def test_set_theme_color_persists(tmp_path: Path):
+    service = _service(tmp_path)
+    service.set_theme_color("background", "#111111")
+    assert service.config.theme.background == "#111111"
+    assert service.store.load().theme.background == "#111111"
+
+
+def test_set_theme_color_rejects_unknown_and_bad_hex(tmp_path: Path):
+    service = _service(tmp_path)
+    with pytest.raises(ValueError):
+        service.set_theme_color("glow", "#fff")
+    with pytest.raises(ValueError):
+        service.set_theme_color("accent", "red")
+
+
+def test_save_theme_clones_current(tmp_path: Path):
+    service = _service(tmp_path)
+    service.set_theme_color("accent", "#DC143C")
+    service.save_theme("crimson")
+    loaded = service.store.load()
+    names = [item.name for item in loaded.themes]
+    assert names == ["b3code", "github-dark", "crimson"]
+    assert loaded.selected_theme == "crimson"
+    assert loaded.theme.accent == "#DC143C"
 
 
 def test_persist_allowed_path(tmp_path: Path):
