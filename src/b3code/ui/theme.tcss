@@ -113,26 +113,37 @@ CopyableFence {
 }
 
 .fence-bar {
-    height: 1;
+    height: 4;
     width: 100%;
-    padding: 0 1;
+    padding: 1 1 0 1;
+    align: left middle;
 }
 
 .fence-lang {
     width: 1fr;
     height: 1;
-    color: #9a9a9a;
+    color: $text-muted;
+    content-align: left middle;
 }
 
+/* height 3 = 1 de conteúdo + 2 da borda (Textual come a borda da height). */
 FenceCopy {
     width: auto;
-    height: 1;
-    color: #c9a227;
+    height: 3;
+    color: $accent;
+    background: $surface;
+    border: round $border;
     padding: 0 1;
+    content-align: center middle;
+}
+
+FenceCopy:hover {
+    border: round $accent;
 }
 
 FenceCopy:focus {
-    color: #e6e6e6;
+    color: $foreground;
+    border: round $accent;
     text-style: bold;
 }
 

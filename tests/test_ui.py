@@ -706,7 +706,7 @@ async def test_assistant_fence_copy_button(tmp_path: Path):
         screen.chat_view.hide_welcome()
         button.scroll_visible(animate=False)
         await pilot.pause()
-        assert await pilot.click(button, offset=(1, 0))
+        assert await pilot.click(button, offset=(2, 1))
         await pilot.pause()
         assert app.clipboard == "print(1)\n"
 

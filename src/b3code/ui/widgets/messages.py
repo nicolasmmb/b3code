@@ -73,9 +73,12 @@ class CopyableFence(MarkdownFence):
     """Fence com linguagem à esquerda e ⧉ copy à direita."""
 
     def compose(self) -> ComposeResult:
+        colors = rich_palette(theme_of(self))
         with Horizontal(classes="fence-bar"):
             yield Static(
-                Text.assemble(("◆ ", _HEAD), (fence_lang(self.lexer), _HEAD)),
+                Text.assemble(
+                    ("◆ ", colors.head), (fence_lang(self.lexer), colors.head)
+                ),
                 classes="fence-lang",
             )
             yield FenceCopy()
@@ -285,7 +288,9 @@ class ErrorBlock(Vertical, can_focus=False):
         self.kind, self.message = split_error_summary(summary)
         self.expanded = False
         colors = rich_palette()
-        self._header = Static(render_error_header(self.kind, colors), classes="error-header")
+        self._header = Static(
+            render_error_header(self.kind, colors), classes="error-header"
+        )
         self._message = Static(
             Text(self.message, style=colors.error_msg), classes="error-message"
         )
