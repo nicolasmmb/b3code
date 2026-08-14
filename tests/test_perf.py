@@ -21,12 +21,14 @@ from pydantic_ai.models.test import TestModel
 from b3code.commands.apply import apply_suggestion, decide_submit
 from b3code.commands.registry import CommandRegistry
 from b3code.commands.types import Suggestion
-from b3code.config.schema import AppConfig
+from b3code.config.schema import AppConfig, McpServerConfig
+from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 from b3code.services.agents import build_coder
 from b3code.services.catalog import list_models
 from b3code.services.chat import ChatService
 from b3code.services.files import FileIndex
+from b3code.services.mcp import format_mcp_list
 from b3code.services.plan import PlanMode
 from b3code.services.session import SessionStore
 from b3code.ui.widgets.messages import render_diff, render_lines
@@ -47,6 +49,9 @@ BUDGET_MS = {
     "can_write": 0.05,
     "plan_toggle": 5.0,
     "agent_build": 40.0,
+    "complete_mcp": 0.25,
+    "mcp_list": 0.15,
+    "mcp_upsert": 2.0,
 }
 
 ROUNDS = 9
@@ -94,9 +99,20 @@ def _sample(fn: Callable[[], object]) -> Sample:
     return Sample(raw[0], statistics.median(raw), p95, batch, ROUNDS)
 
 
+def _many_mcp(n: int = 24) -> dict[str, McpServerConfig]:
+    return {
+        f"s{i:02d}": McpServerConfig(command="npx", args=["-y", f"demo-{i}"])
+        for i in range(n)
+    }
+
+
 def _registry(tmp_path: Path, *, sessions: int = 1) -> CommandRegistry:
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(use_provider_gateway=False, api_models=["gpt-4o"])
+    cfg = AppConfig(
+        use_provider_gateway=False,
+        api_models=["gpt-4o"],
+        mcp_servers=_many_mcp(),
+    )
     store.save(cfg)
     sess = SessionStore(tmp_path / "sessions.json")
     for _ in range(sessions - 1):
@@ -135,7 +151,7 @@ def _plan_work(tmp_path: Path) -> dict[str, Callable[[], object]]:
     mode = PlanMode(tmp_path)
     target = tmp_path / "a.py"
     chat = ChatService(
-        AppConfig(api_models=["gpt-4o"]),
+        AppConfig(api_models=["gpt-4o"], mcp_servers=_many_mcp()),
         SessionStore(tmp_path / "perf-sessions.json"),
         tmp_path,
         model=TestModel(),
@@ -173,12 +189,21 @@ def test_hot_paths_stay_under_budget(tmp_path: Path):
     idx = FileIndex(tmp_path)
     idx.scan()
 
+    store = ConfigStore(tmp_path / "config.json")
+    svc = ConfigService(store, reg.config)
+    extra = McpServerConfig(command="npx", args=["-y", "tmp"])
     jobs: dict[str, Callable[[], object]] = {
         "apply_suggestion": lambda: apply_suggestion(line, len(line), item),
         "decide_submit": lambda: decide_submit(line, len(line), item),
         "complete_root": lambda: reg.complete("/"),
         "complete_model": lambda: reg.complete("/model claude"),
         "complete_resume": lambda: reg.complete("/resume"),
+        "complete_mcp": lambda: (
+            reg.complete("/mcp "),
+            reg.complete("/mcp enable "),
+        ),
+        "mcp_list": lambda: format_mcp_list(reg.config.mcp_servers),
+        "mcp_upsert": lambda: svc.upsert_mcp_server("tmp", extra),
         "index_search": lambda: idx.search("mod"),
         **_diff_work(),
         **_plan_work(tmp_path),

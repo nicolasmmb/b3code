@@ -15,6 +15,7 @@ from pydantic_monty import MountDir
 
 from b3code.config.schema import AppConfig
 from b3code.libs.models import build_model
+from b3code.services.mcp import MCP_TOOLS, McpHub
 from b3code.services.permission import PermissionDenied, PermissionGate
 from b3code.services.plan import PlanMode
 from b3code.services.planner import build_planner
@@ -31,12 +32,17 @@ INSTRUCTIONS = (
     "Prefer replace_in_file for edits; write_file only to create files. "
     "Use run_command only for git, tests, and lint — never to write "
     "project files (no cat, heredoc, or echo redirects). "
-    "Last expression in run_code is the return value."
+    "Use search_tool / use_tool for MCP integrations; names are server__tool. "
+    "Last expression in run_code is the return value. "
+    "Respond in the language the user is using. "
+    "Follow ASD-STE100 Simplified Technical English style: short sentences, "
+    "one idea per sentence, active voice, and imperative for instructions."
 )
 
 SHELL_TOOLS = frozenset(
     {"run_command", "start_command", "check_command", "stop_command"}
 )
+HOST_TOOLS = SHELL_TOOLS | MCP_TOOLS
 
 
 async def ensure_shell_args(gate: PermissionGate | None, args: Any) -> Any:
@@ -52,6 +58,10 @@ async def ensure_shell_args(gate: PermissionGate | None, args: Any) -> Any:
     return args
 
 
+def _host_tool(_ctx: Any, tool_def: Any) -> bool:
+    return tool_def.name not in HOST_TOOLS
+
+
 def build_coder(
     *,
     config: AppConfig,
@@ -59,11 +69,13 @@ def build_coder(
     gate: PermissionGate | None = None,
     on_change: Callable[[FileChange], None] | None = None,
     injected_model: Model | None = None,
+    mcp: McpHub | None = None,
 ) -> Agent[None, str]:
     model = injected_model or build_model(config)
     if injected_model is not None:
         return Agent(model, instructions=INSTRUCTIONS)
     hooks = Hooks()
+    hub = mcp or McpHub(config)
 
     @hooks.on.before_tool_execute(tools=["run_command", "start_command"])
     async def gate_shell(_ctx: Any, *, call: Any, tool_def: Any, args: Any) -> Any:
@@ -74,6 +86,7 @@ def build_coder(
         instructions=INSTRUCTIONS,
         toolsets=[
             workspace_toolset(cwd, on_change=on_change),
+            hub.tools(),
         ],
         capabilities=[
             Shell(
@@ -83,7 +96,7 @@ def build_coder(
                 denied_env_patterns=LLM_API_KEY_ENV_PATTERNS,
             ),
             CodeMode(
-                tools=lambda ctx, td: td.name not in SHELL_TOOLS,
+                tools=_host_tool,
                 mount=MountDir(
                     virtual_path="/work",
                     host_path=str(cwd),
@@ -104,6 +117,7 @@ def build_planner_agent(
     on_exit: Callable[[], None] | None = None,
     on_write: Callable[[str], None] | None = None,
     injected_model: Model | None = None,
+    mcp: McpHub | None = None,
 ) -> Agent[None, str]:
     model = injected_model or build_model(config)
     if injected_model is not None:
@@ -114,4 +128,5 @@ def build_planner_agent(
         plan,
         on_exit=on_exit,
         on_write=on_write,
+        mcp=mcp or McpHub(config),
     )

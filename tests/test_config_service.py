@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from b3code.config.schema import AppConfig, ThemeColors
+from b3code.config.schema import AppConfig, McpServerConfig, ThemeColors
 from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 
@@ -96,6 +96,19 @@ def test_save_theme_slugifies_spaces(tmp_path: Path):
     assert loaded.theme.name == "tokyo-night"
     assert loaded.theme.label == "Tokyo Night"
     assert loaded.theme.display == "Tokyo Night"
+
+
+def test_mcp_crud_persists(tmp_path: Path):
+    service = _service(tmp_path)
+    spec = McpServerConfig(command="npx", args=["-y", "demo"])
+    service.upsert_mcp_server("github", spec)
+    assert service.store.load().mcp_servers["github"].command == "npx"
+    service.set_mcp_enabled("github", False)
+    assert service.store.load().mcp_servers["github"].enabled is False
+    service.remove_mcp_server("github")
+    assert service.store.load().mcp_servers == {}
+    with pytest.raises(ValueError, match="unknown"):
+        service.get_mcp_server("github")
 
 
 def test_persist_allowed_path(tmp_path: Path):

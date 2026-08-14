@@ -8,6 +8,7 @@ DEFAULT_ACCENT = "#00b0e6"
 DEFAULT_THEME_NAME = "b3code"
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _SLUG_CHUNK = re.compile(r"[^a-z0-9]+")
+_MCP_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
 # B3 institucional (guia da marca): ciano #00b0e6 / navy #003475.
 # Fundo e superfícies ficam cinza-neutro — navy de canvas quebra contraste.
@@ -122,6 +123,42 @@ def default_themes() -> list[ThemeColors]:
     return [ThemeColors(), github_dark_theme()]
 
 
+def parse_mcp_name(value: object) -> str:
+    if not isinstance(value, str) or not _MCP_NAME.match(value):
+        raise ValueError(f"invalid mcp server name {value!r}")
+    return value
+
+
+class McpServerConfig(BaseModel):
+    command: str = ""
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    url: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+    startup_timeout_sec: int = 30
+
+    @model_validator(mode="after")
+    def _command_xor_url(self) -> "McpServerConfig":
+        has_cmd = bool(self.command.strip())
+        has_url = bool(self.url.strip())
+        if has_cmd == has_url:
+            raise ValueError("mcp server needs either command or url")
+        return self
+
+    @property
+    def transport(self) -> str:
+        if not self.url:
+            return "stdio"
+        return "sse" if self.url.rstrip("/").endswith("/sse") else "http"
+
+    @property
+    def target(self) -> str:
+        if self.url:
+            return self.url
+        return " ".join([self.command, *self.args]).strip()
+
+
 class AppConfig(BaseModel):
     # true = Azure do JSON é o gateway. false = catálogo pydantic-ai.
     use_provider_gateway: bool = True
@@ -137,6 +174,14 @@ class AppConfig(BaseModel):
     # true = paste preserva \\n; Shift+Enter / Alt+Enter inserem newline.
     # false = composer de uma linha (Enter envia; newline não entra).
     multiline: bool = True
+    mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
+
+    @field_validator("mcp_servers", mode="before")
+    @classmethod
+    def _mcp_server_names(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        return {parse_mcp_name(name): spec for name, spec in value.items()}
 
     @field_validator("selected_theme", mode="before")
     @classmethod

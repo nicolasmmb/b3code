@@ -6,6 +6,7 @@ import pytest
 from b3code.config.schema import (
     THEME_COLOR_DEFAULTS,
     AppConfig,
+    McpServerConfig,
     github_dark_theme,
     slugify_theme,
 )
@@ -45,6 +46,7 @@ def test_legacy_json_defaults_gateway(tmp_path: Path):
     assert loaded.selected_theme == "b3code"
     assert loaded.theme.name == "b3code"
     assert loaded.multiline is True
+    assert loaded.mcp_servers == {}
 
 
 def test_accent_rejects_bad_hex():
@@ -143,6 +145,27 @@ def test_load_creates_default(tmp_path: Path):
     cfg = store.load()
     assert cfg.api_models
     assert store.path.exists()
+
+
+def test_mcp_servers_roundtrip_and_reject_bad(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(
+        mcp_servers={
+            "github": McpServerConfig(command="npx", args=["-y", "demo"]),
+            "linear": McpServerConfig(url="https://mcp.linear.app/mcp", enabled=False),
+        }
+    )
+    store.save(cfg)
+    loaded = store.load()
+    assert loaded.mcp_servers["github"].command == "npx"
+    assert loaded.mcp_servers["github"].enabled is True
+    assert loaded.mcp_servers["linear"].enabled is False
+    with pytest.raises(ValueError, match="invalid mcp server name"):
+        AppConfig(mcp_servers={"bad name": {"command": "npx"}})
+    with pytest.raises(ValueError, match="command or url"):
+        McpServerConfig(command="npx", url="https://x.example/mcp")
+    with pytest.raises(ValueError, match="command or url"):
+        McpServerConfig()
 
 
 def test_first_run_creates_project_settings_with_all_fields(tmp_path: Path):

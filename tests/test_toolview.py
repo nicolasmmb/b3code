@@ -59,6 +59,12 @@ def test_unknown_tools_use_args_not_whitelist():
     assert tool_title("clone_repo", {"repo": "xai-org/grok-build"}) == (
         "Clone xai-org/grok-build"
     )
+    assert tool_title("search_tool", {"query": "linear issue"}) == (
+        'Searched "linear issue"'
+    )
+    assert tool_title("use_tool", {"tool_name": "github__create_issue"}) == (
+        "Use github__create_issue"
+    )
 
 
 def test_preview_output_caps_lines():
@@ -66,6 +72,14 @@ def test_preview_output_caps_lines():
     out = preview_output(text)
     assert out.endswith("…")
     assert out.count("\n") == PREVIEW_LINES
+
+
+def test_preview_output_caps_chars():
+    from b3code.utils.toolview import PREVIEW_CHARS
+
+    out = preview_output("x" * (PREVIEW_CHARS + 80))
+    assert out.endswith("…")
+    assert len(out) < PREVIEW_CHARS + 10
 
 
 def test_map_start_uses_human_title():

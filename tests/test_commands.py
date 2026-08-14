@@ -4,6 +4,7 @@ from pydantic_ai.models.test import TestModel
 
 from b3code.commands.apply import apply_suggestion, decide_submit
 from b3code.commands.effects import PlanOff, Refresh, RunPrompt, ShowPlanDoc
+from b3code.commands.parse import parse_mcp_add
 from b3code.commands.registry import CommandRegistry
 from b3code.commands.types import Suggestion
 from b3code.config.schema import AppConfig
@@ -26,6 +27,7 @@ def test_complete_root(tmp_path: Path):
     names = [s.label for s in reg.complete("/")]
     assert "/help" in names
     assert "/model" in names
+    assert "/mcp" in names
 
 
 def test_complete_model_names(tmp_path: Path):
@@ -233,6 +235,61 @@ def test_multiline_toggle(tmp_path: Path):
     assert cfg.multiline is False
     bad = reg.execute("/multiline maybe")
     assert "usage" in bad.message
+
+
+def test_mcp_add_enable_disable_remove(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(api_models=["gpt-4o"])
+    store.save(cfg)
+    sessions = SessionStore(tmp_path / "sessions.json")
+    chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
+    reg = CommandRegistry.build(store, cfg, sessions, chat)
+    empty = reg.execute("/mcp")
+    assert "no servers" in empty.message
+    added = reg.execute("/mcp add github -- npx -y @modelcontextprotocol/server-github")
+    assert isinstance(added.effect, Refresh)
+    assert "github" in added.message
+    listed = reg.execute("/mcp")
+    assert "github  on  stdio" in listed.message
+    off = reg.execute("/mcp disable github")
+    assert isinstance(off.effect, Refresh)
+    assert store.load().mcp_servers["github"].enabled is False
+    enabled = reg.execute("/mcp enable github")
+    assert isinstance(enabled.effect, Refresh)
+    assert store.load().mcp_servers["github"].enabled is True
+    remote = reg.execute("/mcp add --transport http linear https://mcp.linear.app/mcp")
+    assert isinstance(remote.effect, Refresh)
+    names = [s.value for s in reg.complete("/mcp enable ")]
+    assert "github" in names
+    assert "linear" in names
+    subs = [s.value for s in reg.complete("/mcp ")]
+    assert set(subs) >= {"add", "remove", "enable", "disable"}
+    gone = reg.execute("/mcp remove github")
+    assert isinstance(gone.effect, Refresh)
+    assert "github" not in store.load().mcp_servers
+    assert chat.mcp.connects == 0
+
+
+def test_parse_mcp_add_flags():
+    stdio = parse_mcp_add(
+        ("postgres", "-e", "DATABASE_URL=postgres://x", "--", "npx", "-y", "pg")
+    )
+    assert stdio.name == "postgres"
+    assert stdio.command == "npx"
+    assert stdio.args == ["-y", "pg"]
+    assert stdio.env == {"DATABASE_URL": "postgres://x"}
+    http = parse_mcp_add(
+        (
+            "--transport",
+            "http",
+            "api",
+            "https://mcp.example.com/mcp",
+            "--header",
+            "Authorization=Bearer tok",
+        )
+    )
+    assert http.url == "https://mcp.example.com/mcp"
+    assert http.headers == {"Authorization": "Bearer tok"}
 
 
 def test_plan_on_off_and_view(tmp_path: Path):

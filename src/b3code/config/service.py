@@ -7,8 +7,10 @@ from pathlib import Path
 from b3code.config.schema import (
     THEME_COLOR_DEFAULTS,
     AppConfig,
+    McpServerConfig,
     ThemeColors,
     parse_hex,
+    parse_mcp_name,
     slugify_theme,
 )
 from b3code.config.store import ConfigStore
@@ -83,6 +85,27 @@ class ConfigService:
         if not parsed:
             raise ValueError(f"invalid hex {value!r}")
         setattr(self._config.theme, token, parsed)
+        self.store.save(self._config)
+
+    def get_mcp_server(self, name: str) -> McpServerConfig:
+        spec = self._config.mcp_servers.get(name)
+        if spec is None:
+            raise ValueError(f"unknown mcp server {name!r}")
+        return spec
+
+    def upsert_mcp_server(self, name: str, spec: McpServerConfig) -> None:
+        key = parse_mcp_name(name)
+        self._config.mcp_servers[key] = spec
+        self.store.save(self._config)
+
+    def remove_mcp_server(self, name: str) -> None:
+        self.get_mcp_server(name)
+        del self._config.mcp_servers[name]
+        self.store.save(self._config)
+
+    def set_mcp_enabled(self, name: str, enabled: bool) -> None:
+        spec = self.get_mcp_server(name)
+        self._config.mcp_servers[name] = spec.model_copy(update={"enabled": enabled})
         self.store.save(self._config)
 
     def save_theme(self, name: str) -> None:

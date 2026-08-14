@@ -10,6 +10,7 @@ from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.models import Model
 from pydantic_ai.toolsets import FunctionToolset
 
+from b3code.services.mcp import McpHub
 from b3code.services.plan import PlanMode
 from b3code.tools.workspace import workspace_toolset
 from b3code.utils.planmeta import plan_meta
@@ -34,11 +35,18 @@ How to explore:
 - grep for symbols, then read_file with start_line/end_line around the hits.
 - Read every file you will name in Files / Steps. Quote short signatures
   (1–8 lines), never dump whole files into the plan.
+- Use search_tool / use_tool to pull facts from enabled MCP servers
+  (tickets, PRs, docs, schemas) into Context / Current. Do not mutate
+  remote state — no create, update, or delete via MCP.
 - If something is ambiguous, state the assumption and the cheaper alternative.
 
 The plan must be long enough that an implementer who has not seen this
 conversation can execute it without guessing. Typical good plans are 80–400
 lines. Thin outlines are rejected.
+
+Write the plan in the language the user is using. Follow ASD-STE100
+Simplified Technical English style: short sentences, one idea per
+sentence, active voice, and imperative for instructions.
 
 Required markdown headings (exactly these, in order):
 
@@ -100,6 +108,7 @@ def planner_toolsets(
     plan: PlanMode,
     on_exit: Callable[[], None] | None = None,
     on_write: Callable[[str], None] | None = None,
+    mcp: McpHub | None = None,
 ) -> list[FunctionToolset]:
     files = workspace_toolset(
         cwd,
@@ -128,7 +137,8 @@ def planner_toolsets(
         return "plan ready for approval"
 
     extra = FunctionToolset(tools=[write_plan_file, exit_plan_mode])
-    return [files, extra]
+    hub = mcp or McpHub()
+    return [files, extra, hub.tools()]
 
 
 def planner_tool_names(cwd: Path, plan: PlanMode) -> set[str]:
@@ -144,11 +154,12 @@ def build_planner(
     plan: PlanMode,
     on_exit: Callable[[], None] | None = None,
     on_write: Callable[[str], None] | None = None,
+    mcp: McpHub | None = None,
 ) -> Agent[None, str]:
     return Agent(
         model,
         instructions=PLAN_INSTRUCTIONS,
-        toolsets=planner_toolsets(cwd, plan, on_exit, on_write),
+        toolsets=planner_toolsets(cwd, plan, on_exit, on_write, mcp=mcp),
     )
 
 

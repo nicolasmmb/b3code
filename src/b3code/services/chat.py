@@ -26,6 +26,7 @@ from b3code.services.events import (
     map_agent_event,
     permission_event,
 )
+from b3code.services.mcp import McpHub
 from b3code.services.permission import PermissionGate
 from b3code.services.plan import PlanMode
 from b3code.services.planner import slim_plan_note
@@ -58,6 +59,7 @@ class ChatService:
         self.plan = PlanMode(cwd)
         # Testes injetam TestModel e pulam o Azure.
         self._injected_model = model
+        self.mcp = McpHub(config)
         self._coder: Agent[None, str] | None = None
         self._planner: Agent[None, str] | None = None
         self._plan_history: list[Any] = []
@@ -70,6 +72,7 @@ class ChatService:
     def reload(self, config: AppConfig) -> None:
         """Recria o agent no próximo run (ex.: /model). Histórico fica no store."""
         self.config = config
+        self.mcp.reload(config)
         self._coder = None
         self._planner = None
 
@@ -217,6 +220,7 @@ class ChatService:
                 gate=self.gate,
                 on_change=self._emit_change,
                 injected_model=self._injected_model,
+                mcp=self.mcp,
             )
         return self._coder
 
@@ -229,6 +233,7 @@ class ChatService:
                 on_exit=self._emit_plan_ready,
                 on_write=self._emit_plan_draft,
                 injected_model=self._injected_model,
+                mcp=self.mcp,
             )
         return self._planner
 

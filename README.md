@@ -24,7 +24,7 @@ sessões entre execuções. Construído com **Textual** (interface), **Pydantic 
 - Dependências principais (`pyproject.toml`):
   - `textual>=1.0` — a TUI.
   - `pydantic-ai-harness[codemode]>=0.18.1` — Shell, CodeMode (mount `/work`) e Planning.
-  - `pydantic-ai-slim[openai]>=2.28.0` — agentes e modelos.
+  - `pydantic-ai-slim[openai,mcp]>=2.28.0` — agentes, modelos e cliente MCP.
   - `pydantic>=2.10` — schema de config e modelos de dados.
   - `rapidfuzz>=3.14.5` — fuzzy match do autocomplete de arquivos.
   - `pathspec>=1.1.1` — respeito ao `.gitignore` no índice de arquivos.
@@ -55,6 +55,8 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `shell_allowed_paths` | list | `[]` | Paths absolutos que o shell pode usar sem perguntar de novo. |
 | `selected_theme` | string | `"b3code"` | Slug do tema ativo (o `name` de um item de `themes`). |
 | `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. JSON antigo com `accent` no topo migra para o tema default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
+| `multiline` | bool | `true` | `true` = paste preserva `\\n`; Shift+Enter insere newline. |
+| `mcp_servers` | object | `{}` | Servers MCP por nome. Cada um tem `command`+`args`+`env` (stdio) **ou** `url`+`headers` (HTTP/SSE), mais `enabled` (default `true`) e `startup_timeout_sec` (default `30`). Aceita `${VAR}` / `${VAR:-default}` na conexão. |
 
 Exemplo:
 
@@ -92,7 +94,9 @@ Exemplo:
       "error": "#f85149",
       "success": "#3fb950"
     }
-  ]
+  ],
+  "multiline": true,
+  "mcp_servers": {}
 }
 ```
 
@@ -117,6 +121,29 @@ de texto e diffs.
 `github-dark` (Primer) vem no mesmo JSON. Hex inválido em qualquer token volta
 ao default daquele token. JSON antigo com `accent` no topo migra para o tema
 `b3code`.
+
+### MCP
+
+Servers ficam em `mcp_servers` no mesmo JSON. O modelo não vê as tools de cada
+server no schema — só `search_tool` e `use_tool` (nomes `server__tool`), no
+coder e no planner. O planner pesquisa (ticket, PR, docs); não muta estado
+remoto. Handshake é lazy: `/mcp` e o boot não sobem processo.
+
+```json
+"mcp_servers": {
+  "github": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"},
+    "enabled": true
+  },
+  "linear": {
+    "url": "https://mcp.linear.app/mcp",
+    "headers": {"Authorization": "Bearer ${LINEAR_TOKEN}"},
+    "enabled": false
+  }
+}
+```
 
 Autocomplete em etapas: `/theme ` lista só os subcomandos; `set` / `save`
 completam pelos nomes de exibição (`Tokyo Night`); `update` completa o token
@@ -168,6 +195,10 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/theme set <nome>` | Ativa um tema já salvo |
 | `/theme update <token> <#hex>` | Edita uma cor do tema ativo (`background`, `accent`, …) |
 | `/theme save <nome>` | Copia o tema ativo para um novo nome |
+| `/mcp` | Lista servers MCP e se estão `on`/`off` |
+| `/mcp add <name> -- <cmd> …` | Adiciona um server stdio |
+| `/mcp add --transport http\|sse <name> <url>` | Adiciona um server HTTP/SSE |
+| `/mcp enable\|disable\|remove <name>` | Liga, desliga ou apaga (persistido) |
 | `/plan on\|off` | Entra/sai do plan mode |
 | `/view-plan` | Mostra o `.b3code/plan.md` atual |
 | `/quit` / `/exit` | Sai do app |
@@ -230,7 +261,7 @@ a UI só conhece `ChatEvent`.
 |---|---|
 | `config/` | Schema (`AppConfig`), load/save atômico (`ConfigStore`), único escritor (`ConfigService`), checagem de credencial. |
 | `commands/` | Registry de comandos `/`, parser de decisão do Enter (`apply.py`), efeitos puros que a UI aplica (`effects.py`). |
-| `services/` | `ChatService` (orquestra 1 request por vez, lock FIFO), `agents.py` (factories), `events.py` (fronteira de eventos), `session.py`, `permission.py`, `plan.py`, `planner.py`, `files.py`, `catalog.py`. |
+| `services/` | `ChatService` (orquestra 1 request por vez, lock FIFO), `agents.py` (factories), `mcp.py` (`McpHub`, `search_tool`/`use_tool`), `events.py` (fronteira de eventos), `session.py`, `permission.py`, `plan.py`, `planner.py`, `files.py`, `catalog.py`. |
 | `tools/` | `workspace_toolset`: `read_file`, `list_dir`, `grep`, `write_file`, `replace_in_file`, `delete_file`, `move_file`, com guard de escrita e recorte de saída. |
 | `ui/` | `B3App` + `ChatScreen` (wiring), `ChatView`, `PromptBar`, controllers de plano/permissão, stream com coalesce, widgets (`topbar`, `messages`, `planbar`, `permission`, `spinner`, `autocomplete`). |
 | `utils/` | Paths seguros (`/work` → cwd), expansão de `@arquivo`, diff unificado, fuzzy, helpers de texto. |

@@ -302,6 +302,52 @@ def test_delta_burst_coalesces():
     assert count_markdown_updates(200, duration_s=1.0) < 100
 
 
+async def test_mcp_command_lists_and_toggles(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._run_command("/mcp add github -- npx -y demo")
+        await pilot.pause()
+        screen._run_command("/mcp")
+        await pilot.pause()
+        notes = [str(n.render()) for n in screen.query(SystemNote)]
+        assert any("github  on  stdio" in n for n in notes)
+        screen._run_command("/mcp disable github")
+        await pilot.pause()
+        assert app.container.config.mcp_servers["github"].enabled is False
+        assert screen.deps.chat.mcp.connects == 0
+
+
+async def test_mcp_tool_event_burst_does_not_break_host(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        for i in range(12):
+            cid = f"c{i}"
+            screen._apply_event(
+                ChatEvent(
+                    kind="tool_start",
+                    tool="use_tool",
+                    detail="Use github__create_issue",
+                    call_id=cid,
+                )
+            )
+            screen._apply_event(
+                ChatEvent(
+                    kind="tool_end",
+                    tool="use_tool",
+                    output="ok",
+                    call_id=cid,
+                )
+            )
+        rows = screen.query(ToolRow)
+        assert len(rows) == 12
+
+
 async def test_at_complete_empty_index_does_not_crash(tmp_path: Path):
     app = B3App(AppContainer.build(tmp_path))
     async with app.run_test() as pilot:
