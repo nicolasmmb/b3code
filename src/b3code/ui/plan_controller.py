@@ -35,6 +35,9 @@ class PlanController:
         self._on_lock = on_lock
         self._on_unlock = on_unlock
 
+    def set_accent(self, accent: str) -> None:
+        self._accent = accent
+
     def consume_key(self, event: Key) -> bool:
         if not self.awaiting:
             return False

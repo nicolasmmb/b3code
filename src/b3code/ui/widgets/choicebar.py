@@ -6,7 +6,7 @@ from textual.containers import Vertical
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
-from b3code.config.schema import DEFAULT_ACCENT
+from b3code.config.schema import DEFAULT_ACCENT, THEME_COLOR_DEFAULTS
 
 
 class QuietOptions(OptionList, can_focus=False):
@@ -19,9 +19,15 @@ class ChoiceBar(Vertical):
     OPTIONS_ID = ""
     FALLBACK = ""
 
-    def __init__(self, accent: str = DEFAULT_ACCENT, **kwargs) -> None:
+    def __init__(
+        self,
+        accent: str = DEFAULT_ACCENT,
+        muted: str = THEME_COLOR_DEFAULTS["muted"],
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.accent = accent
+        self.muted = muted
 
     def compose(self) -> ComposeResult:
         yield Static("", id=self.SUMMARY_ID)
@@ -43,16 +49,27 @@ class ChoiceBar(Vertical):
         return self.CHOICES[idx][0]
 
     def paint(self, idx: int) -> None:
+        accent, muted = self._active_colors()
         options = self.query_one(f"#{self.OPTIONS_ID}", QuietOptions)
         options.clear_options()
         rows: list[Option] = []
         for i, (_value, label, hint) in enumerate(self.CHOICES):
             mark = "›" if i == idx else " "
             body = f"{mark}  {label:<8} {hint}".rstrip()
-            style = self.accent if i == idx else "#6e6e6e"
+            style = accent if i == idx else muted
             rows.append(Option(Text(body, style=style)))
         options.add_options(rows)
         options.highlighted = idx
+
+    def _active_colors(self) -> tuple[str, str]:
+        try:
+            container = getattr(self.app, "container", None)
+        except Exception:
+            container = None
+        if container is None:
+            return self.accent, self.muted
+        theme = container.config.theme
+        return theme.accent, theme.muted
 
     def set_summary(self, text: str, accent: str | None = None) -> None:
         if accent:

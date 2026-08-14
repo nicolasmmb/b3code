@@ -2,10 +2,124 @@
 
 import re
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
-DEFAULT_ACCENT = "#c9a227"
+DEFAULT_ACCENT = "#00b0e6"
+DEFAULT_THEME_NAME = "b3code"
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_SLUG_CHUNK = re.compile(r"[^a-z0-9]+")
+
+# B3 institucional (guia da marca): ciano #00b0e6 / navy #003475.
+# Fundo e superfícies ficam cinza-neutro — navy de canvas quebra contraste.
+THEME_COLOR_DEFAULTS: dict[str, str] = {
+    "background": "#1c1d1f",
+    "foreground": "#e6e8ea",
+    "accent": DEFAULT_ACCENT,
+    "muted": "#8b9198",
+    "border": "#3c4046",
+    "surface": "#26282c",
+    "error": "#e05a5a",
+    "success": "#3fba7a",
+}
+
+
+def parse_hex(value: object, default: str) -> str:
+    if isinstance(value, str) and _HEX.match(value.strip()):
+        return value.strip()
+    return default
+
+
+def slugify_theme(value: str) -> str:
+    text = _SLUG_CHUNK.sub("-", value.strip().lower()).strip("-")
+    if not text or not text[0].isalpha():
+        return ""
+    return text[:32]
+
+
+def parse_theme_name(value: object, default: str = DEFAULT_THEME_NAME) -> str:
+    if not isinstance(value, str):
+        return default
+    return slugify_theme(value) or default
+
+
+class ThemeColors(BaseModel):
+    name: str = DEFAULT_THEME_NAME
+    label: str = ""
+    background: str = THEME_COLOR_DEFAULTS["background"]
+    foreground: str = THEME_COLOR_DEFAULTS["foreground"]
+    accent: str = THEME_COLOR_DEFAULTS["accent"]
+    muted: str = THEME_COLOR_DEFAULTS["muted"]
+    border: str = THEME_COLOR_DEFAULTS["border"]
+    surface: str = THEME_COLOR_DEFAULTS["surface"]
+    error: str = THEME_COLOR_DEFAULTS["error"]
+    success: str = THEME_COLOR_DEFAULTS["success"]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _slug_and_label(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        raw = data.get("name")
+        if not isinstance(raw, str):
+            return data
+        slug = slugify_theme(raw)
+        if not slug:
+            data["name"] = DEFAULT_THEME_NAME
+            return data
+        data["name"] = slug
+        label = data.get("label")
+        if isinstance(label, str) and label.strip():
+            data["label"] = label.strip()
+        else:
+            pretty = raw.strip()
+            data["label"] = pretty if pretty != slug else ""
+        return data
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _name(cls, value: object) -> str:
+        return parse_theme_name(value)
+
+    @field_validator(
+        "background",
+        "foreground",
+        "accent",
+        "muted",
+        "border",
+        "surface",
+        "error",
+        "success",
+        mode="before",
+    )
+    @classmethod
+    def _hex(cls, value: object, info: ValidationInfo) -> str:
+        default = THEME_COLOR_DEFAULTS[info.field_name]
+        return parse_hex(value, default)
+
+    @property
+    def display(self) -> str:
+        return self.label or self.name
+
+
+def github_dark_theme() -> ThemeColors:
+    # Primer dark: canvas-default, fg-default, accent-fg, fg-muted,
+    # border-default, canvas-subtle, danger-fg, success-fg.
+    return ThemeColors(
+        name="github-dark",
+        background="#0d1117",
+        foreground="#e6edf3",
+        accent="#58a6ff",
+        muted="#8b949e",
+        border="#30363d",
+        surface="#161b22",
+        error="#f85149",
+        success="#3fb950",
+    )
+
+
+def default_themes() -> list[ThemeColors]:
+    return [ThemeColors(), github_dark_theme()]
 
 
 class AppConfig(BaseModel):
@@ -18,24 +132,56 @@ class AppConfig(BaseModel):
     selected_model: str = ""
     # Paths absolutos que o Shell pode usar sem perguntar de novo.
     shell_allowed_paths: list[str] = Field(default_factory=list)
-    accent: str = DEFAULT_ACCENT
+    selected_theme: str = DEFAULT_THEME_NAME
+    themes: list[ThemeColors] = Field(default_factory=default_themes)
     # true = paste preserva \\n; Shift+Enter / Alt+Enter inserem newline.
     # false = composer de uma linha (Enter envia; newline não entra).
     multiline: bool = True
 
-    @field_validator("accent", mode="before")
+    @field_validator("selected_theme", mode="before")
     @classmethod
-    def accent_hex(cls, value: object) -> str:
-        if isinstance(value, str) and _HEX.match(value.strip()):
-            return value.strip()
-        return DEFAULT_ACCENT
+    def _selected_theme_name(cls, value: object) -> str:
+        return parse_theme_name(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_accent(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        legacy = data.pop("accent", None)
+        if data.get("themes") is not None or legacy is None:
+            return data
+        colors: dict[str, object] = {"name": DEFAULT_THEME_NAME}
+        parsed = parse_hex(legacy, "")
+        if parsed:
+            colors["accent"] = parsed
+        data["themes"] = [colors]
+        data.setdefault("selected_theme", DEFAULT_THEME_NAME)
+        return data
 
     @model_validator(mode="after")
     def _default_selected(self) -> "AppConfig":
         if not self.selected_model:
             self.selected_model = self.api_models[0] if self.api_models else "gpt-4o"
+        if not self.themes:
+            self.themes = default_themes()
+        names = {item.name for item in self.themes}
+        if self.selected_theme not in names:
+            self.selected_theme = self.themes[0].name
         return self
 
     @property
     def model(self) -> str:
         return self.selected_model
+
+    @property
+    def theme(self) -> ThemeColors:
+        for item in self.themes:
+            if item.name == self.selected_theme:
+                return item
+        return self.themes[0]
+
+    @property
+    def accent(self) -> str:
+        return self.theme.accent

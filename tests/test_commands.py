@@ -68,6 +68,59 @@ def test_gateway_toggle(tmp_path: Path):
     assert store.load().use_provider_gateway is False
 
 
+def test_theme_list_and_set(tmp_path: Path):
+    reg = _registry(tmp_path)
+    listed = reg.execute("/theme")
+    assert "b3code" in listed.message
+    assert "accent" in listed.message
+    result = reg.execute("/theme update accent #DC143C")
+    assert isinstance(result.effect, Refresh)
+    assert "#DC143C" in result.message
+    saved = reg.execute("/theme save crimson")
+    assert isinstance(saved.effect, Refresh)
+    switched = reg.execute("/theme set crimson")
+    assert "crimson" in switched.message
+    subs = [s.value for s in reg.complete("/theme ")]
+    assert subs == ["set", "update", "save"] or set(subs) == {"set", "update", "save"}
+    assert "accent" not in subs
+    assert "b3code" not in subs
+    names = [s.value for s in reg.complete("/theme set ")]
+    assert "crimson" in names
+    assert "b3code" in names
+    tokens = [s.value for s in reg.complete("/theme update ")]
+    assert "accent" in tokens
+    assert "background" in tokens
+    current = [s.value for s in reg.complete("/theme update accent ")]
+    assert current == ["#DC143C"]
+
+
+def test_theme_set_and_save_accept_spaces(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(
+        api_models=["gpt-4o"],
+        themes=[
+            {"name": "B3 Light", "accent": "#1818b7"},
+            {"name": "b3code"},
+        ],
+        selected_theme="b3code",
+    )
+    store.save(cfg)
+    sessions = SessionStore(tmp_path / "sessions.json")
+    chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
+    reg = CommandRegistry.build(store, cfg, sessions, chat)
+    listed = reg.execute("/theme")
+    assert "B3 Light" in listed.message
+    assert "b3-light" not in listed.message
+    switched = reg.execute("/theme set B3 Light")
+    assert "B3 Light" in switched.message
+    assert cfg.selected_theme == "b3-light"
+    shown = {s.label: s.value for s in reg.complete("/theme set ")}
+    assert shown["B3 Light"] == "b3-light"
+    saved = reg.execute("/theme save Tokyo Night")
+    assert "Tokyo Night" in saved.message
+    assert any(item.name == "tokyo-night" for item in cfg.themes)
+
+
 def test_complete_catalog_models(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(use_provider_gateway=False, api_models=["gpt-4o"])
@@ -85,6 +138,18 @@ def _arg(value: str) -> Suggestion:
 
 def _cmd(value: str, *, consume: bool = False) -> Suggestion:
     return Suggestion(value=value, label=value, hint="cmd", kind="cmd", consume=consume)
+
+
+def test_apply_theme_child_does_not_repeat_command():
+    item = Suggestion(
+        value="set", label="set", hint="activate a saved theme", kind="arg", consume=False
+    )
+    spaced, _ = apply_suggestion("/theme ", 7, item)
+    assert spaced == "/theme set "
+    bare, _ = apply_suggestion("/theme", 6, item)
+    assert bare == "/theme set "
+    partial, _ = apply_suggestion("/theme s", 8, item)
+    assert partial == "/theme set "
 
 
 def test_apply_model_replaces_prefix():

@@ -19,7 +19,7 @@ def build_plan(chat: ChatService) -> Command:
             effect=RunPrompt(rest) if rest else None,
         )
 
-    def complete(prefix: str) -> list[Suggestion]:
+    def complete(prefix: str = "", *_: str) -> list[Suggestion]:
         return [
             Suggestion(value=value, label=value, hint="plan", kind="arg", consume=True)
             for value in ("on", "off")

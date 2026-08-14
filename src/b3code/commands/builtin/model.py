@@ -25,7 +25,7 @@ def build_model(
             f"model → {config_service.config.selected_model}", effect=Refresh()
         )
 
-    def complete(prefix: str) -> list[Suggestion]:
+    def complete(prefix: str = "", *_: str) -> list[Suggestion]:
         config = config_service.config
         hint = "gateway" if config.use_provider_gateway else "catalog"
         return [
@@ -50,7 +50,7 @@ def build_gateway(config_service: ConfigService, chat: ChatService) -> Command:
         state = "on" if config_service.config.use_provider_gateway else "off"
         return CommandResult(f"gateway: {state}", effect=Refresh())
 
-    def complete(prefix: str) -> list[Suggestion]:
+    def complete(prefix: str = "", *_: str) -> list[Suggestion]:
         return [
             Suggestion(
                 value=value, label=value, hint="toggle", kind="arg", consume=True

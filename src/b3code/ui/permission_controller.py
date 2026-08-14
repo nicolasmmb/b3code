@@ -20,6 +20,9 @@ class PermissionController:
         self._picker = picker
         self._accent = accent
 
+    def set_accent(self, accent: str) -> None:
+        self._accent = accent
+
     def consume_key(self, event: Key) -> bool:
         if not self.awaiting:
             return False

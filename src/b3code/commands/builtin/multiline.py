@@ -16,7 +16,7 @@ def build_multiline(config_service: ConfigService) -> Command:
         state = "on" if config_service.config.multiline else "off"
         return CommandResult(f"multiline: {state}")
 
-    def complete(prefix: str) -> list[Suggestion]:
+    def complete(prefix: str = "", *_: str) -> list[Suggestion]:
         return [
             Suggestion(
                 value=value, label=value, hint="toggle", kind="arg", consume=True

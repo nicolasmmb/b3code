@@ -10,6 +10,8 @@ from textual.widget import Widget
 from textual.widgets import Label, Markdown, Static
 from textual.widgets.markdown import MarkdownFence
 
+from b3code.config.schema import ThemeColors
+from b3code.ui.palette import RichPalette, rich_palette, theme_of
 from b3code.utils.diffview import (
     DiffLine,
     FileChange,
@@ -19,17 +21,6 @@ from b3code.utils.diffview import (
 )
 from b3code.utils.errors import split_error_summary
 from b3code.utils.prompt import split_display_chips
-
-# Grok-like: fundo na linha inteira, sem prefixo +/- no código.
-_ADD = "#b7d5b4 on #1c2b1e"
-_DEL = "#e0a3a3 on #2e1a1a"
-_NUM = "#6e6e6e"
-_CTX = "#d4d4d4"
-_HEAD = "#9a9a9a"
-_FILE = "#c9a227"
-_FOLD = "#9a9a9a"
-_ERR = "#c45c5c"
-_ERR_MSG = "#e0a3a3"
 
 
 class FileChip(Static):
@@ -183,9 +174,11 @@ class DiffBlock(Vertical, can_focus=False):
         self._paint()
 
     def _paint(self) -> None:
+        colors = rich_palette(theme_of(self))
         width = self.size.width if self.size.width > 0 else 80
         lines = visible(self.change, expanded=self.expanded)
-        self._body.update(render_lines(lines, width))
+        self._header.update(render_header(self.change, colors))
+        self._body.update(render_lines(lines, width, colors))
         if self._fold is not None:
             label = fold_label(self.change, expanded=self.expanded)
             self._fold.update(label)
@@ -193,44 +186,57 @@ class DiffBlock(Vertical, can_focus=False):
         self.refresh(layout=True)
 
 
-def render_header(change: FileChange) -> Text:
+def render_header(change: FileChange, colors: RichPalette | None = None) -> Text:
+    colors = colors or rich_palette()
     out = Text()
-    out.append("◆ ", style=_HEAD)
-    out.append("Edit  ", style=_HEAD)
-    out.append(change.path, style=_FILE)
-    out.append(f"  +{change.added} −{change.removed}", style=_NUM)
+    out.append("◆ ", style=colors.head)
+    out.append("Edit  ", style=colors.head)
+    out.append(change.path, style=colors.file)
+    out.append(f"  +{change.added} −{change.removed}", style=colors.number)
     return out
 
 
-def render_lines(lines: tuple[DiffLine, ...], width: int = 80) -> Text:
+def render_lines(
+    lines: tuple[DiffLine, ...],
+    width: int = 80,
+    colors: RichPalette | None = None,
+) -> Text:
+    colors = colors or rich_palette()
     out = Text()
     for line in lines:
-        out.append_text(_paint_line(line, width))
+        out.append_text(_paint_line(line, width, colors))
     return out
 
 
-def render_diff(change: FileChange, width: int = 80, *, expanded: bool = False) -> Text:
-    out = render_header(change)
+def render_diff(
+    change: FileChange,
+    width: int = 80,
+    *,
+    expanded: bool = False,
+    theme: ThemeColors | None = None,
+) -> Text:
+    colors = rich_palette(theme)
+    out = render_header(change, colors)
     out.append("\n")
-    out.append_text(render_lines(visible(change, expanded=expanded), width))
+    out.append_text(render_lines(visible(change, expanded=expanded), width, colors))
     label = fold_label(change, expanded=expanded)
     if label:
-        out.append(label + "\n", style=_FOLD)
+        out.append(label + "\n", style=colors.fold)
     return out
 
 
-def _paint_line(line: DiffLine, width: int) -> Text:
+def _paint_line(line: DiffLine, width: int, colors: RichPalette) -> Text:
     gutter = f"{line.number:>4} "
     room = max(8, width - len(gutter))
     body = line.text.replace("\t", "    ")[:room].ljust(room)
     row = gutter + body + "\n"
     if line.kind == "+":
-        return Text(row, style=_ADD)
+        return Text(row, style=colors.add)
     if line.kind == "-":
-        return Text(row, style=_DEL)
+        return Text(row, style=colors.delete)
     painted = Text()
-    painted.append(gutter, style=_NUM)
-    painted.append(body + "\n", style=_CTX)
+    painted.append(gutter, style=colors.number)
+    painted.append(body + "\n", style=colors.context)
     return painted
 
 
@@ -278,9 +284,10 @@ class ErrorBlock(Vertical, can_focus=False):
         self.detail = detail.rstrip() + "\n" if detail else ""
         self.kind, self.message = split_error_summary(summary)
         self.expanded = False
-        self._header = Static(render_error_header(self.kind), classes="error-header")
+        colors = rich_palette()
+        self._header = Static(render_error_header(self.kind, colors), classes="error-header")
         self._message = Static(
-            Text(self.message, style=_ERR_MSG), classes="error-message"
+            Text(self.message, style=colors.error_msg), classes="error-message"
         )
         self._body = Static(Text(self.detail), markup=False, classes="error-body")
         self._fold = ErrorFold("")
@@ -317,6 +324,9 @@ class ErrorBlock(Vertical, can_focus=False):
         self.app.notify("error copied")
 
     def _paint(self) -> None:
+        colors = rich_palette(theme_of(self))
+        self._header.update(render_error_header(self.kind, colors))
+        self._message.update(Text(self.message, style=colors.error_msg))
         can_open = self.expandable
         self._body.display = self.expanded and can_open
         self._fold.display = can_open
@@ -325,12 +335,13 @@ class ErrorBlock(Vertical, can_focus=False):
         self.refresh(layout=True)
 
 
-def render_error_header(kind: str) -> Text:
+def render_error_header(kind: str, colors: RichPalette | None = None) -> Text:
+    colors = colors or rich_palette()
     out = Text()
-    out.append("◆ ", style=_HEAD)
-    out.append("Error  ", style=_HEAD)
+    out.append("◆ ", style=colors.head)
+    out.append("Error  ", style=colors.head)
     if kind:
-        out.append(kind, style=_ERR)
+        out.append(kind, style=colors.error)
     return out
 
 

@@ -53,7 +53,8 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `api_models` | list | `["gpt-4o"]` | Modelos listados pelo `/model` quando o gateway está ligado. |
 | `selected_model` | string | primeiro de `api_models` | Modelo ativo. No gateway é um item de `api_models`; no catálogo é `provider:model`. |
 | `shell_allowed_paths` | list | `[]` | Paths absolutos que o shell pode usar sem perguntar de novo. |
-| `accent` | string | `#c9a227` | Cor de destaque da UI (hex de 3 ou 6 dígitos; valor inválido volta ao default). |
+| `selected_theme` | string | `"b3code"` | Slug do tema ativo (o `name` de um item de `themes`). |
+| `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. JSON antigo com `accent` no topo migra para o tema default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
 
 Exemplo:
 
@@ -65,9 +66,63 @@ Exemplo:
   "api_models": ["gpt-4o"],
   "selected_model": "gpt-4o",
   "shell_allowed_paths": [],
-  "accent": "#c9a227"
+  "selected_theme": "b3code",
+  "themes": [
+    {
+      "name": "b3code",
+      "label": "",
+      "background": "#1c1d1f",
+      "foreground": "#e6e8ea",
+      "accent": "#00b0e6",
+      "muted": "#8b9198",
+      "border": "#3c4046",
+      "surface": "#26282c",
+      "error": "#e05a5a",
+      "success": "#3fba7a"
+    },
+    {
+      "name": "github-dark",
+      "label": "",
+      "background": "#0d1117",
+      "foreground": "#e6edf3",
+      "accent": "#58a6ff",
+      "muted": "#8b949e",
+      "border": "#30363d",
+      "surface": "#161b22",
+      "error": "#f85149",
+      "success": "#3fb950"
+    }
+  ]
 }
 ```
+
+### Temas
+
+O first-run grava dois temas. O ativo e o default gerado é **`b3code`**, com a paleta
+institucional da B3 (ciano Pantone 2995 `#00b0e6`). O fundo é cinza-neutro
+`#1c1d1f` de propósito — o navy oficial `#003475` no canvas quebra o contraste
+de texto e diffs.
+
+| Token | `b3code` | Uso |
+|---|---|---|
+| `background` | `#1c1d1f` | tela, prompt, barras |
+| `foreground` | `#e6e8ea` | texto |
+| `accent` | `#00b0e6` | prefixo, plan, tools, hint |
+| `muted` | `#8b9198` | ícones, cwd, folds |
+| `border` | `#3c4046` | prompt, welcome, autocomplete |
+| `surface` | `#26282c` | chips, painéis |
+| `error` | `#e05a5a` | erros, diffs `-` |
+| `success` | `#3fba7a` | diffs `+` |
+
+`github-dark` (Primer) vem no mesmo JSON. Hex inválido em qualquer token volta
+ao default daquele token. JSON antigo com `accent` no topo migra para o tema
+`b3code`.
+
+Autocomplete em etapas: `/theme ` lista só os subcomandos; `set` / `save`
+completam pelos nomes de exibição (`Tokyo Night`); `update` completa o token
+e depois o hex atual. O Tab insere o slug (`tokyo-night`) para o comando
+ficar em um token. `/theme set B3 Light` e `/theme save Tokyo Night` também
+funcionam. A listagem mostra o label, nunca o slug.
 
 ## 6. Backends de modelo
 
@@ -109,6 +164,10 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/resume` | Lista sessões; `/resume <id>` ativa uma |
 | `/model` | Mostra o modelo ativo; `/model <nome>` troca (com autocomplete) |
 | `/gateway on\|off` | Liga/desliga o gateway Azure (persistido) |
+| `/theme` | Lista os temas salvos e as cores do ativo |
+| `/theme set <nome>` | Ativa um tema já salvo |
+| `/theme update <token> <#hex>` | Edita uma cor do tema ativo (`background`, `accent`, …) |
+| `/theme save <nome>` | Copia o tema ativo para um novo nome |
 | `/plan on\|off` | Entra/sai do plan mode |
 | `/view-plan` | Mostra o `.b3code/plan.md` atual |
 | `/quit` / `/exit` | Sai do app |
@@ -280,7 +339,7 @@ src/b3code/
 │   ├── apply.py           # decide_submit / apply_suggestion
 │   ├── effects.py         # efeitos puros dos comandos
 │   ├── registry.py        # CommandRegistry
-│   └── builtin/           # help, model, plan, session
+│   └── builtin/           # help, model, plan, session, theme
 ├── config/
 │   ├── schema.py          # AppConfig
 │   ├── store.py           # ConfigStore (.b3code/config.json)
@@ -302,6 +361,7 @@ src/b3code/
 │   └── workspace.py       # workspace_toolset
 ├── ui/
 │   ├── app.py             # B3App (Textual)
+│   ├── palette.py         # Theme JSON → Textual Theme + Rich
 │   ├── screens/chat.py    # ChatScreen (wiring, bindings)
 │   ├── chat_view.py       # ChatView + widgets de mensagem
 │   ├── prompt_bar.py      # PromptBar + Autocomplete

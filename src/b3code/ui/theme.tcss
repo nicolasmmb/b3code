@@ -1,13 +1,13 @@
 Screen {
-    background: #1a1b1e;
-    color: #d4d4d4;
+    background: $background;
+    color: $foreground;
 }
 
 /* height 2 = 1 de conteúdo + 1 da border-bottom (Textual come a borda da height). */
 #top-bar {
     height: 2;
-    background: #1a1b1e;
-    border-bottom: solid #2a2a2e;
+    background: $background;
+    border-bottom: solid $surface;
     padding: 0 1;
 }
 
@@ -15,12 +15,12 @@ Screen {
 #model-icon {
     width: auto;
     height: 1;
-    color: #6e6e6e;
+    color: $text-muted;
     padding: 0 1 0 0;
 }
 
 #cwd {
-    color: #9a9a9a;
+    color: $text-muted;
     width: 1fr;
     height: 1;
 }
@@ -28,7 +28,7 @@ Screen {
 #model-label {
     width: auto;
     height: 1;
-    color: #9a9a9a;
+    color: $text-muted;
     content-align: right middle;
 }
 
@@ -36,7 +36,7 @@ Screen {
     display: none;
     width: auto;
     height: 1;
-    color: #c9a227;
+    color: $accent;
     padding: 0 0 0 1;
     content-align: right middle;
 }
@@ -49,24 +49,24 @@ Screen {
 Welcome {
     width: 72;
     height: auto;
-    border: solid #3a3a3a;
+    border: solid $border;
     padding: 1 2;
     margin: 4 0;
     align: center middle;
 }
 
 #welcome-title {
-    color: #e6e6e6;
+    color: $foreground;
     text-style: bold;
 }
 
 #welcome-hint {
-    color: #c9a227;
+    color: $accent;
     margin-top: 1;
 }
 
 #welcome-menu {
-    color: #c8c8c8;
+    color: $foreground;
     margin-top: 1;
 }
 
@@ -74,7 +74,7 @@ UserMessage {
     height: auto;
     margin: 1 12 0 0;
     padding: 0 1;
-    color: #e6e6e6;
+    color: $foreground;
 }
 
 .user-chips {
@@ -85,19 +85,19 @@ UserMessage {
 .file-chip {
     width: auto;
     height: 1;
-    background: #2a2a32;
-    color: #e6e6e6;
+    background: $surface;
+    color: $foreground;
     padding: 0 1;
     margin: 0 1 0 0;
 }
 
 .user-body {
     height: auto;
-    color: #e6e6e6;
+    color: $foreground;
 }
 
 Spinner {
-    color: #8a8a8a;
+    color: $text-muted;
     margin: 0 0 1 0;
     padding: 0 1;
 }
@@ -137,20 +137,20 @@ FenceCopy:focus {
 }
 
 ToolRow {
-    color: #8a8a8a;
+    color: $text-muted;
     padding: 0 1;
 }
 
 ToolRow.running {
-    color: #c9a227;
+    color: $accent;
 }
 
 ToolRow.done {
-    color: #6e6e6e;
+    color: $text-muted;
 }
 
 ToolRow.error {
-    color: #c45c5c;
+    color: $error;
 }
 
 DiffBlock {
@@ -159,13 +159,13 @@ DiffBlock {
 }
 
 DiffFold {
-    color: #9a9a9a;
+    color: $text-muted;
     height: 1;
     padding: 0 1;
 }
 
 DiffFold:focus {
-    color: #e6e6e6;
+    color: $foreground;
     text-style: bold;
 }
 
@@ -173,7 +173,7 @@ ErrorBlock {
     height: auto;
     margin: 1 0 0 0;
     padding: 0 0 1 1;
-    border-left: wide #c45c5c;
+    border-left: wide $error;
 }
 
 ErrorBlock > Static {
@@ -181,34 +181,34 @@ ErrorBlock > Static {
 }
 
 .error-header {
-    color: #9a9a9a;
+    color: $text-muted;
     height: 1;
 }
 
 .error-message {
-    color: #e0a3a3;
+    color: $text-error;
     padding: 0 1;
 }
 
 .error-body {
-    color: #8a8a8a;
+    color: $text-muted;
     padding: 0 1;
     margin-top: 1;
 }
 
 ErrorFold {
-    color: #9a9a9a;
+    color: $text-muted;
     height: 1;
     padding: 0 1;
 }
 
 ErrorFold:focus {
-    color: #e6e6e6;
+    color: $foreground;
     text-style: bold;
 }
 
 SystemNote {
-    color: #8a8a8a;
+    color: $text-muted;
     padding: 0 1;
     margin: 1 0;
 }
@@ -220,20 +220,20 @@ SystemNote {
 
 #prompt-row {
     height: auto;
-    border: round #3a3a3a;
+    border: round $border;
     padding: 0 1;
 }
 
 #prompt-prefix {
     width: 2;
     height: 1;
-    color: #c9a227;
+    color: $accent;
     content-align: left top;
 }
 
 #prompt {
-    background: #1a1b1e;
-    color: #d4d4d4;
+    background: $background;
+    color: $foreground;
     border: none;
     padding: 0;
     width: 1fr;
@@ -247,28 +247,28 @@ SystemNote {
 }
 
 #prompt .text-area--cursor-line {
-    background: #1a1b1e;
+    background: $background;
 }
 
 Autocomplete {
     display: none;
     max-height: 10;
     height: auto;
-    border: solid #3a3a3a;
-    background: #141414;
+    border: solid $border;
+    background: $background-darken-1;
     padding: 0;
 }
 
 Autocomplete > .option-list--option-highlighted {
-    background: #2a2a2a;
-    color: #e6e6e6;
+    background: $surface;
+    color: $foreground;
 }
 
 PlanBar {
     display: none;
     height: auto;
-    background: #1a1b1e;
-    border-top: solid #2a2a2e;
+    background: $background;
+    border-top: solid $surface;
     padding: 1 2;
 }
 
@@ -278,7 +278,7 @@ PlanDoc {
 }
 
 #plan-summary {
-    color: #9a9a9a;
+    color: $text-muted;
     margin-bottom: 1;
     height: auto;
 }
@@ -287,24 +287,24 @@ PlanDoc {
     height: auto;
     max-height: 5;
     border: none;
-    background: #1a1b1e;
+    background: $background;
     padding: 0;
 }
 
 #plan-options > .option-list--option-highlighted {
-    background: #1a1b1e;
+    background: $background;
 }
 
 PermissionPicker {
     display: none;
     height: auto;
-    background: #1a1b1e;
-    border-top: solid #2a2a2e;
+    background: $background;
+    border-top: solid $surface;
     padding: 1 2;
 }
 
 #permission-summary {
-    color: #9a9a9a;
+    color: $text-muted;
     margin-bottom: 1;
 }
 
@@ -312,16 +312,16 @@ PermissionPicker {
     height: auto;
     max-height: 5;
     border: none;
-    background: #1a1b1e;
+    background: $background;
     padding: 0;
 }
 
 #permission-options > .option-list--option-highlighted {
-    background: #1a1b1e;
+    background: $background;
 }
 
 .role {
-    color: #6e6e6e;
+    color: $text-muted;
     text-style: bold;
     padding: 0 1;
     margin-top: 1;

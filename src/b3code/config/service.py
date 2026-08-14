@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from b3code.config.schema import AppConfig
+from b3code.config.schema import (
+    THEME_COLOR_DEFAULTS,
+    AppConfig,
+    ThemeColors,
+    parse_hex,
+    slugify_theme,
+)
 from b3code.config.store import ConfigStore
 from b3code.services.catalog import ModelCatalog
 
@@ -53,4 +59,46 @@ class ConfigService:
 
     def set_multiline(self, on: bool) -> None:
         self._config.multiline = on
+        self.store.save(self._config)
+
+    def find_theme(self, name: str) -> ThemeColors | None:
+        slug = slugify_theme(name)
+        needle = name.strip().lower()
+        for item in self._config.themes:
+            if item.name == slug or item.display.lower() == needle:
+                return item
+        return None
+
+    def select_theme(self, name: str) -> None:
+        theme = self.find_theme(name)
+        if theme is None:
+            raise ValueError(f"theme {name!r} not saved")
+        self._config.selected_theme = theme.name
+        self.store.save(self._config)
+
+    def set_theme_color(self, token: str, value: str) -> None:
+        if token not in THEME_COLOR_DEFAULTS:
+            raise ValueError(f"unknown color {token!r}")
+        parsed = parse_hex(value, "")
+        if not parsed:
+            raise ValueError(f"invalid hex {value!r}")
+        setattr(self._config.theme, token, parsed)
+        self.store.save(self._config)
+
+    def save_theme(self, name: str) -> None:
+        slug = slugify_theme(name)
+        if not slug:
+            raise ValueError(f"invalid theme name {name!r}")
+
+        pretty = name.strip()
+        payload = self._config.theme.model_dump()
+        payload["name"] = slug
+        payload["label"] = pretty if pretty != slug else ""
+        clone = ThemeColors.model_validate(payload)
+        existing = self.find_theme(slug)
+        if existing is None:
+            self._config.themes.append(clone)
+        else:
+            self._config.themes[self._config.themes.index(existing)] = clone
+        self._config.selected_theme = slug
         self.store.save(self._config)
