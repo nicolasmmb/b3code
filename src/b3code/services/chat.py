@@ -6,11 +6,13 @@ A UI só conhece `ChatEvent`. Nada de pydantic_ai atravessa essa fronteira.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from pydantic_ai import Agent, CancellationToken
 from pydantic_ai.exceptions import RunCancelled
+from pydantic_ai.messages import UserContent
 from pydantic_ai.models import Model
 
 from b3code.config.credentials import missing_gateway_credentials
@@ -97,7 +99,9 @@ class ChatService:
         if self._cancel is not None:
             self._cancel.cancel()
 
-    async def enqueue(self, prompt: str, on_event: OnEvent) -> None:
+    async def enqueue(
+        self, prompt: str | Sequence[UserContent], on_event: OnEvent
+    ) -> None:
         """Única porta de entrada. O lock garante 1 `agent.run` por vez."""
         async with self._lock:
             self.busy = True
@@ -106,7 +110,9 @@ class ChatService:
             finally:
                 self.busy = False
 
-    async def _run_turn(self, prompt: str, on_event: OnEvent) -> None:
+    async def _run_turn(
+        self, prompt: str | Sequence[UserContent], on_event: OnEvent
+    ) -> None:
         problem = missing_gateway_credentials(self.config)
         if self._injected_model is None and problem:
             on_event(ChatEvent(kind="error", text=problem))
@@ -136,7 +142,10 @@ class ChatService:
             self.gate.on_ask = None
 
     async def _dispatch_turn(
-        self, prompt: str, token: CancellationToken, on_event: OnEvent
+        self,
+        prompt: str | Sequence[UserContent],
+        token: CancellationToken,
+        on_event: OnEvent,
     ) -> None:
         async def handler(_ctx: Any, events: Any) -> None:
             async for event in events:
@@ -149,7 +158,11 @@ class ChatService:
         await self._run_coder(prompt, handler, token, on_event)
 
     async def _run_coder(
-        self, prompt: str, handler: Any, token: CancellationToken, on_event: OnEvent
+        self,
+        prompt: str | Sequence[UserContent],
+        handler: Any,
+        token: CancellationToken,
+        on_event: OnEvent,
     ) -> None:
         result = await self._get_coder().run(
             prompt,
@@ -161,7 +174,11 @@ class ChatService:
         on_event(ChatEvent(kind="done", text=result.output or ""))
 
     async def _run_planner(
-        self, prompt: str, handler: Any, token: CancellationToken, on_event: OnEvent
+        self,
+        prompt: str | Sequence[UserContent],
+        handler: Any,
+        token: CancellationToken,
+        on_event: OnEvent,
     ) -> None:
         result = await self._get_planner().run(
             prompt,
@@ -175,7 +192,7 @@ class ChatService:
         if self.plan.read():
             on_event(ChatEvent(kind="plan_ready", text=self.plan.read()))
 
-    async def _persist_plan_turn(self, prompt: str) -> None:
+    async def _persist_plan_turn(self, prompt: str | Sequence[UserContent]) -> None:
         from pydantic_ai.messages import (
             ModelRequest,
             ModelResponse,
@@ -183,8 +200,11 @@ class ChatService:
             UserPromptPart,
         )
 
+        content: str | list[UserContent] = (
+            prompt if isinstance(prompt, str) else list(prompt)
+        )
         msgs = list(self.session.messages) + [
-            ModelRequest(parts=[UserPromptPart(content=prompt)]),
+            ModelRequest(parts=[UserPromptPart(content=content)]),
             ModelResponse(parts=[TextPart(content=slim_plan_note(self.plan))]),
         ]
         await self.session.replace_async(msgs)

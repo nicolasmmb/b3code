@@ -39,7 +39,11 @@ class FileIndex:
         return rank_paths(query, self._files, limit=limit)
 
     def read(self, rel: str, *, limit: int | None = ATTACH_CHAR_LIMIT) -> str:
-        text = safe_workspace_path(rel, self.cwd).read_text(encoding="utf-8")
+        path = safe_workspace_path(rel, self.cwd)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"not a text file: {rel}") from exc
         if limit is None:
             return text
         body, _truncated = truncate_chars(text, limit)

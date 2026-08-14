@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 
+from pydantic_ai import BinaryContent
 from pydantic_ai.models.test import TestModel
 
 from b3code.config.schema import AppConfig
@@ -93,3 +94,28 @@ async def test_enqueue_in_plan_mode(tmp_path: Path):
     assert chat._plan_history
     chat.exit_plan()
     assert chat._plan_history == []
+
+
+async def test_enqueue_binary_content_round_trips(tmp_path: Path):
+    chat = _service(tmp_path)
+    payload = [
+        "o que e",
+        BinaryContent(
+            data=b"\x89PNG\r\n\x1a\n", media_type="image/png", identifier="casa.jpg"
+        ),
+    ]
+    events: list[ChatEvent] = []
+    await chat.enqueue(payload, events.append)
+    assert any(e.kind == "done" for e in events)
+    found = False
+    for msg in chat.session.messages:
+        for part in getattr(msg, "parts", []):
+            content = getattr(part, "content", None)
+            if isinstance(content, list) and any(
+                isinstance(item, BinaryContent) for item in content
+            ):
+                found = True
+    assert found
+    reloaded = SessionStore(chat.session.path)
+    turns = reloaded.display_turns()
+    assert any("[IMG - casa.jpg]" in turn.text for turn in turns if turn.role == "user")

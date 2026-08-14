@@ -25,7 +25,8 @@ from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.planbar import PlanBar
 from b3code.ui.widgets.topbar import TopBar
-from b3code.utils.prompt import expand_attachments
+from b3code.utils.attachments import Attachment
+from b3code.utils.prompt import build_user_content
 
 
 class ChatScreen(ChatStreamMixin, Screen):
@@ -221,14 +222,20 @@ class ChatScreen(ChatStreamMixin, Screen):
         if self.plan_controller is not None:
             self.plan_controller.reset()
 
-    def _send_chat(self, user_text: str) -> None:
+    def _send_chat(
+        self,
+        user_text: str,
+        attachments: dict[str, Attachment] | None = None,
+    ) -> None:
         self.chat_view.mount_user(user_text)
         self.chat_view.start_assistant()
         self.chat_view.stop_thinking()
         self.chat_view.ensure_thinking()
         self.chat_view.scroll_end()
         self.query_one(PromptBar).disable_input()
-        self._enqueue_prompt(user_text)
+        if attachments is None:
+            attachments = self.query_one(PromptBar).pop_attachments(user_text)
+        self._enqueue_prompt(user_text, attachments)
 
     def _apply_event(self, event) -> None:
         super()._apply_event(event)
@@ -239,9 +246,15 @@ class ChatScreen(ChatStreamMixin, Screen):
         self.query_one(PromptBar).enable_input()
 
     @work(exclusive=False)
-    async def _enqueue_prompt(self, user_text: str) -> None:
+    async def _enqueue_prompt(
+        self, user_text: str, attachments: dict[str, Attachment]
+    ) -> None:
         prompt = await asyncio.to_thread(
-            expand_attachments, user_text, self.deps.cwd, self.deps.files.read
+            build_user_content,
+            user_text,
+            self.deps.cwd,
+            self.deps.files.read,
+            attachments,
         )
         await self.deps.chat.enqueue(prompt, self._on_event)
 

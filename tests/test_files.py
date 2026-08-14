@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from b3code.commands.apply import apply_suggestion
 from b3code.commands.types import Suggestion
 from b3code.services.files import FileIndex
@@ -43,6 +45,14 @@ def test_expand_attachments(tmp_path: Path):
     out = expand_attachments("explica @a.py", tmp_path, idx.read)
     assert '<file path="a.py">' in out
     assert "print(1)" in out
+
+
+def test_read_rejects_binary_image(tmp_path: Path):
+    from test_attachments import make_png
+
+    (tmp_path / "shot.png").write_bytes(make_png(8, 8))
+    with pytest.raises(ValueError, match="not a text file"):
+        FileIndex(tmp_path).read("shot.png")
 
 
 def test_expand_attachments_truncates_large_file(tmp_path: Path):

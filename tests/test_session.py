@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic_ai import BinaryContent
 from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 from b3code.services.session import SessionStore, turns_from_messages
@@ -58,6 +59,25 @@ async def test_replace_async_persists(tmp_path: Path):
     assert reloaded.messages[0].parts[0].content == "async"
 
 
+def test_binary_content_persists_across_reload(tmp_path: Path):
+    store = SessionStore(tmp_path / "sessions.json")
+    payload = [
+        "o que e",
+        BinaryContent(
+            data=b"\x89PNG\r\n\x1a\n",
+            media_type="image/png",
+            identifier="casa.jpg",
+        ),
+    ]
+    store.replace([ModelRequest(parts=[UserPromptPart(content=payload)])])
+    reloaded = SessionStore(tmp_path / "sessions.json")
+    turns = reloaded.display_turns()
+    assert "[IMG - casa.jpg]" in turns[0].text
+    content = reloaded.messages[0].parts[0].content
+    assert isinstance(content, list)
+    assert any(isinstance(item, BinaryContent) for item in content)
+
+
 def test_strip_file_blocks_in_display():
     msgs = [
         ModelRequest(
@@ -67,4 +87,48 @@ def test_strip_file_blocks_in_display():
         )
     ]
     turns = turns_from_messages(msgs)
-    assert turns[0].text == "veja"
+    assert "[PY - a.py]" in turns[0].text
+    assert "veja" in turns[0].text
+    assert "print(1)" not in turns[0].text
+
+
+def test_display_binary_image_chip():
+    msgs = [
+        ModelRequest(
+            parts=[
+                UserPromptPart(
+                    content=[
+                        "o que e",
+                        BinaryContent(
+                            data=b"\x89PNG\r\n\x1a\n",
+                            media_type="image/png",
+                            identifier="casa.jpg",
+                        ),
+                    ]
+                )
+            ]
+        )
+    ]
+    turns = turns_from_messages(msgs)
+    assert "[IMG - casa.jpg]" in turns[0].text
+    assert "o que e" in turns[0].text
+
+
+def test_display_binary_pdf_chip():
+    msgs = [
+        ModelRequest(
+            parts=[
+                UserPromptPart(
+                    content=[
+                        BinaryContent(
+                            data=b"%PDF-1.4\n",
+                            media_type="application/pdf",
+                            identifier="report.pdf",
+                        )
+                    ]
+                )
+            ]
+        )
+    ]
+    turns = turns_from_messages(msgs)
+    assert turns[0].text == "[PDF - report.pdf]"

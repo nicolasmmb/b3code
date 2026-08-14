@@ -71,8 +71,28 @@ Welcome {
 }
 
 UserMessage {
+    height: auto;
     margin: 1 12 0 0;
     padding: 0 1;
+    color: #e6e6e6;
+}
+
+.user-chips {
+    height: auto;
+    width: 100%;
+}
+
+.file-chip {
+    width: auto;
+    height: 1;
+    background: #2a2a32;
+    color: #e6e6e6;
+    padding: 0 1;
+    margin: 0 1 0 0;
+}
+
+.user-body {
+    height: auto;
     color: #e6e6e6;
 }
 

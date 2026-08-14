@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from test_attachments import make_png
 from textual.app import App
 from textual.events import Paste
 from textual.widgets import Static
@@ -18,9 +19,11 @@ from b3code.ui.widgets.messages import (
     DiffFold,
     ErrorBlock,
     ErrorFold,
+    FileChip,
     PlanDoc,
     SystemNote,
     ToolRow,
+    UserMessage,
     render_diff,
 )
 from b3code.ui.widgets.permission import PermissionPicker
@@ -487,3 +490,143 @@ async def test_diff_fold_toggles_omitted_lines(tmp_path: Path):
         await pilot.pause()
         assert block.expanded is True
         assert "recolher" in str(fold.render())
+
+
+async def test_paste_png_inserts_image_chip(tmp_path: Path):
+    png = tmp_path / "casa.jpg"
+    png.write_bytes(make_png(8, 8))
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste(str(png)))
+        await pilot.pause()
+        assert "[IMG - casa.jpg]" in prompt.text
+        assert str(png) not in prompt.text
+
+
+async def test_paste_pdf_and_py_chips(tmp_path: Path):
+    pdf = tmp_path / "report.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    py = tmp_path / "app.py"
+    py.write_text("print(1)\n")
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste(str(pdf)))
+        await pilot.pause()
+        assert "[PDF - report.pdf]" in prompt.text
+        prompt.clear()
+        app.post_message(Paste(str(py)))
+        await pilot.pause()
+        assert "[PY - app.py]" in prompt.text
+
+
+async def test_paste_bin_is_path_not_chip(tmp_path: Path):
+    blob = tmp_path / "blob.bin"
+    blob.write_bytes(b"\x00\x01\x02\xff")
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        prompt = app.screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste(str(blob)))
+        await pilot.pause()
+        assert "[" not in prompt.text
+        assert str(blob) in prompt.text
+
+
+async def test_paste_mixed_file_urls(tmp_path: Path):
+    png = tmp_path / "casa.jpg"
+    png.write_bytes(make_png(8, 8))
+    txt = tmp_path / "notes.txt"
+    txt.write_text("hi\n")
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        prompt = app.screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste(f"file://{png}\nfile://{txt}"))
+        await pilot.pause()
+        assert "[IMG - casa.jpg]" in prompt.text
+        assert "[TXT - notes.txt]" in prompt.text
+        assert prompt.text.index("[IMG - casa.jpg]") < prompt.text.index(
+            "[TXT - notes.txt]"
+        )
+
+
+async def test_backspace_deletes_whole_chip(tmp_path: Path):
+    png = tmp_path / "casa.jpg"
+    png.write_bytes(make_png(8, 8))
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        prompt = app.screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste(str(png)))
+        await pilot.pause()
+        assert "[IMG - casa.jpg]" in prompt.text
+        await pilot.press("backspace")
+        await pilot.pause()
+        assert "[IMG - casa.jpg]" not in prompt.text
+
+
+async def test_at_complete_file_inserts_chip(tmp_path: Path):
+    (tmp_path / "app.py").write_text("print(1)\n")
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        bar = screen.query_one(PromptBar)
+        await bar._files.ensure_scanned()
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        prompt.text = "@ap"
+        prompt.cursor_position = len(prompt.text)
+        bar.refresh_suggestions()
+        await asyncio.sleep(0.2)
+        await pilot.pause()
+        await pilot.press("tab")
+        await pilot.pause()
+        assert "[PY - app.py]" in prompt.text
+        assert "@app.py" not in prompt.text
+
+
+async def test_submit_chip_shows_in_chat(tmp_path: Path):
+    png = tmp_path / "casa.jpg"
+    png.write_bytes(make_png(8, 8))
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste(str(png)))
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert prompt.text == ""
+        chips = list(screen.query(FileChip))
+        assert chips
+        user = screen.query_one(UserMessage)
+        assert user.query(FileChip)
+
+
+async def test_plain_paste_still_not_a_chip(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        prompt = app.screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        app.post_message(Paste("linha 1\nlinha 2"))
+        await pilot.pause()
+        assert prompt.text == "linha 1\nlinha 2"

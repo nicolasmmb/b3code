@@ -26,7 +26,7 @@ from pydantic_ai.messages import (
 )
 
 from b3code.utils.paths import atomic_write_text
-from b3code.utils.prompt import strip_file_blocks
+from b3code.utils.prompt import display_user_content
 from b3code.utils.text import ellipsize
 
 
@@ -119,7 +119,7 @@ class SessionStore:
         return turns_from_messages(self.messages)
 
     def _install(self, messages: list[ModelMessage]) -> None:
-        dumped = ModelMessagesTypeAdapter.dump_python(messages)
+        dumped = ModelMessagesTypeAdapter.dump_python(messages, mode="json")
         self._current.messages = dumped
         self._current.message_count = len(messages)
         self._messages = list(messages)
@@ -204,8 +204,7 @@ def _turns_from_request(msg: ModelRequest) -> list[DisplayTurn]:
     for part in msg.parts:
         if not isinstance(part, UserPromptPart):
             continue
-        text = part.content if isinstance(part.content, str) else str(part.content)
-        cleaned = strip_file_blocks(text)
+        cleaned = display_user_content(part.content)
         if cleaned:
             turns.append(DisplayTurn(role="user", text=cleaned))
     return turns

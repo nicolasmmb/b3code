@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.events import Click, Key
 from textual.widgets import Markdown, Static
 
@@ -16,6 +16,7 @@ from b3code.utils.diffview import (
     visible,
 )
 from b3code.utils.errors import split_error_summary
+from b3code.utils.prompt import split_display_chips
 
 # Grok-like: fundo na linha inteira, sem prefixo +/- no código.
 _ADD = "#b7d5b4 on #1c2b1e"
@@ -29,8 +30,33 @@ _ERR = "#c45c5c"
 _ERR_MSG = "#e0a3a3"
 
 
-class UserMessage(Markdown):
-    """Prompt do user. Markdown para `**bold**` / code, igual o assistant."""
+class FileChip(Static):
+    """Pill `[TIPO - arquivo]` no prompt enviado."""
+
+    def __init__(self, label: str, name: str) -> None:
+        super().__init__(
+            Text.assemble((label, "dim"), (" - ", "dim"), (name, "")),
+            classes="file-chip",
+        )
+
+
+class UserMessage(Vertical):
+    """Prompt do user: chips de anexo + markdown do texto."""
+
+    def __init__(self, text: str) -> None:
+        super().__init__()
+        self._text = text
+
+    def compose(self) -> ComposeResult:
+        chips, body = split_display_chips(self._text)
+        if chips:
+            with Horizontal(classes="user-chips"):
+                for label, name in chips:
+                    yield FileChip(label, name)
+        if body:
+            yield Markdown(body, classes="user-body")
+        elif not chips:
+            yield Markdown(self._text, classes="user-body")
 
 
 class AssistantMessage(Markdown):
