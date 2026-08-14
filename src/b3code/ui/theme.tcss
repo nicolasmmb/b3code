@@ -3,19 +3,25 @@ Screen {
     color: $foreground;
 }
 
-/* height 2 = 1 de conteúdo + 1 da border-bottom (Textual come a borda da height). */
 #top-bar {
-    height: 2;
+    height: 1;
     background: $background;
-    border-bottom: solid $surface;
-    padding: 0 1;
+    padding: 0 2;
+    margin: 1 0;
 }
 
-#cwd-icon,
-#model-icon {
+#git-branch {
     width: auto;
     height: 1;
-    color: $text-muted;
+    color: $foreground;
+    text-style: dim;
+    padding: 0 1 0 0;
+}
+
+#worktree-flag {
+    width: auto;
+    height: 1;
+    color: $accent;
     padding: 0 1 0 0;
 }
 
@@ -23,6 +29,8 @@ Screen {
     color: $text-muted;
     width: 1fr;
     height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 #model-label {

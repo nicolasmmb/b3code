@@ -45,12 +45,12 @@ async def test_app_opens_welcome(tmp_path: Path):
         assert isinstance(screen, ChatScreen)
         assert screen.query_one(Welcome).display
         assert screen.query_one("#prompt")
-        assert screen.query_one("#cwd-icon")
-        assert screen.query_one("#model-icon")
         cwd = screen.query_one("#cwd", Static)
         model = screen.query_one("#model-label", Static)
         assert cwd.content
         assert model.content
+        assert not screen.query("#cwd-icon")
+        assert not screen.query("#model-icon")
         await pilot.press("/")
         await pilot.pause()
         ac = screen.query_one(Autocomplete)
