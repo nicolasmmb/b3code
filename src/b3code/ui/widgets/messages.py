@@ -48,10 +48,11 @@ def fence_lang(lexer: str) -> str:
 
 
 class FenceCopy(Static, can_focus=True):
-    """Botão ⧉ copy no canto do fence."""
+    """Ícone ⧉ no canto do fence."""
 
     def __init__(self) -> None:
-        super().__init__("⧉ copy", classes="fence-copy")
+        super().__init__("⧉", classes="fence-copy")
+        self.tooltip = "copy"
 
     def on_click(self, event: Click) -> None:
         fence = _owning_fence(self)

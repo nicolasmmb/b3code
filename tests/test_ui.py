@@ -702,11 +702,11 @@ async def test_assistant_fence_copy_button(tmp_path: Path):
         await pilot.pause()
         button = screen.query_one(FenceCopy)
         assert "⧉" in str(button.render())
-        assert "copy" in str(button.render())
+        assert "copy" not in str(button.render())
         screen.chat_view.hide_welcome()
         button.scroll_visible(animate=False)
         await pilot.pause()
-        assert await pilot.click(button, offset=(2, 1))
+        assert await pilot.click(button, offset=(0, 0))
         await pilot.pause()
         assert app.clipboard == "print(1)\n"
 

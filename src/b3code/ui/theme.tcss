@@ -110,41 +110,31 @@ AssistantMessage {
 CopyableFence {
     layout: vertical;
     height: auto;
+    padding: 1 0 0 0;
 }
 
 .fence-bar {
-    height: 4;
+    height: 1;
     width: 100%;
-    padding: 1 1 0 1;
-    align: left middle;
+    padding: 0 2;
 }
 
 .fence-lang {
     width: 1fr;
     height: 1;
     color: $text-muted;
-    content-align: left middle;
 }
 
-/* height 3 = 1 de conteúdo + 2 da borda (Textual come a borda da height). */
 FenceCopy {
     width: auto;
-    height: 3;
-    color: $accent;
-    background: $surface;
-    border: round $border;
-    padding: 0 1;
-    content-align: center middle;
+    height: 1;
+    color: $text-muted;
+    padding: 0;
 }
 
-FenceCopy:hover {
-    border: round $accent;
-}
-
+FenceCopy:hover,
 FenceCopy:focus {
-    color: $foreground;
-    border: round $accent;
-    text-style: bold;
+    color: $accent;
 }
 
 ToolRow {
