@@ -270,9 +270,9 @@ def render_error_header(kind: str) -> Text:
 
 def error_fold_label(detail: str, *, expanded: bool) -> str:
     if expanded:
-        return "▾  recolher  ·  [c]opy"
+        return "▲  See Less · -> Press C to copy"
     lines = detail.count("\n") or 1
-    return f"▸  {lines} linhas  ·  c"
+    return f"▶  See More {lines} Lines ·"
 
 
 class ToolRow(Static):
