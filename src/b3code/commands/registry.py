@@ -60,26 +60,23 @@ class CommandRegistry:
             return []
         tokens = slash_tokens(line)
         head = tokens[0] if tokens else ""
-        exact = self.roots.get(head)
-        arg_hits = self._complete_args(exact, tokens)
-        if arg_hits is not None:
-            return arg_hits
-        if len(tokens) <= 1:
-            return self._complete_roots(head)
-        if exact is None:
-            return []
-        return self._complete_children(exact, tokens[1])
+        root = self.roots.get(head)
+        if root is None:
+            return self._complete_roots(head) if len(tokens) <= 1 else []
+        cmd, rest = self._resolve(root, tokens[1:])
+        if cmd.completer is not None:
+            return cmd.completer(*rest) if rest else cmd.completer("")
+        if cmd.children:
+            prefix = rest[0] if rest else ""
+            return self._complete_children(cmd, prefix)
+        return []
 
-    def _complete_args(
-        self, exact: Command | None, tokens: list[str]
-    ) -> list[Suggestion] | None:
-        if exact is None or exact.completer is None:
-            return None
-        head = tokens[0] if tokens else ""
-        if len(tokens) < 2 and head != exact.name:
-            return None
-        prefix = tokens[1] if len(tokens) >= 2 else ""
-        return exact.completer(prefix)
+    def _resolve(self, cmd: Command, tokens: list[str]) -> tuple[Command, list[str]]:
+        rest = list(tokens)
+        while rest and rest[0] in cmd.children:
+            cmd = cmd.children[rest[0]]
+            rest = rest[1:]
+        return cmd, rest
 
     def _complete_roots(self, head: str) -> list[Suggestion]:
         return [
@@ -97,10 +94,10 @@ class CommandRegistry:
     def _complete_children(self, exact: Command, prefix: str) -> list[Suggestion]:
         return [
             Suggestion(
-                value=f"/{exact.name} {child.name}",
-                label=f"/{exact.name} {child.name}",
+                value=child.name,
+                label=child.name,
                 hint=child.help,
-                kind="cmd",
+                kind="arg",
                 consume=child.completer is None and not child.children,
             )
             for child in exact.children.values()
@@ -112,12 +109,13 @@ class CommandRegistry:
         if not tokens:
             return CommandResult("empty command")
         name, *rest = tokens
-        cmd = self.roots.get(name)
-        if cmd is None:
+        root = self.roots.get(name)
+        if root is None:
             return CommandResult(f"unknown command /{name}")
+        cmd, args = self._resolve(root, rest)
         if cmd.handler is None:
             return CommandResult(f"usage: /{cmd.name}")
         try:
-            return cmd.handler(*rest)
+            return cmd.handler(*args)
         except Exception as exc:
             return CommandResult(str(exc))

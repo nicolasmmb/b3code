@@ -40,7 +40,7 @@ def build_resume(sessions: SessionStore) -> Command:
         sessions.activate(args[0])
         return CommandResult(f"resumed {args[0]}", effect=Refresh())
 
-    def complete(prefix: str) -> list[Suggestion]:
+    def complete(prefix: str = "", *_: str) -> list[Suggestion]:
         needle = prefix.lower()
         out: list[Suggestion] = []
         for session in sessions.list_sessions():

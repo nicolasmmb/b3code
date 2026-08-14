@@ -4,34 +4,98 @@ from b3code.commands.types import CommandResult, Suggestion
 from b3code.config.schema import THEME_COLOR_DEFAULTS
 from b3code.config.service import ConfigService
 
+_USAGE = (
+    "usage: /theme | /theme set <name> | /theme update <token> <#hex> "
+    "| /theme save <name>"
+)
+
 
 def build_theme(config_service: ConfigService) -> Command:
-    tokens = tuple(THEME_COLOR_DEFAULTS)
+    return Command(
+        "theme",
+        "list or edit themes",
+        lambda *args: _list(config_service, args),
+        children={
+            "set": Command(
+                "set",
+                "activate a saved theme",
+                lambda *args: _set(config_service, args),
+                lambda prefix="", *_: _complete_names(config_service, prefix),
+            ),
+            "update": Command(
+                "update",
+                "edit a color of the active theme",
+                lambda *args: _update(config_service, args),
+                lambda prefix="", *more: _complete_update(config_service, prefix, more),
+            ),
+            "save": Command(
+                "save",
+                "copy active theme to a new name",
+                lambda *args: _save(config_service, args),
+                lambda prefix="", *_: _complete_names(config_service, prefix),
+            ),
+        },
+    )
 
-    def handler(*args: str) -> CommandResult:
-        if not args:
-            return CommandResult(_list_themes(config_service))
-        if args[0] == "save":
-            return _save(config_service, args[1:])
-        if len(args) == 1:
-            return _select(config_service, args[0])
-        if len(args) == 2 and args[0] in tokens:
-            return _set_color(config_service, args[0], args[1])
-        return CommandResult(
-            "usage: /theme [name] | /theme <token> <#hex> | /theme save <name>"
-        )
 
-    def complete(prefix: str) -> list[Suggestion]:
-        values = [("save", "copy current")]
-        values.extend((item.name, "saved") for item in config_service.config.themes)
-        values.extend((token, "color") for token in tokens)
+def _list(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult:
+    if args:
+        return CommandResult(_USAGE)
+    return CommandResult(_list_themes(config_service))
+
+
+def _set(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult:
+    if len(args) != 1:
+        return CommandResult("usage: /theme set <name>")
+    config_service.select_theme(args[0])
+    return CommandResult(
+        f"theme → {config_service.config.theme.name}", effect=Refresh()
+    )
+
+
+def _update(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult:
+    if len(args) != 2:
+        return CommandResult("usage: /theme update <token> <#hex>")
+    config_service.set_theme_color(args[0], args[1])
+    token, name = args[0], config_service.config.theme.name
+    color = getattr(config_service.config.theme, token)
+    return CommandResult(f"theme {name}.{token} → {color}", effect=Refresh())
+
+
+def _save(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult:
+    if len(args) != 1:
+        return CommandResult("usage: /theme save <name>")
+    config_service.save_theme(args[0])
+    return CommandResult(
+        f"theme saved {config_service.config.theme.name}", effect=Refresh()
+    )
+
+
+def _complete_names(config_service: ConfigService, prefix: str) -> list[Suggestion]:
+    return [
+        Suggestion(value=item.name, label=item.name, hint="saved", kind="arg", consume=True)
+        for item in config_service.config.themes
+        if item.name.startswith(prefix)
+    ]
+
+
+def _complete_update(
+    config_service: ConfigService, prefix: str, more: tuple[str, ...]
+) -> list[Suggestion]:
+    if not more:
         return [
-            Suggestion(value=name, label=name, hint=hint, kind="arg", consume=True)
-            for name, hint in values
-            if name.startswith(prefix)
+            Suggestion(value=token, label=token, hint="color", kind="arg", consume=False)
+            for token in THEME_COLOR_DEFAULTS
+            if token.startswith(prefix)
         ]
-
-    return Command("theme", "list, switch or edit saved themes", handler, complete)
+    if prefix not in THEME_COLOR_DEFAULTS:
+        return []
+    current = getattr(config_service.config.theme, prefix)
+    if not str(current).startswith(more[0]):
+        return []
+    return [
+        Suggestion(value=current, label=current, hint="current", kind="arg", consume=True)
+    ]
 
 
 def _list_themes(config_service: ConfigService) -> str:
@@ -45,22 +109,3 @@ def _list_themes(config_service: ConfigService) -> str:
     for token in THEME_COLOR_DEFAULTS:
         lines.append(f"  {token:<11} {getattr(current, token)}")
     return "\n".join(lines)
-
-
-def _select(config_service: ConfigService, name: str) -> CommandResult:
-    config_service.select_theme(name)
-    return CommandResult(f"theme → {config_service.config.theme.name}", effect=Refresh())
-
-
-def _set_color(config_service: ConfigService, token: str, value: str) -> CommandResult:
-    config_service.set_theme_color(token, value)
-    color = getattr(config_service.config.theme, token)
-    name = config_service.config.theme.name
-    return CommandResult(f"theme {name}.{token} → {color}", effect=Refresh())
-
-
-def _save(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult:
-    if len(args) != 1:
-        return CommandResult("usage: /theme save <name>")
-    config_service.save_theme(args[0])
-    return CommandResult(f"theme saved {config_service.config.theme.name}", effect=Refresh())

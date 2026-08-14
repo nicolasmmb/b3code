@@ -79,7 +79,7 @@ async def test_theme_command_updates_css(tmp_path: Path):
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, ChatScreen)
-        screen._run_command("/theme background #101010")
+        screen._run_command("/theme update background #101010")
         await pilot.pause()
         assert app.container.config.theme.background == "#101010"
         assert app.theme_variables["background"].lower() == "#101010"

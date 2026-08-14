@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from b3code.config.schema import AppConfig, github_dark_theme
+from b3code.config.schema import THEME_COLOR_DEFAULTS, AppConfig, github_dark_theme
 from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 
@@ -68,6 +68,8 @@ def test_default_themes_include_github_dark():
     cfg = AppConfig()
     names = [item.name for item in cfg.themes]
     assert names == ["b3code", "github-dark"]
+    assert cfg.selected_theme == "b3code"
+    assert cfg.theme.model_dump(exclude={"name"}) == THEME_COLOR_DEFAULTS
     github = github_dark_theme()
     saved = next(item for item in cfg.themes if item.name == "github-dark")
     assert saved.background == "#0d1117"

@@ -94,6 +94,31 @@ Exemplo:
 }
 ```
 
+### Temas
+
+O first-run grava dois temas. O ativo e o default gerado é **`b3code`**, com a paleta
+institucional da B3 (ciano Pantone 2995 `#00b0e6`). O fundo é cinza-neutro
+`#1c1d1f` de propósito — o navy oficial `#003475` no canvas quebra o contraste
+de texto e diffs.
+
+| Token | `b3code` | Uso |
+|---|---|---|
+| `background` | `#1c1d1f` | tela, prompt, barras |
+| `foreground` | `#e6e8ea` | texto |
+| `accent` | `#00b0e6` | prefixo, plan, tools, hint |
+| `muted` | `#8b9198` | ícones, cwd, folds |
+| `border` | `#3c4046` | prompt, welcome, autocomplete |
+| `surface` | `#26282c` | chips, painéis |
+| `error` | `#e05a5a` | erros, diffs `-` |
+| `success` | `#3fba7a` | diffs `+` |
+
+`github-dark` (Primer) vem no mesmo JSON. Hex inválido em qualquer token volta
+ao default daquele token. JSON antigo com `accent` no topo migra para o tema
+`b3code`.
+
+Autocomplete em etapas: `/theme ` lista só os subcomandos; `set` / `save`
+completam nomes salvos; `update` completa o token e depois o hex atual.
+
 ## 6. Backends de modelo
 
 Há dois modos, trocáveis em runtime com `/gateway on|off` (a flag é persistida
@@ -135,8 +160,8 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/model` | Mostra o modelo ativo; `/model <nome>` troca (com autocomplete) |
 | `/gateway on\|off` | Liga/desliga o gateway Azure (persistido) |
 | `/theme` | Lista os temas salvos e as cores do ativo |
-| `/theme <nome>` | Ativa um tema já salvo |
-| `/theme <token> <#hex>` | Edita uma cor do tema ativo (`background`, `accent`, …) |
+| `/theme set <nome>` | Ativa um tema já salvo |
+| `/theme update <token> <#hex>` | Edita uma cor do tema ativo (`background`, `accent`, …) |
 | `/theme save <nome>` | Copia o tema ativo para um novo nome |
 | `/plan on\|off` | Entra/sai do plan mode |
 | `/view-plan` | Mostra o `.b3code/plan.md` atual |

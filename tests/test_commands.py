@@ -73,17 +73,25 @@ def test_theme_list_and_set(tmp_path: Path):
     listed = reg.execute("/theme")
     assert "b3code" in listed.message
     assert "accent" in listed.message
-    result = reg.execute("/theme accent #DC143C")
+    result = reg.execute("/theme update accent #DC143C")
     assert isinstance(result.effect, Refresh)
     assert "#DC143C" in result.message
     saved = reg.execute("/theme save crimson")
     assert isinstance(saved.effect, Refresh)
-    switched = reg.execute("/theme crimson")
+    switched = reg.execute("/theme set crimson")
     assert "crimson" in switched.message
-    names = [s.value for s in reg.complete("/theme ")]
+    subs = [s.value for s in reg.complete("/theme ")]
+    assert subs == ["set", "update", "save"] or set(subs) == {"set", "update", "save"}
+    assert "accent" not in subs
+    assert "b3code" not in subs
+    names = [s.value for s in reg.complete("/theme set ")]
     assert "crimson" in names
-    assert "accent" in names
-    assert "save" in names
+    assert "b3code" in names
+    tokens = [s.value for s in reg.complete("/theme update ")]
+    assert "accent" in tokens
+    assert "background" in tokens
+    current = [s.value for s in reg.complete("/theme update accent ")]
+    assert current == ["#DC143C"]
 
 
 def test_complete_catalog_models(tmp_path: Path):
@@ -103,6 +111,18 @@ def _arg(value: str) -> Suggestion:
 
 def _cmd(value: str, *, consume: bool = False) -> Suggestion:
     return Suggestion(value=value, label=value, hint="cmd", kind="cmd", consume=consume)
+
+
+def test_apply_theme_child_does_not_repeat_command():
+    item = Suggestion(
+        value="set", label="set", hint="activate a saved theme", kind="arg", consume=False
+    )
+    spaced, _ = apply_suggestion("/theme ", 7, item)
+    assert spaced == "/theme set "
+    bare, _ = apply_suggestion("/theme", 6, item)
+    assert bare == "/theme set "
+    partial, _ = apply_suggestion("/theme s", 8, item)
+    assert partial == "/theme set "
 
 
 def test_apply_model_replaces_prefix():

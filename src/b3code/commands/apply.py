@@ -39,6 +39,8 @@ def apply_suggestion(text: str, cursor: int, suggestion: Suggestion) -> tuple[st
         inserted = f"{token} {suggestion.value}"
     else:
         inserted = suggestion.value
+    if suggestion.kind == "arg" and not suggestion.consume:
+        inserted = inserted.rstrip() + " "
 
     new = text[:start] + inserted + text[end:]
     return new, start + len(inserted)
