@@ -313,7 +313,7 @@ async def test_mcp_command_lists_and_toggles(tmp_path: Path):
         screen._run_command("/mcp")
         await pilot.pause()
         notes = [str(n.render()) for n in screen.query(SystemNote)]
-        assert any("github  on  stdio" in n for n in notes)
+        assert any("github  idle  stdio" in n for n in notes)
         screen._run_command("/mcp disable github")
         await pilot.pause()
         assert app.container.config.mcp_servers["github"].enabled is False

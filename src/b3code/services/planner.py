@@ -35,7 +35,7 @@ How to explore:
 - grep for symbols, then read_file with start_line/end_line around the hits.
 - Read every file you will name in Files / Steps. Quote short signatures
   (1–8 lines), never dump whole files into the plan.
-- Use search_tool / use_tool to pull facts from enabled MCP servers
+- Use search_tools to pull facts from enabled MCP servers
   (tickets, PRs, docs, schemas) into Context / Current. Do not mutate
   remote state — no create, update, or delete via MCP.
 - If something is ambiguous, state the assumption and the cheaper alternative.
@@ -109,7 +109,7 @@ def planner_toolsets(
     on_exit: Callable[[], None] | None = None,
     on_write: Callable[[str], None] | None = None,
     mcp: McpHub | None = None,
-) -> list[FunctionToolset]:
+) -> list:
     files = workspace_toolset(
         cwd,
         include_write=False,
@@ -138,13 +138,15 @@ def planner_toolsets(
 
     extra = FunctionToolset(tools=[write_plan_file, exit_plan_mode])
     hub = mcp or McpHub()
-    return [files, extra, hub.tools()]
+    return [files, extra, *hub.toolsets(mutate=False)]
 
 
 def planner_tool_names(cwd: Path, plan: PlanMode) -> set[str]:
     names: set[str] = set()
     for toolset in planner_toolsets(cwd, plan):
-        names.update(toolset.tools)
+        tools = getattr(toolset, "tools", None)
+        if tools is not None:
+            names.update(tools)
     return names
 
 

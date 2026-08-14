@@ -59,7 +59,7 @@ class ChatService:
         self.plan = PlanMode(cwd)
         # Testes injetam TestModel e pulam o Azure.
         self._injected_model = model
-        self.mcp = McpHub(config)
+        self.mcp = McpHub(config, cwd=cwd)
         self._coder: Agent[None, str] | None = None
         self._planner: Agent[None, str] | None = None
         self._plan_history: list[Any] = []

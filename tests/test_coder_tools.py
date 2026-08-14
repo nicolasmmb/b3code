@@ -24,8 +24,8 @@ def _capability_names(agent) -> set[str]:
 def test_instructions_teach_run_code():
     assert "run_code" in INSTRUCTIONS
     assert "not in the schema" in INSTRUCTIONS
-    assert "search_tool" in INSTRUCTIONS
-    assert "use_tool" in INSTRUCTIONS
+    assert "search_tools" in INSTRUCTIONS
+    assert "use_tool" not in INSTRUCTIONS
 
 
 def test_coder_has_codemode_and_shell_not_planning(tmp_path: Path):

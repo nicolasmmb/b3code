@@ -15,7 +15,7 @@ from pydantic_monty import MountDir
 
 from b3code.config.schema import AppConfig
 from b3code.libs.models import build_model
-from b3code.services.mcp import MCP_TOOLS, McpHub
+from b3code.services.mcp import McpHub, is_mcp_tool
 from b3code.services.permission import PermissionDenied, PermissionGate
 from b3code.services.plan import PlanMode
 from b3code.services.planner import build_planner
@@ -32,7 +32,7 @@ INSTRUCTIONS = (
     "Prefer replace_in_file for edits; write_file only to create files. "
     "Use run_command only for git, tests, and lint — never to write "
     "project files (no cat, heredoc, or echo redirects). "
-    "Use search_tool / use_tool for MCP integrations; names are server__tool. "
+    "Use search_tools for MCP integrations; names are server_tool. "
     "Last expression in run_code is the return value. "
     "Respond in the language the user is using. "
     "Follow ASD-STE100 Simplified Technical English style: short sentences, "
@@ -42,9 +42,6 @@ INSTRUCTIONS = (
 SHELL_TOOLS = frozenset(
     {"run_command", "start_command", "check_command", "stop_command"}
 )
-HOST_TOOLS = SHELL_TOOLS | MCP_TOOLS
-
-
 async def ensure_shell_args(gate: PermissionGate | None, args: Any) -> Any:
     if gate is None:
         return args
@@ -59,7 +56,7 @@ async def ensure_shell_args(gate: PermissionGate | None, args: Any) -> Any:
 
 
 def _host_tool(_ctx: Any, tool_def: Any) -> bool:
-    return tool_def.name not in HOST_TOOLS
+    return tool_def.name not in SHELL_TOOLS and not is_mcp_tool(tool_def)
 
 
 def build_coder(
@@ -86,7 +83,7 @@ def build_coder(
         instructions=INSTRUCTIONS,
         toolsets=[
             workspace_toolset(cwd, on_change=on_change),
-            hub.tools(),
+            *hub.toolsets(mutate=True),
         ],
         capabilities=[
             Shell(

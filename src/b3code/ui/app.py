@@ -30,3 +30,6 @@ class B3App(App):
 
     def on_mount(self) -> None:
         self.push_screen(ChatScreen(self.container.screen_deps()))
+
+    async def on_unmount(self) -> None:
+        await self.container.chat.mcp.aclose()

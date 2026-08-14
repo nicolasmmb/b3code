@@ -250,7 +250,7 @@ def test_mcp_add_enable_disable_remove(tmp_path: Path):
     assert isinstance(added.effect, Refresh)
     assert "github" in added.message
     listed = reg.execute("/mcp")
-    assert "github  on  stdio" in listed.message
+    assert "github  idle  stdio" in listed.message
     off = reg.execute("/mcp disable github")
     assert isinstance(off.effect, Refresh)
     assert store.load().mcp_servers["github"].enabled is False
@@ -259,6 +259,10 @@ def test_mcp_add_enable_disable_remove(tmp_path: Path):
     assert store.load().mcp_servers["github"].enabled is True
     remote = reg.execute("/mcp add --transport http linear https://mcp.linear.app/mcp")
     assert isinstance(remote.effect, Refresh)
+    assert store.load().mcp_servers["linear"].transport == "http"
+    stream = reg.execute("/mcp add --transport sse events https://x.example/mcp")
+    assert isinstance(stream.effect, Refresh)
+    assert store.load().mcp_servers["events"].transport == "sse"
     names = [s.value for s in reg.complete("/mcp enable ")]
     assert "github" in names
     assert "linear" in names

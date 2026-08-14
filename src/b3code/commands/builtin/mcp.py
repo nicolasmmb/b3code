@@ -17,7 +17,7 @@ def build_mcp(config_service: ConfigService, chat: ChatService) -> Command:
     return Command(
         "mcp",
         "list or edit MCP servers",
-        lambda *args: _list(config_service, args),
+        lambda *args: _list(config_service, chat, args),
         children={
             "add": Command(
                 "add",
@@ -46,12 +46,14 @@ def build_mcp(config_service: ConfigService, chat: ChatService) -> Command:
     )
 
 
-def _list(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult:
+def _list(
+    config_service: ConfigService, chat: ChatService, args: tuple[str, ...]
+) -> CommandResult:
     if args:
         return CommandResult(
             "usage: /mcp | /mcp add | /mcp remove | /mcp enable | /mcp disable"
         )
-    return CommandResult(format_mcp_list(config_service.config.mcp_servers))
+    return CommandResult(format_mcp_list(config_service.config.mcp_servers, chat.mcp))
 
 
 def _add(
@@ -67,6 +69,7 @@ def _add(
             env=parsed.env,
             url=parsed.url,
             headers=parsed.headers,
+            transport=parsed.transport,
         )
         config_service.upsert_mcp_server(parsed.name, spec)
     except ValueError as exc:

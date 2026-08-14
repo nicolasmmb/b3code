@@ -136,27 +136,41 @@ class McpServerConfig(BaseModel):
     url: str = ""
     headers: dict[str, str] = Field(default_factory=dict)
     enabled: bool = True
+    transport: str = ""
     startup_timeout_sec: int = 30
+    tool_timeout_sec: int = 120
 
     @model_validator(mode="after")
-    def _command_xor_url(self) -> "McpServerConfig":
+    def _normalize(self) -> "McpServerConfig":
         has_cmd = bool(self.command.strip())
         has_url = bool(self.url.strip())
         if has_cmd == has_url:
             raise ValueError("mcp server needs either command or url")
+        kind = self.transport.strip().lower()
+        if not kind:
+            kind = _infer_mcp_transport(has_cmd, self.url)
+        if kind not in {"stdio", "http", "sse"}:
+            raise ValueError("mcp transport must be stdio, http, or sse")
+        if kind == "stdio" and not has_cmd:
+            raise ValueError("stdio mcp server needs command")
+        if kind in {"http", "sse"} and not has_url:
+            raise ValueError("http/sse mcp server needs url")
+        self.transport = kind
         return self
-
-    @property
-    def transport(self) -> str:
-        if not self.url:
-            return "stdio"
-        return "sse" if self.url.rstrip("/").endswith("/sse") else "http"
 
     @property
     def target(self) -> str:
         if self.url:
             return self.url
         return " ".join([self.command, *self.args]).strip()
+
+
+def _infer_mcp_transport(has_cmd: bool, url: str) -> str:
+    if has_cmd:
+        return "stdio"
+    if url.rstrip("/").endswith("/sse"):
+        return "sse"
+    return "http"
 
 
 class AppConfig(BaseModel):

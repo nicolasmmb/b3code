@@ -160,6 +160,12 @@ def test_mcp_servers_roundtrip_and_reject_bad(tmp_path: Path):
     assert loaded.mcp_servers["github"].command == "npx"
     assert loaded.mcp_servers["github"].enabled is True
     assert loaded.mcp_servers["linear"].enabled is False
+    assert loaded.mcp_servers["github"].transport == "stdio"
+    assert loaded.mcp_servers["linear"].transport == "http"
+    assert loaded.mcp_servers["github"].tool_timeout_sec == 120
+    sse = McpServerConfig(url="https://x.example/mcp", transport="sse")
+    assert sse.transport == "sse"
+    assert McpServerConfig(url="https://x.example/sse").transport == "sse"
     with pytest.raises(ValueError, match="invalid mcp server name"):
         AppConfig(mcp_servers={"bad name": {"command": "npx"}})
     with pytest.raises(ValueError, match="command or url"):

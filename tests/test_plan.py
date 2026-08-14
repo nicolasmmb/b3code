@@ -67,9 +67,9 @@ def test_planner_has_no_write_or_shell(tmp_path: Path):
     assert "exit_plan_mode" in names
     assert "read_file" in names
     assert "grep" in names
-    assert "search_tool" in names
-    assert "use_tool" in names
-    assert "search_tool" in PLAN_INSTRUCTIONS
+    assert "search_tool" not in names
+    assert "use_tool" not in names
+    assert "search_tools" in PLAN_INSTRUCTIONS
     assert "Do not mutate" in PLAN_INSTRUCTIONS
 
 
@@ -77,7 +77,10 @@ def _write_plan(tmp_path: Path):
     mode = PlanMode(tmp_path)
     tools = {}
     for toolset in planner_toolsets(tmp_path, mode):
-        tools.update({name: t.function for name, t in toolset.tools.items()})
+        owned = getattr(toolset, "tools", None)
+        if owned is None:
+            continue
+        tools.update({name: t.function for name, t in owned.items()})
     return tools["write_plan_file"], tools["exit_plan_mode"], mode
 
 

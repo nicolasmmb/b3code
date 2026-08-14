@@ -56,7 +56,7 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `selected_theme` | string | `"b3code"` | Slug do tema ativo (o `name` de um item de `themes`). |
 | `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. JSON antigo com `accent` no topo migra para o tema default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
 | `multiline` | bool | `true` | `true` = paste preserva `\\n`; Shift+Enter insere newline. |
-| `mcp_servers` | object | `{}` | Servers MCP por nome. Cada um tem `command`+`args`+`env` (stdio) **ou** `url`+`headers` (HTTP/SSE), mais `enabled` (default `true`) e `startup_timeout_sec` (default `30`). Aceita `${VAR}` / `${VAR:-default}` na conexão. |
+| `mcp_servers` | object | `{}` | Servers MCP por nome. Cada um tem `command`+`args`+`env` (stdio) **ou** `url`+`headers` (HTTP/SSE), mais `enabled`, `transport` (`stdio`/`http`/`sse`), `startup_timeout_sec` (30) e `tool_timeout_sec` (120). Tudo vive neste JSON. Aceita `${VAR}` / `${VAR:-default}` na conexão. |
 
 Exemplo:
 
@@ -124,10 +124,10 @@ ao default daquele token. JSON antigo com `accent` no topo migra para o tema
 
 ### MCP
 
-Servers ficam em `mcp_servers` no mesmo JSON. O modelo não vê as tools de cada
-server no schema — só `search_tool` e `use_tool` (nomes `server__tool`), no
-coder e no planner. O planner pesquisa (ticket, PR, docs); não muta estado
-remoto. Handshake é lazy: `/mcp` e o boot não sobem processo.
+Servers ficam em `mcp_servers` no mesmo JSON. O modelo descobre tools com
+`search_tools` da lib (nomes `server_tool`). O schema de argumentos vem da
+lib. O planner pesquisa (ticket, PR, docs) e não vê tools de mutação.
+Handshake é lazy: `/mcp` e o boot não sobem processo.
 
 ```json
 "mcp_servers": {
@@ -135,12 +135,18 @@ remoto. Handshake é lazy: `/mcp` e o boot não sobem processo.
     "command": "npx",
     "args": ["-y", "@modelcontextprotocol/server-github"],
     "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"},
-    "enabled": true
+    "enabled": true,
+    "transport": "stdio",
+    "startup_timeout_sec": 30,
+    "tool_timeout_sec": 120
   },
   "linear": {
     "url": "https://mcp.linear.app/mcp",
     "headers": {"Authorization": "Bearer ${LINEAR_TOKEN}"},
-    "enabled": false
+    "enabled": false,
+    "transport": "http",
+    "startup_timeout_sec": 30,
+    "tool_timeout_sec": 120
   }
 }
 ```
