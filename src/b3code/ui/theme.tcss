@@ -107,6 +107,35 @@ AssistantMessage {
     padding: 0 1;
 }
 
+CopyableFence {
+    layout: vertical;
+    height: auto;
+}
+
+.fence-bar {
+    height: 1;
+    width: 100%;
+    padding: 0 1;
+}
+
+.fence-lang {
+    width: 1fr;
+    height: 1;
+    color: #9a9a9a;
+}
+
+FenceCopy {
+    width: auto;
+    height: 1;
+    color: #c9a227;
+    padding: 0 1;
+}
+
+FenceCopy:focus {
+    color: #e6e6e6;
+    text-style: bold;
+}
+
 ToolRow {
     color: #8a8a8a;
     padding: 0 1;

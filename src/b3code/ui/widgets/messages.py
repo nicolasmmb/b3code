@@ -6,7 +6,9 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.events import Click, Key
-from textual.widgets import Markdown, Static
+from textual.widget import Widget
+from textual.widgets import Label, Markdown, Static
+from textual.widgets.markdown import MarkdownFence
 
 from b3code.utils.diffview import (
     DiffLine,
@@ -40,6 +42,70 @@ class FileChip(Static):
         )
 
 
+def _owning_fence(widget: Widget) -> CopyableFence | None:
+    node = widget.parent
+    while node is not None:
+        if isinstance(node, CopyableFence):
+            return node
+        node = node.parent
+    return None
+
+
+def fence_lang(lexer: str) -> str:
+    word = lexer.split()[0] if lexer else ""
+    return word or "code"
+
+
+class FenceCopy(Static, can_focus=True):
+    """Botão ⧉ copy no canto do fence."""
+
+    def __init__(self) -> None:
+        super().__init__("⧉ copy", classes="fence-copy")
+
+    def on_click(self, event: Click) -> None:
+        fence = _owning_fence(self)
+        if fence is not None:
+            fence.copy()
+        event.stop()
+
+    def on_key(self, event: Key) -> None:
+        if event.key not in {"enter", "space", "c", "y"}:
+            return
+        fence = _owning_fence(self)
+        if fence is not None:
+            fence.copy()
+        event.stop()
+        event.prevent_default()
+
+
+class CopyableFence(MarkdownFence):
+    """Fence com linguagem à esquerda e ⧉ copy à direita."""
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(classes="fence-bar"):
+            yield Static(
+                Text.assemble(("◆ ", _HEAD), (fence_lang(self.lexer), _HEAD)),
+                classes="fence-lang",
+            )
+            yield FenceCopy()
+        yield Label(self._highlighted_code, id="code-content", expand=True)
+
+    def copy(self) -> None:
+        payload = self.code if self.code.endswith("\n") else f"{self.code}\n"
+        self.app.copy_to_clipboard(payload)
+        self.app.notify("copied")
+
+
+class ChatMarkdown(Markdown):
+    """Markdown do chat: fences com botão de copiar."""
+
+    BLOCKS = {
+        **Markdown.BLOCKS,
+        "fence": CopyableFence,
+        "code_block": CopyableFence,
+    }
+
+
 class UserMessage(Vertical):
     """Prompt do user: chips de anexo + markdown do texto."""
 
@@ -54,16 +120,16 @@ class UserMessage(Vertical):
                 for label, name in chips:
                     yield FileChip(label, name)
         if body:
-            yield Markdown(body, classes="user-body")
+            yield ChatMarkdown(body, classes="user-body")
         elif not chips:
-            yield Markdown(self._text, classes="user-body")
+            yield ChatMarkdown(self._text, classes="user-body")
 
 
-class AssistantMessage(Markdown):
+class AssistantMessage(ChatMarkdown):
     """Resposta da LLM. `update()` a cada delta do stream."""
 
 
-class PlanDoc(Markdown):
+class PlanDoc(ChatMarkdown):
     """Preview do plan.md (Grok: o plano inteiro, não uma linha)."""
 
 

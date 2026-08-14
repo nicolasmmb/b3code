@@ -15,15 +15,18 @@ from b3code.ui.prompt_bar import PromptBar, PromptInput
 from b3code.ui.screens.chat import ChatScreen, Welcome
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.messages import (
+    AssistantMessage,
     DiffBlock,
     DiffFold,
     ErrorBlock,
     ErrorFold,
+    FenceCopy,
     FileChip,
     PlanDoc,
     SystemNote,
     ToolRow,
     UserMessage,
+    fence_lang,
     render_diff,
 )
 from b3code.ui.widgets.permission import PermissionPicker
@@ -648,3 +651,111 @@ async def test_plain_paste_still_not_a_chip(tmp_path: Path):
         app.post_message(Paste("linha 1\nlinha 2"))
         await pilot.pause()
         assert prompt.text == "linha 1\nlinha 2"
+
+
+def test_fence_lang_uses_first_word_or_code():
+    assert fence_lang("python") == "python"
+    assert fence_lang("python hl_lines=1") == "python"
+    assert fence_lang("") == "code"
+
+
+async def test_assistant_fence_copy_button(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.chat_view.start_assistant()
+        await pilot.pause()
+        screen.chat_view.append_assistant("```python\nprint(1)\n```\n")
+        await pilot.pause()
+        button = screen.query_one(FenceCopy)
+        assert "⧉" in str(button.render())
+        assert "copy" in str(button.render())
+        screen.chat_view.hide_welcome()
+        button.scroll_visible(animate=False)
+        await pilot.pause()
+        assert await pilot.click(button, offset=(1, 0))
+        await pilot.pause()
+        assert app.clipboard == "print(1)\n"
+
+
+async def test_two_fences_copy_independently(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.chat_view.start_assistant()
+        await pilot.pause()
+        screen.chat_view.append_assistant(
+            "```python\nprint(1)\n```\n\n```bash\necho hi\n```\n"
+        )
+        await pilot.pause()
+        buttons = list(screen.query(FenceCopy))
+        assert len(buttons) == 2
+        buttons[0].focus()
+        await pilot.press("c")
+        await pilot.pause()
+        assert app.clipboard == "print(1)\n"
+        buttons[1].focus()
+        await pilot.press("c")
+        await pilot.pause()
+        assert app.clipboard == "echo hi\n"
+
+
+async def test_unlabeled_fence_still_has_copy(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.chat_view.start_assistant()
+        await pilot.pause()
+        screen.chat_view.append_assistant("```\nplain\n```\n")
+        await pilot.pause()
+        msg = screen.query_one(AssistantMessage)
+        header = str(msg.query_one(".fence-lang", Static).render())
+        assert "code" in header
+        button = screen.query_one(FenceCopy)
+        button.focus()
+        await pilot.press("c")
+        await pilot.pause()
+        assert app.clipboard == "plain\n"
+
+
+async def test_user_message_fence_has_copy(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.chat_view.mount_user("```python\nprint(2)\n```\n")
+        await pilot.pause()
+        user = screen.query_one(UserMessage)
+        assert user.query(FenceCopy)
+        button = user.query_one(FenceCopy)
+        button.focus()
+        await pilot.press("c")
+        await pilot.pause()
+        assert app.clipboard == "print(2)\n"
+
+
+async def test_fence_copy_survives_markdown_update(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.chat_view.start_assistant()
+        await pilot.pause()
+        screen.chat_view.append_assistant("```python\nprint(1)\n```\n")
+        await pilot.pause()
+        screen.chat_view.append_assistant("depois\n")
+        await pilot.pause()
+        assert screen.query_one(FenceCopy)
+        button = screen.query_one(FenceCopy)
+        button.focus()
+        await pilot.press("c")
+        await pilot.pause()
+        assert app.clipboard == "print(1)\n"
