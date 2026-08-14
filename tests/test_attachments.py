@@ -122,6 +122,16 @@ def test_drop_quoted_and_relative(tmp_path: Path):
     assert try_read_dropped_paths("app.py", tmp_path) == [file.resolve()]
 
 
+def test_drop_unquoted_path_with_spaces(tmp_path: Path):
+    folder = tmp_path / "My Documents"
+    folder.mkdir()
+    file = _write(folder / "Captura de Tela.png", make_png(8, 8))
+    assert try_read_dropped_paths(str(file), tmp_path) == [file.resolve()]
+    assert try_read_dropped_paths(f"{file} ", tmp_path) == [file.resolve()]
+    escaped = str(file).replace(" ", r"\ ")
+    assert try_read_dropped_paths(escaped, tmp_path) == [file.resolve()]
+
+
 def test_drop_rejects_prose_with_filename(tmp_path: Path):
     _write(tmp_path / "app.py", b"print(1)\n")
     assert try_read_dropped_paths("please see app.py thanks", tmp_path) is None

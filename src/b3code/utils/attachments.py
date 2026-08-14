@@ -133,9 +133,26 @@ def decode_file_url(token: str) -> Path | None:
     return Path(raw) if raw else None
 
 
-def _resolve_token(token: str, cwd: Path) -> Path | None:
-    decoded = decode_file_url(token)
-    candidate = decoded if decoded is not None else Path(token).expanduser()
+def _normalize_token(token: str) -> str:
+    token = token.strip().strip("\x00")
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'}:
+        return token[1:-1]
+    return token
+
+
+def _unescape_posix(token: str) -> str | None:
+    try:
+        parts = shlex.split(token, posix=True)
+    except ValueError:
+        return None
+    if len(parts) == 1 and parts[0] != token:
+        return parts[0]
+    return None
+
+
+def _as_existing_file(raw: str, cwd: Path) -> Path | None:
+    decoded = decode_file_url(raw)
+    candidate = decoded if decoded is not None else Path(raw).expanduser()
     if not candidate.is_absolute():
         candidate = cwd / candidate
     try:
@@ -143,6 +160,19 @@ def _resolve_token(token: str, cwd: Path) -> Path | None:
             return candidate.resolve()
     except OSError:
         return None
+    return None
+
+
+def _resolve_token(token: str, cwd: Path) -> Path | None:
+    token = _normalize_token(token)
+    if not token:
+        return None
+    found = _as_existing_file(token, cwd)
+    if found is not None:
+        return found
+    unescaped = _unescape_posix(token)
+    if unescaped:
+        return _as_existing_file(unescaped, cwd)
     return None
 
 
@@ -155,9 +185,18 @@ def drop_tokens(text: str) -> list[str]:
         return [part for part in text.split() if part]
 
 
-def try_read_dropped_paths(text: str, cwd: Path) -> list[Path] | None:
-    """None = não é drop. Lista (possivelmente vazia de arquivos válidos) = drop."""
-    tokens = drop_tokens(text.strip())
+def _resolve_all(parts: list[str], cwd: Path) -> list[Path] | None:
+    resolved: list[Path] = []
+    for part in parts:
+        path = _resolve_token(part, cwd)
+        if path is None:
+            return None
+        resolved.append(path)
+    return resolved or None
+
+
+def _from_shlex_tokens(text: str, cwd: Path) -> list[Path] | None:
+    tokens = drop_tokens(text)
     if not tokens:
         return None
     resolved: list[Path] = []
@@ -172,6 +211,22 @@ def try_read_dropped_paths(text: str, cwd: Path) -> list[Path] | None:
         if path is not None:
             resolved.append(path)
     return resolved or None
+
+
+def try_read_dropped_paths(text: str, cwd: Path) -> list[Path] | None:
+    """None = não é drop. Lista = paths de um drop do Finder/Explorer."""
+    stripped = text.strip().strip("\x00")
+    if not stripped or len(stripped) >= DROP_MAX_BYTES:
+        return None
+    whole = _resolve_token(stripped, cwd)
+    if whole is not None:
+        return [whole]
+    lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+    if len(lines) > 1:
+        from_lines = _resolve_all(lines, cwd)
+        if from_lines is not None:
+            return from_lines
+    return _from_shlex_tokens(stripped, cwd)
 
 
 def uniquify(attachment: Attachment, existing: dict[str, Attachment]) -> Attachment:

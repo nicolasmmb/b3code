@@ -492,6 +492,24 @@ async def test_diff_fold_toggles_omitted_lines(tmp_path: Path):
         assert "recolher" in str(fold.render())
 
 
+async def test_drop_on_chat_area_imports_chip(tmp_path: Path):
+    folder = tmp_path / "My Documents"
+    folder.mkdir()
+    png = folder / "Captura de Tela.png"
+    png.write_bytes(make_png(8, 8))
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.query_one("#chat").focus()
+        screen.post_message(Paste(str(png)))
+        await pilot.pause()
+        prompt = screen.query_one("#prompt", PromptInput)
+        assert "[IMG - Captura de Tela.png]" in prompt.text
+        assert prompt.has_focus
+
+
 async def test_paste_png_inserts_image_chip(tmp_path: Path):
     png = tmp_path / "casa.jpg"
     png.write_bytes(make_png(8, 8))

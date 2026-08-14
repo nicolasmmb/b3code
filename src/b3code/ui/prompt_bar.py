@@ -207,12 +207,12 @@ class PromptBar(Vertical):
             self._attachments.pop(token, None)
         return {**leftover, **pending}
 
-    def handle_paste(self, text: str) -> bool:
+    def handle_paste(self, text: str, *, allow_clipboard: bool = True) -> bool:
         dropped = try_read_dropped_paths(text, self._files.cwd)
         if dropped is not None:
             self._insert_dropped(dropped)
             return True
-        if text.strip():
+        if text.strip() or not allow_clipboard:
             return False
         image = read_clipboard_image()
         if image is None:

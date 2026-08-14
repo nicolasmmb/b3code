@@ -8,7 +8,7 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
-from textual.events import Key
+from textual.events import Key, Paste
 from textual.screen import Screen
 from textual.widgets import OptionList
 
@@ -126,6 +126,16 @@ class ChatScreen(ChatStreamMixin, Screen):
         if self.awaiting_plan:
             self.confirm_plan()
             event.stop()
+
+    def on_paste(self, event: Paste) -> None:
+        """Drop do Finder cai no widget sob o cursor, quase sempre o chat."""
+        text = event.text.replace("\r\n", "\n").replace("\r", "\n")
+        bar = self.query_one(PromptBar)
+        if not bar.handle_paste(text, allow_clipboard=False):
+            return
+        event.stop()
+        event.prevent_default()
+        bar.focus_input()
 
     def on_key(self, event: Key) -> None:
         if self.plan_controller and self.plan_controller.consume_key(event):
