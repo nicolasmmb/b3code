@@ -244,7 +244,7 @@ def render_error_header(kind: str) -> Text:
 
 def error_fold_label(detail: str, *, expanded: bool) -> str:
     if expanded:
-        return "▾  recolher  ·  c"
+        return "▾  recolher  ·  [c]opy"
     lines = detail.count("\n") or 1
     return f"▸  {lines} linhas  ·  c"
 
