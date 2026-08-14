@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from b3code.config.schema import THEME_COLOR_DEFAULTS, AppConfig, github_dark_theme
+from b3code.config.schema import (
+    THEME_COLOR_DEFAULTS,
+    AppConfig,
+    github_dark_theme,
+    slugify_theme,
+)
 from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 
@@ -69,12 +74,41 @@ def test_default_themes_include_github_dark():
     names = [item.name for item in cfg.themes]
     assert names == ["b3code", "github-dark"]
     assert cfg.selected_theme == "b3code"
-    assert cfg.theme.model_dump(exclude={"name"}) == THEME_COLOR_DEFAULTS
+    assert cfg.theme.model_dump(exclude={"name", "label"}) == THEME_COLOR_DEFAULTS
     github = github_dark_theme()
     saved = next(item for item in cfg.themes if item.name == "github-dark")
     assert saved.background == "#0d1117"
     assert saved.accent == "#58a6ff"
     assert saved.model_dump() == github.model_dump()
+
+
+def test_slugify_theme_names():
+    assert slugify_theme("B3 Light") == "b3-light"
+    assert slugify_theme("Tokyo Night") == "tokyo-night"
+    assert slugify_theme("DeepDark") == "deepdark"
+    assert slugify_theme("  Github Dark  ") == "github-dark"
+    assert slugify_theme("!!!") == ""
+
+
+def test_spaced_theme_name_keeps_label():
+    cfg = AppConfig(
+        selected_theme="B3 Light",
+        themes=[{"name": "B3 Light", "accent": "#1818b7"}],
+    )
+    assert cfg.theme.name == "b3-light"
+    assert cfg.theme.label == "B3 Light"
+    assert cfg.theme.display == "B3 Light"
+    assert cfg.selected_theme == "b3-light"
+
+
+def test_selected_theme_matches_slug_case():
+    cfg = AppConfig(
+        selected_theme="deepdark",
+        themes=[{"name": "DeepDark", "accent": "#FFD32C"}],
+    )
+    assert cfg.theme.name == "deepdark"
+    assert cfg.theme.label == "DeepDark"
+    assert cfg.selected_theme == "deepdark"
 
 
 def test_unknown_selected_theme_snaps_to_first():

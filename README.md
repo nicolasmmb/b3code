@@ -53,8 +53,8 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `api_models` | list | `["gpt-4o"]` | Modelos listados pelo `/model` quando o gateway está ligado. |
 | `selected_model` | string | primeiro de `api_models` | Modelo ativo. No gateway é um item de `api_models`; no catálogo é `provider:model`. |
 | `shell_allowed_paths` | list | `[]` | Paths absolutos que o shell pode usar sem perguntar de novo. |
-| `selected_theme` | string | `"b3code"` | Nome do tema ativo (um item de `themes`). |
-| `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success` (hex de 3 ou 6 dígitos; inválido volta ao default). JSON antigo com `accent` no topo migra para o tema default. |
+| `selected_theme` | string | `"b3code"` | Slug do tema ativo (o `name` de um item de `themes`). |
+| `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. JSON antigo com `accent` no topo migra para o tema default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
 
 Exemplo:
 
@@ -70,6 +70,7 @@ Exemplo:
   "themes": [
     {
       "name": "b3code",
+      "label": "",
       "background": "#1c1d1f",
       "foreground": "#e6e8ea",
       "accent": "#00b0e6",
@@ -81,6 +82,7 @@ Exemplo:
     },
     {
       "name": "github-dark",
+      "label": "",
       "background": "#0d1117",
       "foreground": "#e6edf3",
       "accent": "#58a6ff",
@@ -117,7 +119,10 @@ ao default daquele token. JSON antigo com `accent` no topo migra para o tema
 `b3code`.
 
 Autocomplete em etapas: `/theme ` lista só os subcomandos; `set` / `save`
-completam nomes salvos; `update` completa o token e depois o hex atual.
+completam pelos nomes de exibição (`Tokyo Night`); `update` completa o token
+e depois o hex atual. O Tab insere o slug (`tokyo-night`) para o comando
+ficar em um token. `/theme set B3 Light` e `/theme save Tokyo Night` também
+funcionam. A listagem mostra o label, nunca o slug.
 
 ## 6. Backends de modelo
 

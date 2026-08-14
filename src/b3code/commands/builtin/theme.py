@@ -45,11 +45,11 @@ def _list(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult
 
 
 def _set(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult:
-    if len(args) != 1:
+    if not args:
         return CommandResult("usage: /theme set <name>")
-    config_service.select_theme(args[0])
+    config_service.select_theme(" ".join(args))
     return CommandResult(
-        f"theme → {config_service.config.theme.name}", effect=Refresh()
+        f"theme → {config_service.config.theme.display}", effect=Refresh()
     )
 
 
@@ -57,26 +57,39 @@ def _update(config_service: ConfigService, args: tuple[str, ...]) -> CommandResu
     if len(args) != 2:
         return CommandResult("usage: /theme update <token> <#hex>")
     config_service.set_theme_color(args[0], args[1])
-    token, name = args[0], config_service.config.theme.name
+    token = args[0]
+    shown = config_service.config.theme.display
     color = getattr(config_service.config.theme, token)
-    return CommandResult(f"theme {name}.{token} → {color}", effect=Refresh())
+    return CommandResult(f"theme {shown}.{token} → {color}", effect=Refresh())
 
 
 def _save(config_service: ConfigService, args: tuple[str, ...]) -> CommandResult:
-    if len(args) != 1:
+    if not args:
         return CommandResult("usage: /theme save <name>")
-    config_service.save_theme(args[0])
+    config_service.save_theme(" ".join(args))
     return CommandResult(
-        f"theme saved {config_service.config.theme.name}", effect=Refresh()
+        f"theme saved {config_service.config.theme.display}", effect=Refresh()
     )
 
 
 def _complete_names(config_service: ConfigService, prefix: str) -> list[Suggestion]:
-    return [
-        Suggestion(value=item.name, label=item.name, hint="saved", kind="arg", consume=True)
-        for item in config_service.config.themes
-        if item.name.startswith(prefix)
-    ]
+    needle = prefix.lower()
+    hits: list[Suggestion] = []
+    for item in config_service.config.themes:
+        if needle and not (
+            item.name.startswith(needle) or item.display.lower().startswith(needle)
+        ):
+            continue
+        hits.append(
+            Suggestion(
+                value=item.name,
+                label=item.display,
+                hint="",
+                kind="arg",
+                consume=True,
+            )
+        )
+    return hits
 
 
 def _complete_update(
@@ -101,10 +114,10 @@ def _complete_update(
 def _list_themes(config_service: ConfigService) -> str:
     cfg = config_service.config
     current = cfg.theme
-    lines = [f"theme: {current.name}", ""]
+    lines = [f"theme: {current.display}", ""]
     for item in cfg.themes:
         mark = "*" if item.name == current.name else " "
-        lines.append(f"{mark} {item.name}")
+        lines.append(f"{mark} {item.display}")
     lines.append("")
     for token in THEME_COLOR_DEFAULTS:
         lines.append(f"  {token:<11} {getattr(current, token)}")

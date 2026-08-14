@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_va
 DEFAULT_ACCENT = "#00b0e6"
 DEFAULT_THEME_NAME = "b3code"
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
-_THEME_NAME = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,31}$")
+_SLUG_CHUNK = re.compile(r"[^a-z0-9]+")
 
 # B3 institucional (guia da marca): ciano #00b0e6 / navy #003475.
 # Fundo e superfícies ficam cinza-neutro — navy de canvas quebra contraste.
@@ -29,14 +29,22 @@ def parse_hex(value: object, default: str) -> str:
     return default
 
 
+def slugify_theme(value: str) -> str:
+    text = _SLUG_CHUNK.sub("-", value.strip().lower()).strip("-")
+    if not text or not text[0].isalpha():
+        return ""
+    return text[:32]
+
+
 def parse_theme_name(value: object, default: str = DEFAULT_THEME_NAME) -> str:
-    if isinstance(value, str) and _THEME_NAME.match(value.strip()):
-        return value.strip()
-    return default
+    if not isinstance(value, str):
+        return default
+    return slugify_theme(value) or default
 
 
 class ThemeColors(BaseModel):
     name: str = DEFAULT_THEME_NAME
+    label: str = ""
     background: str = THEME_COLOR_DEFAULTS["background"]
     foreground: str = THEME_COLOR_DEFAULTS["foreground"]
     accent: str = THEME_COLOR_DEFAULTS["accent"]
@@ -45,6 +53,28 @@ class ThemeColors(BaseModel):
     surface: str = THEME_COLOR_DEFAULTS["surface"]
     error: str = THEME_COLOR_DEFAULTS["error"]
     success: str = THEME_COLOR_DEFAULTS["success"]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _slug_and_label(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        raw = data.get("name")
+        if not isinstance(raw, str):
+            return data
+        slug = slugify_theme(raw)
+        if not slug:
+            data["name"] = DEFAULT_THEME_NAME
+            return data
+        data["name"] = slug
+        label = data.get("label")
+        if isinstance(label, str) and label.strip():
+            data["label"] = label.strip()
+        else:
+            pretty = raw.strip()
+            data["label"] = pretty if pretty != slug else ""
+        return data
 
     @field_validator("name", mode="before")
     @classmethod
@@ -66,6 +96,10 @@ class ThemeColors(BaseModel):
     def _hex(cls, value: object, info: ValidationInfo) -> str:
         default = THEME_COLOR_DEFAULTS[info.field_name]
         return parse_hex(value, default)
+
+    @property
+    def display(self) -> str:
+        return self.label or self.name
 
 
 def github_dark_theme() -> ThemeColors:

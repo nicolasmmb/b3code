@@ -9,7 +9,7 @@ from b3code.config.schema import (
     AppConfig,
     ThemeColors,
     parse_hex,
-    parse_theme_name,
+    slugify_theme,
 )
 from b3code.config.store import ConfigStore
 from b3code.services.catalog import ModelCatalog
@@ -62,8 +62,10 @@ class ConfigService:
         self.store.save(self._config)
 
     def find_theme(self, name: str) -> ThemeColors | None:
+        slug = slugify_theme(name)
+        needle = name.strip().lower()
         for item in self._config.themes:
-            if item.name == name:
+            if item.name == slug or item.display.lower() == needle:
                 return item
         return None
 
@@ -84,16 +86,19 @@ class ConfigService:
         self.store.save(self._config)
 
     def save_theme(self, name: str) -> None:
-        parsed = parse_theme_name(name, "")
-        if not parsed:
+        slug = slugify_theme(name)
+        if not slug:
             raise ValueError(f"invalid theme name {name!r}")
+
+        pretty = name.strip()
         payload = self._config.theme.model_dump()
-        payload["name"] = parsed
+        payload["name"] = slug
+        payload["label"] = pretty if pretty != slug else ""
         clone = ThemeColors.model_validate(payload)
-        existing = self.find_theme(parsed)
+        existing = self.find_theme(slug)
         if existing is None:
             self._config.themes.append(clone)
         else:
             self._config.themes[self._config.themes.index(existing)] = clone
-        self._config.selected_theme = parsed
+        self._config.selected_theme = slug
         self.store.save(self._config)

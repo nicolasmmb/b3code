@@ -88,6 +88,16 @@ def test_save_theme_clones_current(tmp_path: Path):
     assert loaded.theme.accent == "#DC143C"
 
 
+def test_save_theme_slugifies_spaces(tmp_path: Path):
+    service = _service(tmp_path)
+    service.save_theme("Tokyo Night")
+    loaded = service.store.load()
+    assert loaded.selected_theme == "tokyo-night"
+    assert loaded.theme.name == "tokyo-night"
+    assert loaded.theme.label == "Tokyo Night"
+    assert loaded.theme.display == "Tokyo Night"
+
+
 def test_persist_allowed_path(tmp_path: Path):
     service = _service(tmp_path)
     path = Path("/tmp").resolve()

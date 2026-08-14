@@ -94,6 +94,33 @@ def test_theme_list_and_set(tmp_path: Path):
     assert current == ["#DC143C"]
 
 
+def test_theme_set_and_save_accept_spaces(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(
+        api_models=["gpt-4o"],
+        themes=[
+            {"name": "B3 Light", "accent": "#1818b7"},
+            {"name": "b3code"},
+        ],
+        selected_theme="b3code",
+    )
+    store.save(cfg)
+    sessions = SessionStore(tmp_path / "sessions.json")
+    chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
+    reg = CommandRegistry.build(store, cfg, sessions, chat)
+    listed = reg.execute("/theme")
+    assert "B3 Light" in listed.message
+    assert "b3-light" not in listed.message
+    switched = reg.execute("/theme set B3 Light")
+    assert "B3 Light" in switched.message
+    assert cfg.selected_theme == "b3-light"
+    shown = {s.label: s.value for s in reg.complete("/theme set ")}
+    assert shown["B3 Light"] == "b3-light"
+    saved = reg.execute("/theme save Tokyo Night")
+    assert "Tokyo Night" in saved.message
+    assert any(item.name == "tokyo-night" for item in cfg.themes)
+
+
 def test_complete_catalog_models(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(use_provider_gateway=False, api_models=["gpt-4o"])
