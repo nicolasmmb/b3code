@@ -22,12 +22,13 @@ from pydantic_ai.messages import (
     ModelResponse,
     TextPart,
     ToolCallPart,
+    ToolReturnPart,
     UserPromptPart,
 )
 
 from b3code.utils.paths import atomic_write_text
 from b3code.utils.prompt import display_user_content
-from b3code.utils.text import ellipsize
+from b3code.utils.toolview import preview_output, tool_title
 
 
 class Session(BaseModel):
@@ -51,6 +52,8 @@ class DisplayTurn:
     text: str
     tool: str = ""
     detail: str = ""
+    output: str = ""
+    call_id: str = ""
 
 
 class SessionStore:
@@ -185,17 +188,31 @@ def _blank_session() -> Session:
 
 
 def turns_from_messages(messages: list[ModelMessage]) -> list[DisplayTurn]:
+    returns = _collect_returns(messages)
     turns: list[DisplayTurn] = []
     for msg in messages:
-        turns.extend(_turns_from_message(msg))
+        turns.extend(_turns_from_message(msg, returns))
     return turns
 
 
-def _turns_from_message(msg: ModelMessage) -> list[DisplayTurn]:
+def _collect_returns(messages: list[ModelMessage]) -> dict[str, ToolReturnPart]:
+    found: dict[str, ToolReturnPart] = {}
+    for msg in messages:
+        if not isinstance(msg, ModelRequest):
+            continue
+        for part in msg.parts:
+            if isinstance(part, ToolReturnPart) and part.tool_call_id:
+                found[part.tool_call_id] = part
+    return found
+
+
+def _turns_from_message(
+    msg: ModelMessage, returns: dict[str, ToolReturnPart]
+) -> list[DisplayTurn]:
     if isinstance(msg, ModelRequest):
         return _turns_from_request(msg)
     if isinstance(msg, ModelResponse):
-        return _turns_from_response(msg)
+        return _turns_from_response(msg, returns)
     return []
 
 
@@ -210,24 +227,43 @@ def _turns_from_request(msg: ModelRequest) -> list[DisplayTurn]:
     return turns
 
 
-def _turns_from_response(msg: ModelResponse) -> list[DisplayTurn]:
+def _turns_from_response(
+    msg: ModelResponse, returns: dict[str, ToolReturnPart]
+) -> list[DisplayTurn]:
     turns: list[DisplayTurn] = []
     for part in msg.parts:
         if isinstance(part, ToolCallPart):
-            args = (
-                part.args_as_json_str()
-                if hasattr(part, "args_as_json_str")
-                else str(part.args)
-            )
-            turns.append(
-                DisplayTurn(
-                    role="tool",
-                    text="",
-                    tool=part.tool_name,
-                    detail=ellipsize(args),
-                )
-            )
+            turns.extend(_turns_from_tool_call(part, returns.get(part.tool_call_id)))
             continue
         if isinstance(part, TextPart) and part.content:
             turns.append(DisplayTurn(role="assistant", text=part.content))
     return turns
+
+
+def _turns_from_tool_call(
+    part: ToolCallPart, ret: ToolReturnPart | None
+) -> list[DisplayTurn]:
+    turns = [_turn_from_call(part.tool_name, part.args, part.tool_call_id, ret)]
+    if ret is None:
+        return turns
+    meta = ret.metadata or {}
+    nested = meta.get("tool_calls") or {}
+    replies = meta.get("tool_returns") or {}
+    for call_id, call in nested.items():
+        name = getattr(call, "tool_name", "tool")
+        args = getattr(call, "args", {})
+        child = replies.get(call_id)
+        turns.append(_turn_from_call(name, args, str(call_id), child))
+    return turns
+
+
+def _turn_from_call(name: str, args: Any, call_id: str, ret: Any | None) -> DisplayTurn:
+    content = getattr(ret, "content", "") if ret is not None else ""
+    return DisplayTurn(
+        role="tool",
+        text="",
+        tool=name,
+        detail=tool_title(name, args),
+        output=preview_output(str(content) if content else ""),
+        call_id=call_id or "",
+    )

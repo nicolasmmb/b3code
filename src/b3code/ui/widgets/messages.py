@@ -358,17 +358,150 @@ def error_fold_label(detail: str, *, expanded: bool) -> str:
     return f"▶  See More {lines} Lines ·"
 
 
-class ToolRow(Static):
-    def __init__(self, tool: str, detail: str = "", status: str = "running") -> None:
+def _handle_tool_keys(row: ToolRow, event: Key) -> bool:
+    if event.key in {"enter", "space"}:
+        if row.expandable:
+            row.toggle()
+        else:
+            row.copy()
+        return True
+    if event.key in {"c", "y"}:
+        row.copy()
+        return True
+    if event.key == "escape" and row.expanded:
+        row.toggle()
+        return True
+    return False
+
+
+class ToolFold(Static, can_focus=True):
+    """Seta no mesmo idioma do ErrorFold / DiffFold."""
+
+    def on_click(self, event: Click) -> None:
+        block = self.parent
+        if isinstance(block, ToolRow):
+            block.toggle()
+        event.stop()
+
+    def on_key(self, event: Key) -> None:
+        block = self.parent
+        if not isinstance(block, ToolRow):
+            return
+        if not _handle_tool_keys(block, event):
+            return
+        event.stop()
+        event.prevent_default()
+
+
+class ToolRow(Vertical, can_focus=False):
+    """Tool call no recorte do Grok: header humano, output atrás do fold."""
+
+    def __init__(
+        self,
+        tool: str,
+        detail: str = "",
+        status: str = "running",
+        output: str = "",
+    ) -> None:
+        super().__init__(classes=status)
         self.tool = tool
         self.detail = detail
-        super().__init__(_fmt(status, tool, detail), classes=status)
+        self.output = output
+        self.status = status
+        self.expanded = False
+        self._header = Static("", classes="tool-header")
+        self._body = Static("", markup=False, classes="tool-body")
+        self._fold = ToolFold("")
 
-    def set_status(self, status: str, detail: str | None = None) -> None:
-        if detail is not None:
+    @property
+    def expandable(self) -> bool:
+        return bool(self.output.strip())
+
+    def compose(self) -> ComposeResult:
+        yield self._header
+        yield self._body
+        yield self._fold
+
+    def on_mount(self) -> None:
+        self._paint()
+
+    def on_click(self, event: Click) -> None:
+        if self.expandable:
+            self.toggle()
+        else:
+            self.copy()
+        event.stop()
+
+    def set_status(
+        self,
+        status: str,
+        detail: str | None = None,
+        output: str | None = None,
+    ) -> None:
+        self.status = status
+        if detail:
             self.detail = detail
+        if output is not None:
+            self.output = output
         self.set_classes(status)
-        self.update(_fmt(status, self.tool, self.detail))
+        self._paint()
+
+    def toggle(self) -> None:
+        if not self.expandable:
+            return
+        self.expanded = not self.expanded
+        self._paint()
+
+    def copy(self) -> None:
+        payload = self.output or self.detail or self.tool
+        if not payload.endswith("\n"):
+            payload += "\n"
+        self.app.copy_to_clipboard(payload)
+        self.app.notify("copied")
+
+    def _paint(self) -> None:
+        colors = rich_palette(theme_of(self))
+        header = render_tool_header(self.status, self.detail, self.tool, colors)
+        self._header.update(header)
+        self._body.update(Text(self.output, style=colors.muted))
+        can_open = self.expandable
+        self._body.display = self.expanded and can_open
+        self._fold.display = can_open
+        if can_open:
+            self._fold.update(tool_fold_label(self.output, expanded=self.expanded))
+        self.refresh(layout=True)
+
+
+def render_tool_header(
+    status: str, title: str, tool: str, colors: RichPalette | None = None
+) -> Text:
+    colors = colors or rich_palette()
+    label = title or f"Ran {tool}"
+    out = Text()
+    if status == "running":
+        out.append("… ", style=colors.muted)
+        out.append(_running_subject(label), style=colors.muted)
+        return out
+    if status == "error":
+        out.append("✗ ", style=colors.error)
+        out.append(label, style=colors.error_msg)
+        return out
+    out.append(label, style=colors.muted)
+    return out
+
+
+def _running_subject(title: str) -> str:
+    if title.startswith("$ "):
+        return title[2:]
+    verb, _, rest = title.partition(" ")
+    return rest or title
+
+
+def tool_fold_label(output: str, *, expanded: bool) -> str:
+    if expanded:
+        return "▲  See Less · -> Press C to copy"
+    lines = output.count("\n") + (0 if output.endswith("\n") else 1)
+    return f"▶  See More {max(lines, 1)} Lines ·"
 
 
 class SystemNote(Static):
@@ -378,9 +511,3 @@ class SystemNote(Static):
 class RoleLabel(Static):
     def __init__(self, name: str) -> None:
         super().__init__(name, classes="role")
-
-
-def _fmt(status: str, tool: str, detail: str) -> str:
-    mark = {"running": "…", "done": "✓", "error": "✗"}.get(status, "·")
-    extra = f"  {detail}" if detail else ""
-    return f"{mark} {tool}{extra}"

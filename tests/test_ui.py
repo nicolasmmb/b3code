@@ -399,11 +399,80 @@ async def test_tool_events_reuse_the_same_row(tmp_path: Path):
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, ChatScreen)
-        screen._apply_event(ChatEvent(kind="tool_start", tool="grep", detail="one"))
-        screen._apply_event(ChatEvent(kind="tool_end", tool="grep", detail="two"))
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_start", tool="grep", detail='Searched "one"', call_id="g1"
+            )
+        )
+        screen._apply_event(
+            ChatEvent(kind="tool_end", tool="grep", output="a.py:1:one", call_id="g1")
+        )
         rows = list(screen.query(ToolRow))
         assert len(rows) == 1
-        assert rows[0].detail == "two"
+        assert rows[0].detail == 'Searched "one"'
+        assert rows[0].output == "a.py:1:one"
+        assert rows[0].expandable
+        assert rows[0].expanded is False
+
+
+async def test_two_commands_get_two_rows(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_start",
+                tool="run_command",
+                detail="$ git status",
+                call_id="a",
+            )
+        )
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_start",
+                tool="run_command",
+                detail="$ git log",
+                call_id="b",
+            )
+        )
+        rows = list(screen.query(ToolRow))
+        assert len(rows) == 2
+        assert rows[0].detail == "$ git status"
+        assert rows[1].detail == "$ git log"
+
+
+async def test_tool_row_fold_reveals_output(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_start",
+                tool="run_command",
+                detail="$ pwd",
+                call_id="p1",
+            )
+        )
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_end",
+                tool="run_command",
+                output="/tmp/proj",
+                call_id="p1",
+            )
+        )
+        await pilot.pause()
+        row = screen.query_one(ToolRow)
+        assert row.expanded is False
+        assert row.query_one(".tool-body").display is False
+        row.toggle()
+        await pilot.pause()
+        assert row.expanded is True
+        assert row.query_one(".tool-body").display is True
 
 
 async def test_diff_event_mounts_block(tmp_path: Path):

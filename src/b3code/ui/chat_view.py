@@ -108,7 +108,9 @@ class ChatView:
             self.scroll.mount(AssistantMessage(turn.text))
             return
         if turn.role == "tool":
-            self.scroll.mount(ToolRow(turn.tool, turn.detail, status="done"))
+            self.scroll.mount(
+                ToolRow(turn.tool, turn.detail, status="done", output=turn.output)
+            )
 
     def mount_user(self, text: str) -> None:
         self.hide_welcome()
@@ -157,12 +159,17 @@ class ChatView:
             kids[idx - 1].remove()
 
     def upsert_tool(self, event: ChatEvent, status: str) -> None:
-        row = self._tools.get(event.tool)
+        key = event.call_id or event.tool
+        row = self._tools.get(key)
         if row is not None:
-            row.set_status(status, event.detail)
+            row.set_status(
+                status,
+                detail=event.detail or None,
+                output=event.output if event.output or status != "running" else None,
+            )
             return
-        row = ToolRow(event.tool, event.detail, status=status)
-        self._tools[event.tool] = row
+        row = ToolRow(event.tool, event.detail, status=status, output=event.output)
+        self._tools[key] = row
         if self._assistant is None:
             self.scroll.mount(row)
             return

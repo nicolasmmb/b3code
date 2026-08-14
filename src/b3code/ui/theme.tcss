@@ -146,20 +146,42 @@ FenceCopy:focus {
 }
 
 ToolRow {
-    color: $text-muted;
+    height: auto;
     padding: 0 1;
 }
 
-ToolRow.running {
-    color: $accent;
-}
-
-ToolRow.done {
+.tool-header {
+    height: 1;
     color: $text-muted;
 }
 
-ToolRow.error {
+ToolRow.running > .tool-header {
+    color: $accent;
+}
+
+ToolRow.done > .tool-header {
+    color: $text-muted;
+}
+
+ToolRow.error > .tool-header {
     color: $error;
+}
+
+.tool-body {
+    height: auto;
+    color: $text-muted;
+    padding: 0 2;
+}
+
+ToolFold {
+    color: $text-muted;
+    height: 1;
+    padding: 0 1;
+}
+
+ToolFold:focus {
+    color: $foreground;
+    text-style: bold;
 }
 
 DiffBlock {
