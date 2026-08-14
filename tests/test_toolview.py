@@ -26,13 +26,39 @@ def test_tool_titles():
     assert tool_title(
         "read_file", {"path": "a.py", "start_line": 2, "end_line": 9}
     ) == ("Read a.py (2-9)")
-    assert tool_title("list_dir", {}) == "Listed ."
-    assert tool_title("list_dir", {"path": "src"}) == "Listed src"
+    assert tool_title("list_dir", {}) == "Ran list_dir"
+    assert tool_title("list_dir", {"path": "src"}) == "List src"
     assert tool_title("grep", {"pattern": "compose"}) == 'Searched "compose"'
     assert tool_title("grep", {"pattern": "x", "path": "src"}) == 'Searched "x" in src'
-    assert tool_title("write_file", {"path": "a.py"}) == "Editing a.py"
+    assert tool_title("write_file", {"path": "a.py"}) == "Write a.py"
+    assert tool_title("replace_in_file", {"path": "a.py", "old": "x", "new": "y"}) == (
+        "Replace a.py"
+    )
+    assert tool_title("delete_file", {"path": "tmp.txt"}) == "Delete tmp.txt"
+    assert tool_title("move_file", {"src": "a.py", "dest": "b.py"}) == (
+        "Move a.py → b.py"
+    )
     assert tool_title("run_code", {"code": "print(1)"}) == "Ran run_code"
     assert tool_title("run_command", {}) == "Ran run_command"
+
+
+def test_unknown_tools_use_args_not_whitelist():
+    assert tool_title("fetch_url", {"url": "https://x.ai"}) == "Fetch https://x.ai"
+    assert tool_title("summarize_pdf", {"path": "docs/spec.pdf"}) == (
+        "Summarize docs/spec.pdf"
+    )
+    assert tool_title("web_search", {"query": "textual fold"}) == (
+        'Searched "textual fold"'
+    )
+    assert tool_title("open_ticket", {"name": "BUG-12"}) == "Open BUG-12"
+    assert tool_title("bash", {"command": "make test"}) == "$ make test"
+    assert tool_title(
+        "search_replace", {"path": "ui.py", "start_line": 10, "end_line": 40}
+    ) == ("Search ui.py (10-40)")
+    assert tool_title("think", {"text": "um parágrafo longo demais"}) == "Ran think"
+    assert tool_title("clone_repo", {"repo": "xai-org/grok-build"}) == (
+        "Clone xai-org/grok-build"
+    )
 
 
 def test_preview_output_caps_lines():
