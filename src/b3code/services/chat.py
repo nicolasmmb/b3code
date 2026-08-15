@@ -17,7 +17,7 @@ from pydantic_ai.models import Model
 
 from b3code.config.credentials import missing_gateway_credentials
 from b3code.config.schema import AppConfig
-from b3code.services.agents import INSTRUCTIONS, build_coder, build_planner_agent
+from b3code.services.agents import CODER_INSTRUCTIONS, build_coder, build_planner_agent
 from b3code.services.events import (
     ChatEvent,
     ChatEventKind,
@@ -43,7 +43,7 @@ __all__ = [
     "ChatEvent",
     "ChatEventKind",
     "ChatService",
-    "INSTRUCTIONS",
+    "CODER_INSTRUCTIONS",
     "OnEvent",
 ]
 
