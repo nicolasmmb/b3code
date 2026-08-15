@@ -55,10 +55,10 @@ def fence_highlight_lang(lexer: str) -> str:
 
 
 class FenceCopy(Static, can_focus=True):
-    """Ícone ⧉ no canto do fence."""
+    """Ícone ⧉ + rótulo [COPY] no canto do fence."""
 
     def __init__(self) -> None:
-        super().__init__("⧉", classes="fence-copy")
+        super().__init__(Text("⧉ [COPY]"), classes="fence-copy")
         self.tooltip = "copy"
 
     def on_click(self, event: Click) -> None:
@@ -78,7 +78,7 @@ class FenceCopy(Static, can_focus=True):
 
 
 class CopyableFence(MarkdownFence):
-    """Fence com linguagem à esquerda e ⧉ copy à direita."""
+    """Fence com linguagem à esquerda e ⧉ [COPY] à direita."""
 
     @classmethod
     def highlight(

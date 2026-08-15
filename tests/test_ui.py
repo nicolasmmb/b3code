@@ -960,8 +960,9 @@ async def test_assistant_fence_copy_button(tmp_path: Path):
         screen.chat_view.append_assistant("```python\nprint(1)\n```\n")
         await pilot.pause()
         button = screen.query_one(FenceCopy)
-        assert "⧉" in str(button.render())
-        assert "copy" not in str(button.render())
+        rendered = str(button.render())
+        assert "⧉" in rendered
+        assert "[COPY]" in rendered
         screen.chat_view.hide_welcome()
         button.scroll_visible(animate=False)
         await pilot.pause()

@@ -118,7 +118,7 @@ AssistantMessage {
 CopyableFence {
     layout: vertical;
     height: auto;
-    padding: 1 0 0 0;
+    padding: 1 0;
     overflow-x: hidden;
     overflow-y: hidden;
 }
@@ -129,6 +129,7 @@ CopyableFence > #code-content {
     text-wrap: wrap;
     overflow: hidden;
     padding: 0 2;
+    margin-top: 1;
 }
 
 .fence-bar {
@@ -141,18 +142,22 @@ CopyableFence > #code-content {
     width: 1fr;
     height: 1;
     color: $text-muted;
+    content-align: left middle;
 }
 
 FenceCopy {
     width: auto;
     height: 1;
-    color: $text-muted;
-    padding: 0;
+    color: $accent;
+    text-style: bold;
+    padding: 0 0 0 1;
+    content-align: right middle;
 }
 
 FenceCopy:hover,
 FenceCopy:focus {
-    color: $accent;
+    background: $accent;
+    color: $background;
 }
 
 ToolRow {
