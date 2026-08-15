@@ -119,6 +119,16 @@ CopyableFence {
     layout: vertical;
     height: auto;
     padding: 1 0 0 0;
+    overflow-x: hidden;
+    overflow-y: hidden;
+}
+
+CopyableFence > #code-content {
+    width: 100%;
+    height: auto;
+    text-wrap: wrap;
+    overflow: hidden;
+    padding: 0 2;
 }
 
 .fence-bar {

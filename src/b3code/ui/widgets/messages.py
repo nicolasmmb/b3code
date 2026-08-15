@@ -73,6 +73,10 @@ class FenceCopy(Static, can_focus=True):
 class CopyableFence(MarkdownFence):
     """Fence com linguagem à esquerda e ⧉ copy à direita."""
 
+    @property
+    def allow_horizontal_scroll(self) -> bool:
+        return False
+
     def compose(self) -> ComposeResult:
         colors = rich_palette(theme_of(self))
         with Horizontal(classes="fence-bar"):
@@ -83,7 +87,7 @@ class CopyableFence(MarkdownFence):
                 classes="fence-lang",
             )
             yield FenceCopy()
-        yield Label(self._highlighted_code, id="code-content", expand=True)
+        yield Label(self._highlighted_code, id="code-content")
 
     def copy(self) -> None:
         payload = self.code if self.code.endswith("\n") else f"{self.code}\n"
@@ -160,6 +164,7 @@ class DiffBlock(Vertical, can_focus=False):
         self._header = Static(render_header(change))
         self._body = Static("")
         self._fold: DiffFold | None = None
+        self._width = 0
 
     def compose(self) -> ComposeResult:
         yield self._header
@@ -171,15 +176,23 @@ class DiffBlock(Vertical, can_focus=False):
     def on_mount(self) -> None:
         self._paint()
 
+    def on_resize(self) -> None:
+        if self._line_width() != self._width:
+            self._paint()
+
     def toggle(self) -> None:
         if hidden_count(self.change, expanded=False) == 0:
             return
         self.expanded = not self.expanded
         self._paint()
 
+    def _line_width(self) -> int:
+        return self._body.size.width or self.content_size.width or 80
+
     def _paint(self) -> None:
         colors = rich_palette(theme_of(self))
-        width = self.size.width if self.size.width > 0 else 80
+        width = self._line_width()
+        self._width = width
         lines = visible(self.change, expanded=self.expanded)
         self._header.update(render_header(self.change, colors))
         self._body.update(render_lines(lines, width, colors))
@@ -232,15 +245,20 @@ def render_diff(
 def _paint_line(line: DiffLine, width: int, colors: RichPalette) -> Text:
     gutter = f"{line.number:>4} "
     room = max(8, width - len(gutter))
-    body = line.text.replace("\t", "    ")[:room].ljust(room)
-    row = gutter + body + "\n"
-    if line.kind == "+":
-        return Text(row, style=colors.add)
-    if line.kind == "-":
-        return Text(row, style=colors.delete)
+    text = line.text.replace("\t", "    ")
+    chunks = [text[i : i + room] for i in range(0, len(text), room)] or [""]
+    blank = " " * len(gutter)
     painted = Text()
-    painted.append(gutter, style=colors.number)
-    painted.append(body + "\n", style=colors.context)
+    for i, chunk in enumerate(chunks):
+        prefix = gutter if i == 0 else blank
+        body = chunk.ljust(room)
+        if line.kind == "+":
+            painted.append(prefix + body + "\n", style=colors.add)
+        elif line.kind == "-":
+            painted.append(prefix + body + "\n", style=colors.delete)
+        else:
+            painted.append(prefix, style=colors.number if i == 0 else colors.context)
+            painted.append(body + "\n", style=colors.context)
     return painted
 
 

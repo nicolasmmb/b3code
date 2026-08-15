@@ -19,6 +19,7 @@ from b3code.ui.screens.chat import ChatScreen, Welcome
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.messages import (
     AssistantMessage,
+    CopyableFence,
     DiffBlock,
     DiffFold,
     ErrorBlock,
@@ -31,11 +32,12 @@ from b3code.ui.widgets.messages import (
     UserMessage,
     fence_lang,
     render_diff,
+    render_lines,
 )
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.planbar import PlanBar
 from b3code.ui.widgets.spinner import FRAMES, Spinner
-from b3code.utils.diffview import diff_texts
+from b3code.utils.diffview import DiffLine, diff_texts
 
 
 async def test_app_opens_welcome(tmp_path: Path):
@@ -591,6 +593,23 @@ def test_render_diff_uses_line_numbers_and_bands():
     assert any(span.style and "on #" in str(span.style) for span in painted.spans)
 
 
+def test_render_lines_wraps_instead_of_truncating():
+    text = "abcdefghijklmnopqrstuvwxyz0123456789" * 4
+    painted = render_lines((DiffLine("+", text, 1),), width=24)
+    rows = painted.plain.splitlines()
+    assert len(rows) > 1
+    assert all(len(row) == 24 for row in rows)
+    assert "".join(row[5:].rstrip() for row in rows) == text
+
+
+def test_render_lines_keeps_short_line():
+    painted = render_lines((DiffLine("+", "ok", 1),), width=20)
+    rows = painted.plain.splitlines()
+    assert len(rows) == 1
+    assert rows[0][5:].rstrip() == "ok"
+    assert len(rows[0]) == 20
+
+
 async def test_error_block_expands_and_copies(tmp_path: Path):
     app = B3App(AppContainer.build(tmp_path))
     async with app.run_test() as pilot:
@@ -659,6 +678,41 @@ async def test_cancelled_stays_a_system_note(tmp_path: Path):
         notes = [str(n.render()) for n in screen.query(SystemNote)]
         assert any("cancelled" in n for n in notes)
         assert list(screen.query(ErrorBlock)) == []
+
+
+async def test_diff_block_shows_full_long_line(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test(size=(48, 24)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        text = "W" * 160
+        change = diff_texts("wide.py", "", text + "\n")
+        screen._apply_event(
+            ChatEvent(kind="diff", tool="write_file", detail="wide.py", change=change)
+        )
+        await pilot.pause()
+        block = screen.query_one(DiffBlock)
+        body = str(block._body.render())
+        assert "".join(row[5:].rstrip() for row in body.splitlines()) == text
+
+
+async def test_fence_wraps_long_code_line(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test(size=(48, 24)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen.chat_view.start_assistant()
+        await pilot.pause()
+        long = "Z" * 160
+        screen.chat_view.append_assistant(f"```\n{long}\n```\n")
+        await pilot.pause()
+        fence = screen.query_one(CopyableFence)
+        label = fence.query_one("#code-content")
+        assert long in str(label.render())
+        assert label.size.width <= fence.size.width
+        assert label.size.height >= 2
 
 
 async def test_diff_fold_toggles_omitted_lines(tmp_path: Path):
