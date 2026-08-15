@@ -96,6 +96,7 @@ class McpHub:
         self, config: AppConfig | None = None, cwd: Path | None = None
     ) -> None:
         self.cwd = cwd
+        self._all: dict[str, McpServerConfig] = {}
         self._specs: dict[str, McpServerConfig] = {}
         self._bound: dict[str, Any] = {}
         self._raw: dict[str, Any] = {}
@@ -108,8 +109,9 @@ class McpHub:
         return self._connects
 
     def reload(self, config: AppConfig) -> None:
+        self._all = dict(config.mcp_servers)
         wanted = {
-            name: spec for name, spec in config.mcp_servers.items() if spec.enabled
+            name: spec for name, spec in self._all.items() if spec.enabled
         }
         for name in list(self._raw):
             if name not in wanted and name not in self._bound:
@@ -122,6 +124,19 @@ class McpHub:
 
     def toolsets(self, *, mutate: bool = True) -> list[Any]:
         return [self._wrap(name, mutate=mutate) for name in self._enabled()]
+
+    async def doctor(self, name: str) -> str:
+        if name not in self._all and name not in self._bound:
+            return f"mcp doctor {name}  error  unknown server"
+        try:
+            toolset = self.raw(name)
+            if not getattr(toolset, "is_running", False):
+                await toolset.__aenter__()
+                self._connects += 1
+            listed = await toolset.list_tools()
+        except Exception as exc:
+            return self._doctor_fail(name, exc)
+        return self._doctor_ok(name, listed)
 
     async def aclose(self) -> None:
         for name in list(self._raw):
@@ -168,7 +183,7 @@ class McpHub:
 
         if name in self._bound:
             return MCPToolset(self._bound[name])
-        spec = self._specs[name]
+        spec = self._specs.get(name) or self._all[name]
         init = float(spec.startup_timeout_sec)
         read = float(spec.tool_timeout_sec)
         if spec.transport == "sse":
@@ -202,6 +217,29 @@ class McpHub:
         return StdioTransport(
             expand_vars(spec.command), args, env=env, log_file=self._log_file(name)
         )
+
+    def _kind(self, name: str) -> str:
+        spec = self._all.get(name)
+        if spec is not None:
+            return spec.transport
+        return "local"
+
+    def _doctor_ok(self, name: str, listed: list[Any]) -> str:
+        kind = self._kind(name)
+        names = [f"{name}_{tool.name}" for tool in listed]
+        head = f"mcp doctor {name}  ok  {kind}  {len(listed)} tools"
+        if not names:
+            return head
+        body = "\n".join(f"  {item}" for item in names)
+        return f"{head}\n{body}"
+
+    def _doctor_fail(self, name: str, exc: Exception) -> str:
+        kind = self._kind(name)
+        lines = [f"mcp doctor {name}  error  {kind}  {exc}"]
+        log = self._log_file(name) if kind == "stdio" else None
+        if log is not None:
+            lines.append(f"  log  {log}")
+        return "\n".join(lines)
 
     def _log_file(self, name: str) -> Path | None:
         if self.cwd is None:

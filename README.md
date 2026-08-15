@@ -205,6 +205,7 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/mcp add <name> -- <cmd> …` | Adiciona um server stdio |
 | `/mcp add --transport http\|sse <name> <url>` | Adiciona um server HTTP/SSE |
 | `/mcp enable\|disable\|remove <name>` | Liga, desliga ou apaga (persistido) |
+| `/mcp doctor [name]` | Testa a conexão. Não grava config. |
 | `/plan on\|off` | Entra/sai do plan mode |
 | `/view-plan` | Mostra o `.b3code/plan.md` atual |
 | `/quit` / `/exit` | Sai do app |

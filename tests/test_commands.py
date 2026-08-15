@@ -3,7 +3,13 @@ from pathlib import Path
 from pydantic_ai.models.test import TestModel
 
 from b3code.commands.apply import apply_suggestion, decide_submit
-from b3code.commands.effects import PlanOff, Refresh, RunPrompt, ShowPlanDoc
+from b3code.commands.effects import (
+    DoctorMcp,
+    PlanOff,
+    Refresh,
+    RunPrompt,
+    ShowPlanDoc,
+)
 from b3code.commands.parse import parse_mcp_add
 from b3code.commands.registry import CommandRegistry
 from b3code.commands.types import Suggestion
@@ -267,7 +273,24 @@ def test_mcp_add_enable_disable_remove(tmp_path: Path):
     assert "github" in names
     assert "linear" in names
     subs = [s.value for s in reg.complete("/mcp ")]
-    assert set(subs) >= {"add", "remove", "enable", "disable"}
+    assert set(subs) >= {"add", "remove", "enable", "disable", "doctor"}
+    empty_root = tmp_path / "empty-doc"
+    empty_root.mkdir()
+    empty_doc = _registry(empty_root).execute("/mcp doctor")
+    assert "no servers" in empty_doc.message
+    assert empty_doc.effect is None
+    missing = reg.execute("/mcp doctor missing")
+    assert "unknown" in missing.message
+    assert missing.effect is None
+    one = reg.execute("/mcp doctor github")
+    assert isinstance(one.effect, DoctorMcp)
+    assert one.effect.names == ("github",)
+    assert chat.mcp.connects == 0
+    all_docs = reg.execute("/mcp doctor")
+    assert isinstance(all_docs.effect, DoctorMcp)
+    assert set(all_docs.effect.names) == {"github", "linear", "events"}
+    docs = [s.value for s in reg.complete("/mcp doctor ")]
+    assert "github" in docs
     gone = reg.execute("/mcp remove github")
     assert isinstance(gone.effect, Refresh)
     assert "github" not in store.load().mcp_servers

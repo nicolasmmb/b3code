@@ -174,3 +174,33 @@ def test_sse_builder_uses_sse_transport():
     raw = hub.raw("remote")
     assert type(raw.client.transport).__name__ == "SSETransport"
     assert raw.client._init_timeout == 30.0
+
+
+async def test_doctor_in_process_lists_tools():
+    cfg = AppConfig(mcp_servers={"demo": _http(enabled=False)})
+    hub = McpHub(cfg)
+    hub.bind("demo", _demo_server())
+    assert hub.connects == 0
+    text = await hub.doctor("demo")
+    assert "mcp doctor demo  ok" in text
+    assert "3 tools" in text
+    assert "demo_ping" in text
+    assert "demo_echo" in text
+    assert "demo_create_issue" in text
+    assert cfg.mcp_servers["demo"].enabled is False
+    assert hub.connects == 1
+
+
+async def test_doctor_unknown_does_not_connect():
+    hub = McpHub(AppConfig())
+    text = await hub.doctor("missing")
+    assert "error  unknown server" in text
+    assert hub.connects == 0
+
+
+async def test_doctor_stdio_error_cites_log(tmp_path):
+    cfg = AppConfig(mcp_servers={"bad": _stdio(command="__b3code_no_such_cmd__")})
+    hub = McpHub(cfg, cwd=tmp_path)
+    text = await hub.doctor("bad")
+    assert "error" in text
+    assert str(tmp_path / ".b3code" / "mcp" / "bad.stderr.log") in text

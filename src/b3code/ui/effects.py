@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from b3code.commands.effects import (
+    DoctorMcp,
     NewSession,
     PlanOff,
     Quit,
@@ -25,24 +26,58 @@ class CommandHooks:
     on_plan_off: Callable[[], None]
     on_show_plan: Callable[[str], None]
     on_note: Callable[[str], None]
+    on_doctor: Callable[[tuple[str, ...]], None]
 
 
 def dispatch_command(result: CommandResult, hooks: CommandHooks) -> None:
     effect = result.effect
-    if isinstance(effect, Quit):
-        hooks.on_quit()
-        return
-    if isinstance(effect, NewSession):
-        hooks.on_reset()
-    if isinstance(effect, Refresh):
-        hooks.on_rebuild()
-    if isinstance(effect, RunPrompt):
-        hooks.on_send(effect.text)
-        return
-    if isinstance(effect, PlanOff):
-        hooks.on_plan_off()
-    if isinstance(effect, ShowPlanDoc):
-        hooks.on_show_plan(effect.body)
+    if effect is not None and _APPLY[type(effect)](hooks, effect):
         return
     if result.message:
         hooks.on_note(result.message)
+
+
+def _quit(hooks: CommandHooks, _effect: Quit) -> bool:
+    hooks.on_quit()
+    return True
+
+
+def _new(hooks: CommandHooks, _effect: NewSession) -> bool:
+    hooks.on_reset()
+    return False
+
+
+def _refresh(hooks: CommandHooks, _effect: Refresh) -> bool:
+    hooks.on_rebuild()
+    return False
+
+
+def _prompt(hooks: CommandHooks, effect: RunPrompt) -> bool:
+    hooks.on_send(effect.text)
+    return True
+
+
+def _plan_off(hooks: CommandHooks, _effect: PlanOff) -> bool:
+    hooks.on_plan_off()
+    return False
+
+
+def _show_plan(hooks: CommandHooks, effect: ShowPlanDoc) -> bool:
+    hooks.on_show_plan(effect.body)
+    return True
+
+
+def _doctor(hooks: CommandHooks, effect: DoctorMcp) -> bool:
+    hooks.on_doctor(effect.names)
+    return True
+
+
+_APPLY = {
+    Quit: _quit,
+    NewSession: _new,
+    Refresh: _refresh,
+    RunPrompt: _prompt,
+    PlanOff: _plan_off,
+    ShowPlanDoc: _show_plan,
+    DoctorMcp: _doctor,
+}

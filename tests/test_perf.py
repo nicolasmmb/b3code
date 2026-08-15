@@ -201,6 +201,7 @@ def test_hot_paths_stay_under_budget(tmp_path: Path):
         "complete_mcp": lambda: (
             reg.complete("/mcp "),
             reg.complete("/mcp enable "),
+            reg.complete("/mcp doctor "),
         ),
         "mcp_list": lambda: format_mcp_list(reg.config.mcp_servers),
         "mcp_upsert": lambda: svc.upsert_mcp_server("tmp", extra),

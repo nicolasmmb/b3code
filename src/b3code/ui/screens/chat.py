@@ -221,6 +221,7 @@ class ChatScreen(ChatStreamMixin, Screen):
             on_plan_off=self._after_plan_off,
             on_show_plan=self.chat_view.show_plan_doc,
             on_note=self.chat_view.mount_system,
+            on_doctor=self._start_doctor,
         )
 
     def _rebuild_after_command(self) -> None:
@@ -262,6 +263,17 @@ class ChatScreen(ChatStreamMixin, Screen):
         if self.awaiting_plan or self.awaiting_permission:
             return
         self.query_one(PromptBar).enable_input()
+
+    def _start_doctor(self, names: tuple[str, ...]) -> None:
+        self.chat_view.mount_system("mcp doctor…")
+        self._doctor_servers(names)
+
+    @work(exclusive=True, group="mcp-doctor")
+    async def _doctor_servers(self, names: tuple[str, ...]) -> None:
+        parts: list[str] = []
+        for name in names:
+            parts.append(await self.deps.chat.mcp.doctor(name))
+        self.call_later(self.chat_view.mount_system, "\n".join(parts))
 
     @work(exclusive=False)
     async def _enqueue_prompt(

@@ -35,4 +35,11 @@ class ShowPlanDoc:
     body: str
 
 
-CommandEffect = Quit | Refresh | NewSession | RunPrompt | PlanOff | ShowPlanDoc
+@dataclass(frozen=True)
+class DoctorMcp:
+    names: tuple[str, ...]
+
+
+CommandEffect = (
+    Quit | Refresh | NewSession | RunPrompt | PlanOff | ShowPlanDoc | DoctorMcp
+)

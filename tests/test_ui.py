@@ -2,12 +2,13 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from mcp.server.fastmcp import FastMCP
 from test_attachments import make_png
 from textual.app import App
 from textual.events import Paste
 from textual.widgets import Static
 
-from b3code.config.schema import AppConfig, ThemeColors
+from b3code.config.schema import AppConfig, McpServerConfig, ThemeColors
 from b3code.config.store import ConfigStore
 from b3code.container import AppContainer
 from b3code.services.chat import ChatEvent
@@ -318,6 +319,46 @@ async def test_mcp_command_lists_and_toggles(tmp_path: Path):
         await pilot.pause()
         assert app.container.config.mcp_servers["github"].enabled is False
         assert screen.deps.chat.mcp.connects == 0
+
+
+async def test_mcp_doctor_does_not_hang(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._run_command("/mcp doctor")
+        await pilot.pause()
+        notes = [str(n.render()) for n in screen.query(SystemNote)]
+        assert any("no servers" in n for n in notes)
+
+
+async def test_mcp_doctor_worker_shows_ok(tmp_path: Path):
+    ConfigStore.for_cwd(tmp_path).save(
+        AppConfig(
+            mcp_servers={"demo": McpServerConfig(url="http://unused.example/mcp")}
+        )
+    )
+    server = FastMCP("demo")
+
+    @server.tool()
+    def ping() -> str:
+        return "pong"
+
+    app = B3App(AppContainer.build(tmp_path))
+    app.container.chat.mcp.bind("demo", server)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        assert screen.deps.chat.mcp.connects == 0
+        screen._run_command("/mcp doctor demo")
+        assert screen.deps.chat.mcp.connects == 0
+        worker = next(item for item in screen.workers if item.group == "mcp-doctor")
+        await worker.wait()
+        await pilot.pause()
+        notes = [str(n.render()) for n in screen.query(SystemNote)]
+        assert any("ok" in n and "demo_ping" in n for n in notes)
 
 
 async def test_mcp_tool_event_burst_does_not_break_host(tmp_path: Path):

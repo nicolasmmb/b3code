@@ -1,4 +1,5 @@
 from b3code.commands.effects import (
+    DoctorMcp,
     NewSession,
     PlanOff,
     Quit,
@@ -23,6 +24,7 @@ class _Recorder:
             on_plan_off=lambda: self.calls.append(("plan_off", None)),
             on_show_plan=lambda body: self.calls.append(("show_plan", body)),
             on_note=lambda text: self.calls.append(("note", text)),
+            on_doctor=lambda names: self.calls.append(("doctor", ",".join(names))),
         )
 
 
@@ -64,6 +66,12 @@ def test_dispatch_show_plan_skips_note():
         CommandResult("# title", effect=ShowPlanDoc("# title")), rec.hooks()
     )
     assert rec.calls == [("show_plan", "# title")]
+
+
+def test_dispatch_doctor_skips_note():
+    rec = _Recorder()
+    dispatch_command(CommandResult("", effect=DoctorMcp(("github",))), rec.hooks())
+    assert rec.calls == [("doctor", "github")]
 
 
 def test_dispatch_message_only():

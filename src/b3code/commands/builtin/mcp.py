@@ -1,4 +1,4 @@
-from b3code.commands.effects import Refresh
+from b3code.commands.effects import DoctorMcp, Refresh
 from b3code.commands.parse import parse_mcp_add
 from b3code.commands.registry import Command
 from b3code.commands.types import CommandResult, Suggestion
@@ -42,6 +42,12 @@ def build_mcp(config_service: ConfigService, chat: ChatService) -> Command:
                 lambda *args: _set_enabled(config_service, chat, args, False),
                 lambda prefix="", *_: _complete_names(config_service, prefix),
             ),
+            "doctor": Command(
+                "doctor",
+                "test a server connection",
+                lambda *args: _doctor(config_service, args),
+                lambda prefix="", *_: _complete_names(config_service, prefix),
+            ),
         },
     )
 
@@ -51,7 +57,8 @@ def _list(
 ) -> CommandResult:
     if args:
         return CommandResult(
-            "usage: /mcp | /mcp add | /mcp remove | /mcp enable | /mcp disable"
+            "usage: /mcp | /mcp add | /mcp remove | /mcp enable | "
+            "/mcp disable | /mcp doctor"
         )
     return CommandResult(format_mcp_list(config_service.config.mcp_servers, chat.mcp))
 
@@ -101,6 +108,22 @@ def _set_enabled(
     chat.reload(config_service.config)
     state = "on" if enabled else "off"
     return CommandResult(f"mcp {args[0]} {state}", effect=Refresh())
+
+
+def _doctor(
+    config_service: ConfigService, args: tuple[str, ...]
+) -> CommandResult:
+    servers = config_service.config.mcp_servers
+    if not args:
+        if not servers:
+            return CommandResult("mcp: no servers")
+        return CommandResult("", effect=DoctorMcp(tuple(servers)))
+    if len(args) != 1:
+        return CommandResult("usage: /mcp doctor [name]")
+    name = args[0]
+    if name not in servers:
+        return CommandResult(f"unknown mcp server {name!r}")
+    return CommandResult("", effect=DoctorMcp((name,)))
 
 
 def _complete_names(config_service: ConfigService, prefix: str) -> list[Suggestion]:
