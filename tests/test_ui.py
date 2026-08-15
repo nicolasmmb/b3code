@@ -30,6 +30,7 @@ from b3code.ui.widgets.messages import (
     SystemNote,
     ToolRow,
     UserMessage,
+    fence_highlight_lang,
     fence_lang,
     render_diff,
     render_lines,
@@ -898,6 +899,32 @@ def test_fence_lang_uses_first_word_or_code():
     assert fence_lang("python") == "python"
     assert fence_lang("python hl_lines=1") == "python"
     assert fence_lang("") == "code"
+
+
+def test_fence_highlight_lang_uses_first_word_or_text():
+    assert fence_highlight_lang("python") == "python"
+    assert fence_highlight_lang("python hl_lines=1") == "python"
+    assert fence_highlight_lang("") == "text"
+
+
+def test_unlabeled_fence_does_not_error_style_tree():
+    tree = (
+        ".\n"
+        "├── pyproject.toml\n"
+        "├── README.md\n"
+        "├── src/b3code/\n"
+        "│   ├── __main__.py\n"
+        "│   └── container.py\n"
+        "└── tests/\n"
+    )
+    painted = CopyableFence.highlight(tree, "")
+    assert "├──" in painted.plain
+    assert not any(span.style and "error" in str(span.style) for span in painted.spans)
+
+
+def test_python_fence_still_highlights():
+    painted = CopyableFence.highlight("def foo():\n    return 1\n", "python")
+    assert any(span.style and "accent" in str(span.style) for span in painted.spans)
 
 
 async def test_assistant_fence_copy_button(tmp_path: Path):

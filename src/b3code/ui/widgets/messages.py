@@ -5,6 +5,7 @@ from __future__ import annotations
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.events import Click, Key
 from textual.widget import Widget
 from textual.widgets import Label, Markdown, Static
@@ -47,6 +48,12 @@ def fence_lang(lexer: str) -> str:
     return word or "code"
 
 
+def fence_highlight_lang(lexer: str) -> str:
+    # Unlabeled: don't guess. guess_lexer treats │├└ as Token.Error (red bar).
+    word = lexer.split()[0] if lexer else ""
+    return word or "text"
+
+
 class FenceCopy(Static, can_focus=True):
     """Ícone ⧉ no canto do fence."""
 
@@ -72,6 +79,14 @@ class FenceCopy(Static, can_focus=True):
 
 class CopyableFence(MarkdownFence):
     """Fence com linguagem à esquerda e ⧉ copy à direita."""
+
+    @classmethod
+    def highlight(
+        cls, code: str, language: str, ansi: bool = False, dark: bool = False
+    ) -> Content:
+        return super().highlight(
+            code, fence_highlight_lang(language), ansi=ansi, dark=dark
+        )
 
     @property
     def allow_horizontal_scroll(self) -> bool:
