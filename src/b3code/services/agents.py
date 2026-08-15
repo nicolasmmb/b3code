@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic_ai import Agent, ModelRetry
-from pydantic_ai.capabilities import WebSearch
+from pydantic_ai.capabilities import Thinking, WebSearch
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models import Model
 from pydantic_ai_harness import CodeMode, Shell
@@ -74,6 +74,15 @@ def _web_search() -> WebSearch:
     return WebSearch(local=True)
 
 
+def thinking_cap(config: AppConfig) -> Thinking | None:
+    level = config.thinking
+    if level == "off":
+        return None
+    if level == "auto":
+        return Thinking()
+    return Thinking(effort=level)
+
+
 async def ensure_shell_args(gate: PermissionGate | None, args: Any) -> Any:
     if gate is None:
         return args
@@ -138,6 +147,7 @@ def build_coder(
                 max_retries=3,
             ),
             _web_search(),
+            *([cap] if (cap := thinking_cap(config)) else []),
             hooks,
         ],
     )
@@ -163,4 +173,5 @@ def build_planner_agent(
         on_exit=on_exit,
         on_write=on_write,
         mcp=mcp or McpHub(config),
+        config=config,
     )

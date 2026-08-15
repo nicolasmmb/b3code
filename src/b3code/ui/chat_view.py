@@ -17,6 +17,7 @@ from b3code.ui.widgets.messages import (
     PlanDoc,
     RoleLabel,
     SystemNote,
+    ThoughtBlock,
     ToolRow,
     UserMessage,
 )
@@ -48,6 +49,7 @@ class ChatView:
         self._scroll: VerticalScroll | None = None
         self._assistant: AssistantMessage | None = None
         self._buffer = ""
+        self._thought: ThoughtBlock | None = None
         self._tools: dict[str, ToolRow] = {}
         self._thinking: Spinner | None = None
         self._plan_doc: PlanDoc | None = None
@@ -82,6 +84,7 @@ class ChatView:
         self.show_welcome()
         self._assistant = None
         self._buffer = ""
+        self._thought = None
         self._tools = {}
         self._plan_doc = None
         self._thinking = None
@@ -104,6 +107,9 @@ class ChatView:
     def mount_turn(self, turn: DisplayTurn) -> None:
         if turn.role == "user":
             self.mount_user(turn.text)
+            return
+        if turn.role == "thinking":
+            self.scroll.mount(ThoughtBlock(turn.text))
             return
         if turn.role == "assistant":
             self.scroll.mount(RoleLabel("assistant"))
@@ -128,9 +134,21 @@ class ChatView:
             if row.tool == "subagent" and row.status == "running"
         }
         self._buffer = ""
+        self._thought = None
         self._assistant = AssistantMessage("")
         self.scroll.mount(RoleLabel("assistant"))
         self.scroll.mount(self._assistant)
+
+    def append_thought(self, text: str) -> None:
+        if not text:
+            return
+        if self._thought is None:
+            self._thought = ThoughtBlock()
+            if self._assistant is None:
+                self.scroll.mount(self._thought)
+            else:
+                self.scroll.mount(self._thought, before=self._assistant)
+        self._thought.append(text)
 
     def append_assistant(self, text: str) -> None:
         self._buffer += text

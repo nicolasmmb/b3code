@@ -14,7 +14,7 @@ from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS
 
 from b3code.config.schema import AppConfig
 from b3code.libs.models import build_model
-from b3code.services.agents import ensure_shell_args
+from b3code.services.agents import ensure_shell_args, thinking_cap
 from b3code.services.permission import PermissionGate
 from b3code.services.tasks import TaskRecord
 from b3code.tools.workspace import workspace_toolset
@@ -59,7 +59,7 @@ def build_subagent(
         resolved,
         instructions=_INSTRUCTIONS[kind],
         toolsets=[files],
-        capabilities=_caps(kind, cwd, gate),
+        capabilities=_caps(kind, cwd, gate, config),
     )
 
 
@@ -106,16 +106,19 @@ def note_child_event(record: TaskRecord, event: Any) -> None:
     record.note(title)
 
 
-def _caps(kind: str, cwd: Path, gate: PermissionGate | None) -> list[Any]:
+def _caps(
+    kind: str, cwd: Path, gate: PermissionGate | None, config: AppConfig
+) -> list[Any]:
+    think = thinking_cap(config)
     if kind == "plan":
-        return []
+        return [think] if think else []
     hooks = Hooks()
 
     @hooks.on.before_tool_execute(tools=["run_command", "start_command"])
     async def gate_shell(_ctx: Any, *, call: Any, tool_def: Any, args: Any) -> Any:
         return await ensure_shell_args(gate, args)
 
-    return [
+    caps: list[Any] = [
         Shell(
             cwd=cwd,
             persist_cwd=True,
@@ -124,3 +127,6 @@ def _caps(kind: str, cwd: Path, gate: PermissionGate | None) -> list[Any]:
         ),
         hooks,
     ]
+    if think:
+        caps.append(think)
+    return caps

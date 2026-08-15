@@ -1,7 +1,10 @@
-from pydantic_ai import FunctionToolCallEvent
+from pydantic_ai import FunctionToolCallEvent, PartDeltaEvent, PartStartEvent
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
+    TextPart,
+    ThinkingPart,
+    ThinkingPartDelta,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -94,6 +97,36 @@ def test_preview_output_caps_chars():
     out = preview_output("x" * (PREVIEW_CHARS + 80))
     assert out.endswith("…")
     assert len(out) < PREVIEW_CHARS + 10
+
+
+def test_map_thinking_parts():
+    start = map_agent_event(PartStartEvent(index=0, part=ThinkingPart(content="hmm")))
+    assert start[0].kind == "thinking_delta"
+    assert start[0].text == "hmm"
+    delta = map_agent_event(
+        PartDeltaEvent(index=0, delta=ThinkingPartDelta(content_delta=" more"))
+    )
+    assert delta[0].kind == "thinking_delta"
+    assert delta[0].text == " more"
+    text = map_agent_event(PartStartEvent(index=0, part=TextPart(content="hi")))
+    assert text[0].kind == "text_delta"
+
+
+def test_turns_include_thinking():
+    turns = turns_from_messages(
+        [
+            ModelResponse(
+                parts=[
+                    ThinkingPart(content="let me look"),
+                    TextPart(content="done"),
+                ]
+            )
+        ]
+    )
+    assert turns[0].role == "thinking"
+    assert turns[0].text == "let me look"
+    assert turns[1].role == "assistant"
+    assert turns[1].text == "done"
 
 
 def test_map_start_uses_human_title():

@@ -33,6 +33,7 @@ def test_complete_root(tmp_path: Path):
     names = [s.label for s in reg.complete("/")]
     assert "/help" in names
     assert "/model" in names
+    assert "/thinking" in names
     assert "/mcp" in names
 
 
@@ -74,6 +75,28 @@ def test_gateway_toggle(tmp_path: Path):
     assert isinstance(result.effect, Refresh)
     assert cfg.use_provider_gateway is False
     assert store.load().use_provider_gateway is False
+
+
+def test_thinking_switch(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(api_models=["gpt-4o"])
+    store.save(cfg)
+    sessions = SessionStore(tmp_path / "sessions.json")
+    chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
+    reg = CommandRegistry.build(store, cfg, sessions, chat)
+    listed = reg.execute("/thinking")
+    assert "off" in listed.message
+    result = reg.execute("/thinking high")
+    assert isinstance(result.effect, Refresh)
+    assert cfg.thinking == "high"
+    assert store.load().thinking == "high"
+    levels = [s.value for s in reg.complete("/thinking ")]
+    assert "off" in levels
+    assert "high" in levels
+    assert "xhigh" in levels
+    bad = reg.execute("/thinking max")
+    assert "usage" in bad.message or "thinking" in bad.message
+    assert cfg.thinking == "high"
 
 
 def test_theme_list_and_set(tmp_path: Path):

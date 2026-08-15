@@ -58,6 +58,7 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `selected_theme` | string | `"b3code"` | Slug do tema ativo (o `name` de um item de `themes`). |
 | `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. JSON antigo com `accent` no topo migra para o tema default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
 | `multiline` | bool | `true` | `true` = paste preserva `\\n`; Shift+Enter insere newline. |
+| `thinking` | string | `"off"` | Esforço de thinking do Pydantic AI: `off`, `auto`, `minimal`, `low`, `medium`, `high`, `xhigh`. `off` não envia o setting. |
 | `mcp_servers` | object | `{}` | Servers MCP por nome. Cada um tem `command`+`args`+`env` (stdio) **ou** `url`+`headers` (HTTP/SSE), mais `enabled`, `transport` (`stdio`/`http`/`sse`), `startup_timeout_sec` (30) e `tool_timeout_sec` (120). Tudo vive neste JSON. Aceita `${VAR}` / `${VAR:-default}` na conexão. |
 
 Exemplo:
@@ -177,7 +178,7 @@ nomes disponíveis em `services/catalog.py`.
 
 ## 7. Uso da TUI
 
-Layout da tela: topbar (cwd + modelo + badge de plan mode), área de chat,
+Layout da tela: topbar (cwd + modelo + badge de thinking + badge de plan mode), área de chat,
 barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 
 ### Atalhos
@@ -199,6 +200,7 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/resume` | Lista sessões; `/resume <id>` ativa uma |
 | `/model` | Mostra o modelo ativo; `/model <nome>` troca (com autocomplete) |
 | `/gateway on\|off` | Liga/desliga o gateway Azure (persistido) |
+| `/thinking` | Mostra o esforço de thinking; `/thinking <nível>` troca (`off`, `auto`, `minimal`, `low`, `medium`, `high`, `xhigh`) |
 | `/theme` | Lista os temas salvos e as cores do ativo |
 | `/theme set <nome>` | Ativa um tema já salvo |
 | `/theme update <token> <#hex>` | Edita uma cor do tema ativo (`background`, `accent`, …) |

@@ -18,6 +18,7 @@ class ChatStreamMixin:
     call_later: Callable[..., Any]
     query_one: Callable[..., Any]
     text_buffer: TextBuffer
+    thought_buffer: TextBuffer
     chat_view: ChatView
     _flush: FlushScheduler | None
     plan_controller: PlanController | None
@@ -28,6 +29,9 @@ class ChatStreamMixin:
     def _on_event(self, event: ChatEvent) -> None:
         if event.kind == "text_delta":
             self._queue_text(event.text)
+            return
+        if event.kind == "thinking_delta":
+            self._queue_thought(event.text)
             return
         if event.kind == "task" and not event.output:
             self._pending_task[event.call_id] = event
@@ -40,6 +44,11 @@ class ChatStreamMixin:
             return
         self._arm_flush()
 
+    def _queue_thought(self, text: str) -> None:
+        if not self.thought_buffer.push(text):
+            return
+        self._arm_flush()
+
     def _arm_flush(self) -> None:
         self.call_later(self._schedule_text_flush)
 
@@ -48,6 +57,10 @@ class ChatStreamMixin:
             self._flush.arm()
 
     def _flush_text(self) -> None:
+        thought = self.thought_buffer.drain()
+        if thought:
+            self.chat_view.append_thought(thought)
+            self.chat_view.scroll_end()
         text = self.text_buffer.drain()
         if text:
             self.chat_view.append_assistant(text)
@@ -60,6 +73,9 @@ class ChatStreamMixin:
     def _apply_event(self, event: ChatEvent) -> None:
         if event.kind == "text_delta":
             self._queue_text(event.text)
+            return
+        if event.kind == "thinking_delta":
+            self._queue_thought(event.text)
             return
         self._flush_text()
         self.chat_view.apply_event(

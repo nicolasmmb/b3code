@@ -12,6 +12,7 @@ from b3code.commands.builtin.session import (
     build_resume,
 )
 from b3code.commands.builtin.theme import build_theme
+from b3code.commands.builtin.thinking import build_thinking
 from b3code.commands.registry import Command
 from b3code.config.service import ConfigService
 from b3code.services.catalog import ModelCatalog
@@ -38,6 +39,7 @@ def build_all(services: CommandServices) -> list[Command]:
             build_exit(),
             build_model(services.config_service, services.catalog, services.chat),
             build_gateway(services.config_service, services.chat),
+            build_thinking(services.config_service, services.chat),
             build_multiline(services.config_service),
             build_theme(services.config_service),
             build_mcp(services.config_service, services.chat),

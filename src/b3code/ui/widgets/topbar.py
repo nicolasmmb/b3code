@@ -10,6 +10,8 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Static
 
+from b3code.config.schema import thinking_badge
+
 _HEADS = "refs/heads/"
 _POWERLINE_BRANCH = "\ue0a0"
 
@@ -21,11 +23,12 @@ class GitLabel:
 
 
 class TopBar(Horizontal):
-    def __init__(self, cwd: Path, model: str, **kwargs) -> None:
+    def __init__(self, cwd: Path, model: str, thinking: str = "off", **kwargs) -> None:
         super().__init__(id="top-bar", **kwargs)
         self._cwd = short_cwd(cwd)
         self._git = git_label(cwd)
         self._model = model
+        self._thinking = thinking
 
     def compose(self) -> ComposeResult:
         if self._git is not None:
@@ -34,10 +37,18 @@ class TopBar(Horizontal):
             yield Static("worktree", id="worktree-flag")
         yield Static(self._cwd, id="cwd")
         yield Static(self._model, id="model-label")
+        yield Static("", id="think-flag")
         yield Static("", id="mode-flag")
+
+    def on_mount(self) -> None:
+        self.set_thinking(self._thinking)
 
     def set_model(self, name: str) -> None:
         self.query_one("#model-label", Static).update(name)
+
+    def set_thinking(self, level: str) -> None:
+        self._thinking = level
+        _set_flag(self.query_one("#think-flag", Static), thinking_badge(level))
 
     def set_plan_badge(self, active: bool) -> None:
         _set_flag(self.query_one("#mode-flag", Static), "plan" if active else "")

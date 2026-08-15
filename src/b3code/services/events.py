@@ -12,7 +12,13 @@ from pydantic_ai import (
     PartDeltaEvent,
     PartStartEvent,
 )
-from pydantic_ai.messages import TextPart, TextPartDelta, ToolReturnPart
+from pydantic_ai.messages import (
+    TextPart,
+    TextPartDelta,
+    ThinkingPart,
+    ThinkingPartDelta,
+    ToolReturnPart,
+)
 
 from b3code.services.permission import PermissionRequest
 from b3code.services.questions import Question
@@ -23,6 +29,7 @@ from b3code.utils.toolview import preview_output, tool_title
 
 ChatEventKind = Literal[
     "text_delta",
+    "thinking_delta",
     "tool_start",
     "tool_end",
     "done",
@@ -119,13 +126,9 @@ def _task_output(record: TaskRecord) -> str:
 
 def map_agent_event(event: Any) -> list[ChatEvent]:
     if isinstance(event, PartStartEvent):
-        content = event.part.content if isinstance(event.part, TextPart) else ""
-        return [ChatEvent(kind="text_delta", text=content)] if content else []
+        return _part_start(event.part)
     if isinstance(event, PartDeltaEvent):
-        content = (
-            event.delta.content_delta if isinstance(event.delta, TextPartDelta) else ""
-        )
-        return [ChatEvent(kind="text_delta", text=content)] if content else []
+        return _part_delta(event.delta)
     if isinstance(event, FunctionToolCallEvent):
         return [_start_event(event)]
     if not isinstance(event, FunctionToolResultEvent) or not isinstance(
@@ -133,6 +136,22 @@ def map_agent_event(event: Any) -> list[ChatEvent]:
     ):
         return []
     return _end_events(event.part)
+
+
+def _part_start(part: Any) -> list[ChatEvent]:
+    if isinstance(part, TextPart) and part.content:
+        return [ChatEvent(kind="text_delta", text=part.content)]
+    if isinstance(part, ThinkingPart) and part.content:
+        return [ChatEvent(kind="thinking_delta", text=part.content)]
+    return []
+
+
+def _part_delta(delta: Any) -> list[ChatEvent]:
+    if isinstance(delta, TextPartDelta) and delta.content_delta:
+        return [ChatEvent(kind="text_delta", text=delta.content_delta)]
+    if isinstance(delta, ThinkingPartDelta) and delta.content_delta:
+        return [ChatEvent(kind="thinking_delta", text=delta.content_delta)]
+    return []
 
 
 def _call_id(part: Any) -> str:

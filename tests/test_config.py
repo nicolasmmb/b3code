@@ -46,6 +46,7 @@ def test_legacy_json_defaults_gateway(tmp_path: Path):
     assert loaded.selected_theme == "b3code"
     assert loaded.theme.name == "b3code"
     assert loaded.multiline is True
+    assert loaded.thinking == "off"
     assert loaded.mcp_servers == {}
 
 
@@ -120,6 +121,18 @@ def test_unknown_selected_theme_snaps_to_first():
     )
     assert cfg.selected_theme == "crimson"
     assert cfg.theme.accent == "#DC143C"
+
+
+def test_thinking_rejects_unknown():
+    with pytest.raises(ValueError, match="thinking"):
+        AppConfig(thinking="max")
+
+
+def test_thinking_roundtrip(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(thinking="high")
+    store.save(cfg)
+    assert store.load().thinking == "high"
 
 
 def test_shell_allowed_paths_roundtrip(tmp_path: Path):

@@ -30,6 +30,7 @@ from b3code.ui.widgets.messages import (
     FileChip,
     PlanDoc,
     SystemNote,
+    ThoughtBlock,
     ToolRow,
     UserMessage,
     fence_highlight_lang,
@@ -65,6 +66,8 @@ async def test_app_opens_welcome(tmp_path: Path):
         assert ac.display
         labels = [item.label for item in ac.suggestions]
         assert "/help" in labels
+        think = screen.query_one("#think-flag", Static)
+        assert think.display is False
 
 
 async def test_app_applies_saved_theme(tmp_path: Path):
@@ -230,6 +233,26 @@ async def test_spinner_animates():
         second = str(sp.render())
         assert second != first
         assert second in {f"{f} thinking" for f in FRAMES}
+
+
+async def test_thinking_badge_and_thought_block(tmp_path: Path):
+    ConfigStore.for_cwd(tmp_path).save(AppConfig(thinking="high"))
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        flag = screen.query_one("#think-flag", Static)
+        assert flag.display is True
+        assert flag.content == "think high"
+        screen.chat_view.start_assistant()
+        screen.chat_view.append_thought("step one")
+        screen.chat_view.append_assistant("answer")
+        await pilot.pause()
+        thought = screen.query_one(ThoughtBlock)
+        assert thought.query_one(".thought-body", Static).content == "step one"
+        assert screen.chat_view._buffer == "answer"
+        assert "step one" not in screen.chat_view._buffer
 
 
 async def test_spinner_mounted_and_removed_on_event(tmp_path: Path):

@@ -40,6 +40,15 @@ Screen {
     content-align: right middle;
 }
 
+#think-flag {
+    display: none;
+    width: auto;
+    height: 1;
+    color: $text-muted;
+    padding: 0 0 0 1;
+    content-align: right middle;
+}
+
 #mode-flag {
     display: none;
     width: auto;
@@ -113,6 +122,24 @@ Spinner {
 AssistantMessage {
     margin: 0 0 1 0;
     padding: 0 1;
+}
+
+ThoughtBlock {
+    height: auto;
+    margin: 0 0 1 0;
+    padding: 0 1;
+}
+
+.thought-head {
+    height: 1;
+    color: $text-muted;
+    text-style: italic;
+}
+
+.thought-body {
+    height: auto;
+    color: $text-muted;
+    padding: 0 0 0 1;
 }
 
 CopyableFence {
