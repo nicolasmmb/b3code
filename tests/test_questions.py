@@ -68,8 +68,13 @@ async def test_question_bar_paint_and_move():
         assert bar.current() == "always"
         bar.move(1, wrap=True)
         assert bar.current() == "Other"
+        assert bar.query_one("#question-other-row").display
+        assert bar.query_one("#question-other-hint").display
+        assert not bar.query_one("#question-other").display
         bar.show_other()
         assert bar.other_visible()
+        assert not bar.query_one("#question-other-hint").display
+        assert bar.query_one("#question-other").display
         field = bar.query_one("#question-other")
         field.value = "hello"
         assert bar.other_text() == "hello"
@@ -78,5 +83,6 @@ async def test_question_bar_paint_and_move():
         bar.hide_other()
         assert bar.other_visible() is False
         assert bar.current() == "Other"
+        assert bar.query_one("#question-other-hint").display
         bar.hide()
         assert bar.display is False

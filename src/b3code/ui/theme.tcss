@@ -390,24 +390,38 @@ QuestionBar {
     display: none;
     height: 1;
     layout: horizontal;
+    background: $background;
 }
 
 #question-other-mark {
     width: auto;
     height: 1;
-}
-
-#question-other {
-    width: 1fr;
-    height: 1;
-    border: none;
-    background: $background;
     padding: 0;
 }
 
-#question-other:focus {
+#question-other-hint {
+    width: 1fr;
+    height: 1;
+    color: $text-muted;
+}
+
+QuestionBar Input,
+QuestionBar Input:focus {
+    width: 1fr;
+    height: 1;
     border: none;
+    padding: 0;
     background: $background;
+    color: $accent;
+}
+
+QuestionBar Input > .input--placeholder {
+    color: $text-muted;
+}
+
+QuestionBar Input > .input--cursor {
+    background: $accent;
+    color: $background;
 }
 
 .role {

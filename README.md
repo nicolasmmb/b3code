@@ -375,8 +375,8 @@ Regras:
 
 - Sempre acrescenta a opção `Other` (`type your own answer`).
 - Recusa `multi_select`. Máximo 4 perguntas e 6 opções por pergunta.
-- `Other` abre um campo de texto na mesma grelha das opções. Todas as letras
-  entram no campo. `Esc` volta à lista sem enviar.
+- Other é **uma linha**. Em espera mostra a hint; ao editar a hint vira o
+  campo. Sem segunda linha Other. `Esc` volta à lista sem enviar.
 - O turno do pai continua à espera. O PromptBar fica bloqueado até o card fechar.
 
 | tecla | ação |
