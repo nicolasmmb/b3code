@@ -1,4 +1,8 @@
-"""Índice de arquivos para o autocomplete `@`."""
+"""Índice de arquivos para o autocomplete `@`.
+
+O disco é a fonte. A UI chama só `search_async`.
+Esse método faz a varredura se o scan é velho. Depois ranqueia.
+"""
 
 from __future__ import annotations
 

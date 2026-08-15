@@ -340,6 +340,87 @@ flowchart TB
     SESS --> BLOBS
 ```
 
+### 12.1 Índice `@`
+
+O disco é a fonte.
+O `@` pergunta ao `FileIndex`.
+O `FileIndex` pergunta ao disco.
+
+A UI usa uma porta: `search_async`.
+Esse método atualiza o índice se o último scan tem mais de 0,3 s.
+Depois ele ranqueia os paths.
+
+O chat não atualiza o índice.
+`write_file`, CodeMode, shell e Finder só mudam o disco.
+A próxima tecla `@` vê a lista nova.
+
+No boot, `PromptBar.refresh_index` aquece o índice.
+Depois disso, só `search_async`.
+
+```mermaid
+flowchart LR
+  disco[Disco]
+  files[FileIndex]
+  bar[PromptBar]
+  ac[Autocomplete]
+
+  disco -->|varredura| files
+  bar -->|search_async| files
+  files -->|hits| ac
+```
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant Writer as CodeMode_shell_Finder
+  participant Disk as Disco
+  participant Idx as FileIndex
+  participant Bar as PromptBar
+  participant Ac as Autocomplete
+
+  Note over Bar,Idx: boot
+  Bar->>Idx: refresh
+  Idx->>Disk: varredura
+
+  Writer->>Disk: cria move ou apaga
+  User->>Bar: @query
+  Bar->>Idx: search_async
+  Idx->>Idx: ensure_fresh
+  alt scan mais velho que 0,3 s
+    Idx->>Disk: varredura
+    Disk-->>Idx: lista nova
+  else scan fresco
+    Idx-->>Idx: mantém a lista
+  end
+  Idx-->>Bar: hits
+  Bar->>Ac: listagem
+```
+
+```mermaid
+flowchart TD
+  start[search_async]
+  fresh[ensure_fresh]
+  old{scan mais velho que 0,3 s}
+  walk[refresh no thread]
+  rank[search na memória]
+  out[devolve hits]
+
+  start --> fresh
+  fresh --> old
+  old -->|sim| walk
+  walk --> rank
+  old -->|nao| rank
+  rank --> out
+```
+
+Regras:
+
+- Não ligue o índice a eventos `diff` ou `done`.
+- Não adicione `watchdog`.
+- A varredura corre em `asyncio.to_thread`. O loop da TUI não espera o walk.
+- O índice respeita `.gitignore` e omite pastas como `node_modules` e `.git`.
+- O teto é 20 000 arquivos.
+
 ## 13. Tools de topo
 
 O modelo vê dois sítios de tools. As file tools vivem **só** dentro de
@@ -498,7 +579,7 @@ src/b3code/
 │   ├── questions.py       # QuestionGate (ask_user_question)
 │   ├── tasks.py           # TaskHub (spawn / snapshot / kill)
 │   ├── subagents.py       # factories do filho
-│   ├── files.py           # FileIndex (@arquivo)
+│   ├── files.py           # FileIndex — porta search_async
 │   └── catalog.py         # ModelCatalog
 ├── tools/
 │   ├── workspace.py       # file tools (vão para o run_code)
@@ -509,7 +590,7 @@ src/b3code/
 │   ├── palette.py         # Theme JSON → Textual Theme + Rich
 │   ├── screens/chat.py    # ChatScreen (wiring, bindings)
 │   ├── chat_view.py       # ChatView + widgets de mensagem
-│   ├── prompt_bar.py      # PromptBar + Autocomplete
+│   ├── prompt_bar.py      # PromptBar + Autocomplete (@ → search_async)
 │   ├── plan_controller.py # barra de aprovação do plano
 │   ├── permission_controller.py
 │   ├── question_controller.py

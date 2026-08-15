@@ -1,4 +1,8 @@
-"""Prompt + autocomplete. Workers de arquivo ficam aqui (Textual @work)."""
+"""Prompt + autocomplete.
+
+O worker `@` chama `FileIndex.search_async`.
+A barra não faz varredura. O índice lê o disco.
+"""
 
 from __future__ import annotations
 
