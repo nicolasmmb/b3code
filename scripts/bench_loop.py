@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import inspect
 import json
 import statistics
 import sys
@@ -109,9 +111,10 @@ def _ready_index(cwd: Path) -> FileIndex:
         return idx
     for name in ("scan", "refresh"):
         fn = getattr(idx, name, None)
-        if callable(fn):
-            fn()
-            return idx
+        if not callable(fn) or inspect.iscoroutinefunction(fn):
+            continue
+        fn()
+        return idx
     return idx
 
 
@@ -137,6 +140,48 @@ async def _app_search(idx: FileIndex, query: str) -> list[Path]:
     if hasattr(idx, "ensure_scanned"):
         return await asyncio.to_thread(idx.search, query)
     return idx.search(query)
+
+
+async def _app_refresh(idx: FileIndex) -> None:
+    """TUI path: async refresh() off-loop. Old API blocks on scan/refresh."""
+    refresh = getattr(idx, "refresh", None)
+    if callable(refresh) and inspect.iscoroutinefunction(refresh):
+        await refresh()
+        return
+    if callable(refresh) and not inspect.iscoroutinefunction(refresh):
+        refresh()
+        return
+    idx.scan()
+
+
+def _add_path(idx: FileIndex, rel: str) -> None:
+    fn = getattr(idx, "add_path", None)
+    if callable(fn):
+        fn(rel)
+        return
+    scan = getattr(idx, "scan", None)
+    if callable(scan):
+        scan()
+
+
+def _remove_path(idx: FileIndex, rel: str) -> None:
+    fn = getattr(idx, "remove_path", None)
+    if callable(fn):
+        fn(rel)
+        return
+    scan = getattr(idx, "scan", None)
+    if callable(scan):
+        scan()
+
+
+def _add_batch(idx: FileIndex, n: int = 200) -> None:
+    for i in range(n):
+        _add_path(idx, f"extra_{i:04d}.py")
+
+
+def _remove_batch(idx: FileIndex, n: int = 200) -> None:
+    for i in range(n):
+        _remove_path(idx, f"src/pkg_00/mod_{i:04d}.py")
 
 
 async def _app_expand(text: str, cwd: Path, idx: FileIndex) -> str:
@@ -214,10 +259,8 @@ async def _stall(
     wall_ms = (done - t0) * 1000
     running = False
     task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
 
     gaps_ms = [g * 1000 for g in gaps if g > 0]
     if not gaps_ms:
@@ -261,6 +304,9 @@ async def run_bench() -> dict[str, Any]:
     idx = _ready_index(tmp)
 
     _, results["index_search"] = await _stall(lambda: _app_search(idx, "mod"))
+    _, results["index_refresh"] = await _stall(lambda: _app_refresh(idx))
+    _, results["index_add_path"] = await _stall(lambda: _add_batch(idx))
+    _, results["index_remove_path"] = await _stall(lambda: _remove_batch(idx))
     prompt = "explica " + " ".join(f"@{n}" for n in attach)
     _, results["expand"] = await _stall(lambda: _app_expand(prompt, tmp, idx))
 
@@ -295,7 +341,9 @@ async def run_bench() -> dict[str, Any]:
         for _ in range(n):
             fn()
 
-    _, results["complete_root"] = await _stall(lambda: _repeat(lambda: reg.complete("/"), 500))
+    _, results["complete_root"] = await _stall(
+        lambda: _repeat(lambda: reg.complete("/"), 500)
+    )
     _, results["complete_model"] = await _stall(
         lambda: _repeat(lambda: reg.complete("/model claude"), 100)
     )
@@ -317,12 +365,10 @@ async def run_bench() -> dict[str, Any]:
     }
 
 
-def _compare(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
-    failures: list[str] = []
+def _print_compare(
+    bm: dict[str, dict[str, float]], am: dict[str, dict[str, float]]
+) -> None:
     print("\ncompare (before → after)")
-    bm = before["metrics"]
-    am = after["metrics"]
-    stall_ids = ("index_build", "index_search", "expand", "session_replace")
     for name in bm:
         if name not in am:
             continue
@@ -337,30 +383,58 @@ def _compare(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
             f"max_gap {b['max_gap_ms']:8.1f} → {a['max_gap_ms']:8.1f}"
         )
 
-    for name in stall_ids:
+
+def _stall_failures(am: dict[str, dict[str, float]]) -> list[str]:
+    names = (
+        "index_build",
+        "index_search",
+        "index_refresh",
+        "expand",
+        "session_replace",
+    )
+    failures: list[str] = []
+    for name in names:
         gap = am[name]["max_gap_ms"]
         if gap > STALL_GATE_MS:
             failures.append(f"{name} max_gap_ms {gap:.1f} > {STALL_GATE_MS}")
+    return failures
 
+
+def _wall_failures(
+    bm: dict[str, dict[str, float]], am: dict[str, dict[str, float]]
+) -> list[str]:
+    failures: list[str] = []
     for name in ("index_build", "grep"):
         if am[name]["wall_ms"] > bm[name]["wall_ms"] * 1.15 + 5:
             failures.append(
                 f"{name} wall_ms regressed {bm[name]['wall_ms']:.1f} → {am[name]['wall_ms']:.1f}"
             )
+    for name in ("index_add_path", "index_remove_path"):
+        if name not in bm or name not in am:
+            continue
+        if am[name]["wall_ms"] > bm[name]["wall_ms"] * 0.5 and bm[name]["wall_ms"] > 5:
+            failures.append(
+                f"{name} wall_ms not incremental {bm[name]['wall_ms']:.1f} → {am[name]['wall_ms']:.1f}"
+            )
+    return failures
 
+
+def _compare(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+    bm = before["metrics"]
+    am = after["metrics"]
+    _print_compare(bm, am)
+    failures = _stall_failures(am) + _wall_failures(bm, am)
     b2 = bm.get("session_messages_2", bm["session_messages"])
     a2 = am.get("session_messages_2", am["session_messages"])
     if a2["wall_ms"] > b2["wall_ms"] * 0.6 + 2 and a2["wall_ms"] > 1.0:
         failures.append(
             f"session_messages_2 not cached enough {b2['wall_ms']:.1f} → {a2['wall_ms']:.1f}"
         )
-
     updates = am["delta_updates"].get("updates", DELTA_BURST)
     if updates >= DELTA_BURST * 0.5:
         failures.append(
             f"delta_updates {int(updates)} not coalesced (burst={DELTA_BURST})"
         )
-
     return failures
 
 

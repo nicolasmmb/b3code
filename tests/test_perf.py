@@ -42,6 +42,8 @@ BUDGET_MS = {
     "complete_model": 2.0,
     "complete_resume": 0.25,
     "index_search": 5.0,
+    "index_add_path": 0.05,
+    "index_remove_path": 0.05,
     "diff_2k": 40.0,
     "render_collapsed": 4.0,
     "render_expanded": 20.0,
@@ -209,6 +211,10 @@ def test_hot_paths_stay_under_budget(tmp_path: Path):
         **_diff_work(),
         **_plan_work(tmp_path),
     }
+    if hasattr(idx, "add_path"):
+        jobs["index_add_path"] = lambda: idx.add_path("extra_hot.py")
+    if hasattr(idx, "remove_path"):
+        jobs["index_remove_path"] = lambda: idx.remove_path("missing_hot.py")
 
     print("\nhot path                  min     median      p95   budget  batch")
     failed: list[str] = []

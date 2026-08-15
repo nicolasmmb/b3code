@@ -111,6 +111,23 @@ def run() -> dict:
             )
         )
 
+        add_path = getattr(idx, "add_path", None)
+        remove_path = getattr(idx, "remove_path", None)
+        if callable(add_path):
+            add_path(stored[0] if stored else "keep.py")
+        if callable(remove_path):
+            remove_path("missing-no-such-file.py")
+        mutated = [str(p) for p in idx.search("", limit=100_000)]
+        rows.append(
+            _snap(
+                "index_mutate",
+                {
+                    "indexed_files": len(mutated),
+                    "stable": len(mutated) == len(stored),
+                },
+            )
+        )
+
         expanded = expand_attachments("veja @src/big.txt", root, idx.read)
         rows.append(
             _snap(

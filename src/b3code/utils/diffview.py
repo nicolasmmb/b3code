@@ -28,6 +28,10 @@ class FileChange:
     truncated: bool = False
     line_count: int = 0
 
+    @property
+    def deleted(self) -> bool:
+        return self.added == 0 and self.removed > 0
+
 
 def summary(change: FileChange) -> str:
     return f"{change.path}  +{change.added} −{change.removed}"

@@ -1,3 +1,5 @@
+import asyncio
+import inspect
 from pathlib import Path
 
 import pytest
@@ -84,3 +86,64 @@ def test_apply_cmd_suggestion():
     )
     text, _ = apply_suggestion("/he", 3, item)
     assert text == "/help"
+
+
+def test_add_path_is_searchable(tmp_path: Path):
+    (tmp_path / "a.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    idx.add_path("b.py")
+    assert "b.py" in [str(p) for p in idx.search("b")]
+
+
+def test_add_path_idempotent_and_skips_junk(tmp_path: Path):
+    (tmp_path / "a.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    idx.add_path("a.py")
+    idx.add_path("node_modules/pkg.js")
+    names = [str(p) for p in idx.search("", limit=100)]
+    assert names.count("a.py") == 1
+    assert not any("node_modules" in n for n in names)
+
+
+def test_remove_path_missing_is_noop(tmp_path: Path):
+    (tmp_path / "a.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    idx.remove_path("missing.py")
+    assert [str(p) for p in idx.search("")] == ["a.py"]
+    idx.remove_path("a.py")
+    assert idx.search("") == []
+
+
+def test_mutate_before_scan_is_ignored(tmp_path: Path):
+    idx = FileIndex(tmp_path)
+    idx.add_path("ghost.py")
+    idx.remove_path("ghost.py")
+    assert idx.search("") == []
+
+
+def test_refresh_is_coroutine():
+    assert inspect.iscoroutinefunction(FileIndex.refresh)
+    assert inspect.iscoroutinefunction(FileIndex.search_async)
+
+
+async def test_refresh_does_not_block_loop(tmp_path: Path):
+    for i in range(80):
+        (tmp_path / f"f{i:03d}.txt").write_text("x")
+    idx = FileIndex(tmp_path)
+    ticks = 0
+
+    async def beat() -> None:
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0)
+            ticks += 1
+
+    task = asyncio.create_task(beat())
+    await asyncio.sleep(0)
+    await idx.refresh()
+    task.cancel()
+    assert ticks >= 1
+    assert len(idx.search("", limit=100)) == 80

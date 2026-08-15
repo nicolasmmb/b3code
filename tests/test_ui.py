@@ -565,6 +565,44 @@ async def test_tool_row_fold_reveals_output(tmp_path: Path):
         assert row.query_one(".tool-body").display is True
 
 
+async def test_diff_indexes_new_file_without_waiting_rescan(tmp_path: Path):
+    (tmp_path / "old.py").write_text("x\n")
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        bar = screen.query_one(PromptBar)
+        await bar._files.ensure_scanned()
+        change = diff_texts("fresh.py", "", "print(1)\n")
+        screen._apply_event(
+            ChatEvent(
+                kind="diff",
+                tool="write_file",
+                detail="fresh.py  +1 −0",
+                change=change,
+            )
+        )
+        names = [str(p) for p in bar._files.search("fresh")]
+        assert "fresh.py" in names
+
+
+async def test_done_starts_files_scan_worker(tmp_path: Path):
+    (tmp_path / "old.py").write_text("x\n")
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        bar = screen.query_one(PromptBar)
+        (tmp_path / "late.py").write_text("y\n")
+        screen._apply_event(ChatEvent(kind="done", text="ok"))
+        worker = next(item for item in bar.workers if item.group == "files-scan")
+        await worker.wait()
+        names = [str(p) for p in bar._files.search("late")]
+        assert "late.py" in names
+
+
 async def test_diff_event_mounts_block(tmp_path: Path):
     app = B3App(AppContainer.build(tmp_path))
     async with app.run_test() as pilot:

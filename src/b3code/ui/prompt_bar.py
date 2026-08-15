@@ -317,8 +317,8 @@ class PromptBar(Vertical):
 
     @work(exclusive=True, group="files-scan")
     async def refresh_index(self) -> None:
-        await self._files.ensure_scanned()
-        self.refresh_suggestions()
+        await self._files.refresh()
+        self.call_later(self.refresh_suggestions)
 
     def consume_key(self, event: Key) -> bool:
         autocomplete = self.query_one(Autocomplete)
@@ -426,7 +426,7 @@ class PromptBar(Vertical):
         await asyncio.sleep(0.05)
         if query != self._ac_query:
             return
-        hits = await asyncio.to_thread(self._files.search, query)
+        hits = await self._files.search_async(query)
         if query != self._ac_query:
             return
         self.call_later(self._show_file_hits, query, hits)

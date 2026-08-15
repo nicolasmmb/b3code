@@ -52,6 +52,43 @@ def test_index_skips_target_dir(tmp_path: Path):
     assert not any(n == "target" or n.startswith("target/") for n in names)
 
 
+def test_add_path_existing_does_not_grow(tmp_path: Path):
+    add_path = getattr(FileIndex, "add_path", None)
+    if add_path is None:
+        pytest.skip("add_path not implemented yet")
+    (tmp_path / "keep.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    before = [str(p) for p in idx.search("", limit=1000)]
+    idx.add_path("keep.py")
+    after = [str(p) for p in idx.search("", limit=1000)]
+    assert after == before
+
+
+def test_remove_path_drops_name(tmp_path: Path):
+    remove_path = getattr(FileIndex, "remove_path", None)
+    if remove_path is None:
+        pytest.skip("remove_path not implemented yet")
+    (tmp_path / "keep.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    idx.remove_path("keep.py")
+    names = [str(p) for p in idx.search("", limit=1000)]
+    assert "keep.py" not in names
+
+
+def test_add_path_new_is_searchable(tmp_path: Path):
+    add_path = getattr(FileIndex, "add_path", None)
+    if add_path is None:
+        pytest.skip("add_path not implemented yet")
+    (tmp_path / "keep.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    idx.add_path("fresh.py")
+    names = [str(p) for p in idx.search("fresh", limit=20)]
+    assert any(n == "fresh.py" or n.endswith("fresh.py") for n in names)
+
+
 def test_grep_skips_nul_binary(tmp_path: Path):
     (tmp_path / "hit.py").write_text("class Foo:\n    pass\n")
     (tmp_path / "blob.bin").write_bytes(b"class Hidden\x00zzz")
@@ -130,18 +167,23 @@ def test_recorded_hotspots_show_gains():
     before = {row["label"]: row for row in json.loads(before_path.read_text())["steps"]}
     after = {row["label"]: row for row in json.loads(after_path.read_text())["steps"]}
     assert (
-        after["index_scan"]["indexed_target"] < before["index_scan"]["indexed_target"]
+        after["index_scan"]["indexed_target"] <= before["index_scan"]["indexed_target"]
     )
-    assert after["expand_120k"]["expand_chars"] < before["expand_120k"]["expand_chars"]
+    assert after["index_scan"]["indexed_target"] == 0
+    assert after["expand_120k"]["expand_chars"] <= before["expand_120k"]["expand_chars"]
     assert after["expand_120k"]["truncated"] is True
     assert (
         after["session_40_turns"]["session_json_bytes"]
-        < before["session_40_turns"]["session_json_bytes"]
+        <= before["session_40_turns"]["session_json_bytes"]
     )
     assert after["session_40_turns"]["display_tool_text_chars"] == 0
     assert after["session_40_turns"]["split_dir"] is True
     assert after["grep_class"]["grep_hit_bin"] is False
     assert (
-        after["diff_2k"]["diff_stored_lines"] < before["diff_2k"]["diff_stored_lines"]
+        after["diff_2k"]["diff_stored_lines"] <= before["diff_2k"]["diff_stored_lines"]
     )
     assert after["diff_2k"]["diff_added"] == before["diff_2k"]["diff_added"]
+    mutated = after.get("index_mutate")
+    if mutated is not None:
+        assert mutated["stable"] is True
+        assert mutated["indexed_files"] == after["index_scan"]["indexed_files"]

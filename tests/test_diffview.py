@@ -9,6 +9,18 @@ from b3code.utils.diffview import (
 )
 
 
+def test_deleted_when_new_is_empty():
+    change = diff_texts("gone.py", "a\nb\n", "")
+    assert change.deleted is True
+    assert change.added == 0
+    assert change.removed == 2
+
+
+def test_edit_is_not_deleted():
+    change = diff_texts("a.py", "x = 1\n", "x = 2\n")
+    assert change.deleted is False
+
+
 def test_new_file_is_all_plus():
     change = diff_texts("n.txt", "", "hello\nworld")
     assert change.path == "n.txt"
