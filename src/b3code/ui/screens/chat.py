@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.events import Key, Paste
 from textual.screen import Screen
-from textual.widgets import OptionList
+from textual.widgets import Input, OptionList
 
 from b3code.ui.chat_view import ChatView, Welcome
 from b3code.ui.coalesce import FLUSH_INTERVAL
@@ -136,8 +136,16 @@ class ChatScreen(ChatStreamMixin, Screen):
             self.confirm_plan()
             event.stop()
 
+    @on(Input.Submitted, "#question-other")
+    def on_other_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
+        if self.question_controller:
+            self.question_controller.submit_other()
+
     def on_paste(self, event: Paste) -> None:
         """Drop do Finder cai no widget sob o cursor, quase sempre o chat."""
+        if self.query_one(QuestionBar).other_visible():
+            return
         text = event.text.replace("\r\n", "\n").replace("\r", "\n")
         bar = self.query_one(PromptBar)
         if not bar.handle_paste(text, allow_clipboard=False):
@@ -173,14 +181,20 @@ class ChatScreen(ChatStreamMixin, Screen):
     def action_plan_approve(self) -> None:
         if self.awaiting_plan:
             self.confirm_plan("approve")
+            return
+        self._other_insert("a")
 
     def action_plan_revise(self) -> None:
         if self.awaiting_plan:
             self.confirm_plan("revise")
+            return
+        self._other_insert("s")
 
     def action_plan_quit(self) -> None:
         if self.awaiting_plan:
             self.confirm_plan("quit")
+            return
+        if self._other_insert("q"):
             return
         if self.deps.chat.busy and self.deps.chat.plan.active:
             self.deps.chat.cancel_current()
@@ -189,6 +203,9 @@ class ChatScreen(ChatStreamMixin, Screen):
             self._run_command("/plan off")
 
     def action_escape(self) -> None:
+        if self.query_one(QuestionBar).other_visible() and self.question_controller:
+            self.question_controller.leave_other()
+            return
         if self.awaiting_plan:
             self.confirm_plan("quit")
             return
@@ -204,6 +221,13 @@ class ChatScreen(ChatStreamMixin, Screen):
             return
         if self.deps.chat.plan.active:
             self._run_command("/plan off")
+
+    def _other_insert(self, text: str) -> bool:
+        bar = self.query_one(QuestionBar)
+        if not bar.other_visible():
+            return False
+        bar.insert(text)
+        return True
 
     def action_new_session(self) -> None:
         self._run_command("/new")

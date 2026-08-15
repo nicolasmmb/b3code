@@ -375,7 +375,8 @@ Regras:
 
 - Sempre acrescenta a opção `Other` (`type your own answer`).
 - Recusa `multi_select`. Máximo 4 perguntas e 6 opções por pergunta.
-- `Other` escreve-se **no card**, não no PromptBar.
+- `Other` abre um campo de texto na mesma grelha das opções. Todas as letras
+  entram no campo. `Esc` volta à lista sem enviar.
 - O turno do pai continua à espera. O PromptBar fica bloqueado até o card fechar.
 
 | tecla | ação |
@@ -384,7 +385,8 @@ Regras:
 | `Tab` / `Shift+Tab` | envolve as opções desta pergunta |
 | `←` `→` | pergunta anterior / seguinte |
 | `1`–`9` | escolhe a opção N |
-| `z` ou Other + Enter | abre o campo livre no card |
+| `z` ou Other + Enter | abre o campo Other |
+| `Esc` no campo | volta à lista |
 | `Enter` | escolhe e avança; na última pergunta, envia |
 | `Esc` | estaciona. O card fica no ecrã. `Tab` volta |
 | `Shift+X` | dispensa. O modelo recebe `skipped` |

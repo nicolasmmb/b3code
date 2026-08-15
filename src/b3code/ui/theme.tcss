@@ -386,11 +386,28 @@ QuestionBar {
     background: $background;
 }
 
-#question-other {
+#question-other-row {
     display: none;
-    margin-top: 1;
-    border: solid $border;
-    height: 3;
+    height: 1;
+    layout: horizontal;
+}
+
+#question-other-mark {
+    width: auto;
+    height: 1;
+}
+
+#question-other {
+    width: 1fr;
+    height: 1;
+    border: none;
+    background: $background;
+    padding: 0;
+}
+
+#question-other:focus {
+    border: none;
+    background: $background;
 }
 
 .role {

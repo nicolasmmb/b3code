@@ -42,6 +42,14 @@ class QuestionController:
             return self._other_key(event)
         return self._card_key(event)
 
+    def submit_other(self) -> None:
+        text = self._bar.other_text()
+        self._bar.hide_other()
+        self._accept(text or OTHER_LABEL)
+
+    def leave_other(self) -> None:
+        self._bar.hide_other()
+
     def dismiss(self) -> None:
         self._finish("skipped", dismiss=True)
 
@@ -92,18 +100,11 @@ class QuestionController:
         self.parked = True
 
     def _other_key(self, event: Key) -> bool:
-        if event.key == "enter":
-            text = self._bar.other_text()
-            self._bar.hide_other()
-            self._accept(text or OTHER_LABEL)
-            event.stop()
-            event.prevent_default()
-            return True
-        if event.key == "escape":
-            self._bar.hide_other()
-            event.stop()
-            event.prevent_default()
-            return True
+        if event.key != "escape":
+            return False
+        self.leave_other()
+        event.stop()
+        event.prevent_default()
         return True
 
     def _unpark(self, event: Key) -> bool:
