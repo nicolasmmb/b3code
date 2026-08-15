@@ -16,10 +16,13 @@ KINDS = frozenset({"general-purpose", "explore", "plan"})
 MAX_RUNNING = 3
 FG_TIMEOUT_S = 180.0
 OUTPUT_CAP = 8_000
+STEPS_CAP = 40
+SNAPSHOT_STEPS = 8
 
 TaskStatus = str
 Runner = Callable[["TaskRecord", str], Awaitable[str]]
 OnTask = Callable[["TaskRecord", bool], None]
+OnTick = Callable[["TaskRecord"], None]
 
 
 @dataclass
@@ -34,6 +37,24 @@ class TaskRecord:
     token: CancellationToken = field(default_factory=CancellationToken)
     started: float = field(default_factory=time.monotonic)
     activity: str = ""
+    steps: list[str] = field(default_factory=list)
+    on_tick: OnTick | None = field(default=None, repr=False, compare=False)
+
+    @property
+    def elapsed(self) -> int:
+        return max(0, int(time.monotonic() - self.started))
+
+    def note(self, title: str) -> bool:
+        text = title.strip()
+        if not text or text == self.activity:
+            return False
+        self.activity = text
+        self.steps.append(text)
+        if len(self.steps) > STEPS_CAP:
+            del self.steps[:-STEPS_CAP]
+        if self.on_tick is not None:
+            self.on_tick(self)
+        return True
 
 
 class TaskHub:
@@ -62,10 +83,10 @@ class TaskHub:
             return f"started {record.id} ({record.kind}): {description}"
         return await self._await_foreground(record, task)
 
-    async def snapshot(
-        self, task_ids: list[str], timeout_ms: int | None = None
-    ) -> str:
-        handles = [self.records[i].handle for i in task_ids if _live(self.records.get(i))]
+    async def snapshot(self, task_ids: list[str], timeout_ms: int | None = None) -> str:
+        handles = [
+            self.records[i].handle for i in task_ids if _live(self.records.get(i))
+        ]
         if timeout_ms and handles:
             await asyncio.wait(handles, timeout=max(timeout_ms, 0) / 1000)
         return "\n".join(self._line(i) for i in task_ids)
@@ -102,6 +123,7 @@ class TaskHub:
             kind=kind,
             description=description,
             background=background,
+            on_tick=self._tick,
         )
         self.records[record.id] = record
         return record
@@ -132,6 +154,9 @@ class TaskHub:
             return f"{record.id} timed out"
         return record.output or record.status
 
+    def _tick(self, record: TaskRecord) -> None:
+        self._emit(record, terminal=False)
+
     def _emit(self, record: TaskRecord, *, terminal: bool) -> None:
         if self.on_event is not None:
             self.on_event(record, terminal)
@@ -140,10 +165,17 @@ class TaskHub:
         record = self.records.get(task_id)
         if record is None:
             return f"{task_id}: unknown"
-        extra = f" — {record.activity}" if record.activity else ""
-        body = record.output.replace("\n", " ")[:200]
-        tail = f" {body}" if body and record.status != "running" else extra
-        return f"{record.id} {record.status} ({record.kind}){tail}"
+        head = f"{record.id} {record.status} ({record.kind}) {record.elapsed}s"
+        if record.status == "running":
+            extra = f" — {record.activity}" if record.activity else ""
+            return head + extra
+        parts = [head]
+        for step in record.steps[-SNAPSHOT_STEPS:]:
+            parts.append(f"  {step}")
+        body = record.output.replace("\n", " ").strip()
+        if body:
+            parts.append(f"  {body[:200]}")
+        return "\n".join(parts)
 
 
 def _live(record: TaskRecord | None) -> bool:

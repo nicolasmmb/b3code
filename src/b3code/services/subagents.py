@@ -19,6 +19,7 @@ from b3code.services.permission import PermissionGate
 from b3code.services.tasks import TaskRecord
 from b3code.tools.workspace import workspace_toolset
 from b3code.utils.diffview import FileChange
+from b3code.utils.toolview import tool_title
 
 KINDS = ("general-purpose", "explore", "plan")
 
@@ -82,9 +83,7 @@ def child_runner(
 
         async def handler(_ctx: Any, events: Any) -> None:
             async for event in events:
-                name = getattr(getattr(event, "part", None), "tool_name", "")
-                if name:
-                    record.activity = name
+                note_child_event(record, event)
 
         result = await agent.run(
             prompt,
@@ -94,6 +93,14 @@ def child_runner(
         return result.output or ""
 
     return run
+
+
+def note_child_event(record: TaskRecord, event: Any) -> None:
+    part = getattr(event, "part", None)
+    name = getattr(part, "tool_name", "") or ""
+    if not name:
+        return
+    record.note(tool_title(name, getattr(part, "args", None)))
 
 
 def _caps(kind: str, cwd: Path, gate: PermissionGate | None) -> list[Any]:

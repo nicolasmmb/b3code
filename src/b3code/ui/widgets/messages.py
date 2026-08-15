@@ -509,6 +509,8 @@ def render_tool_header(
     status: str, title: str, tool: str, colors: RichPalette | None = None
 ) -> Text:
     colors = colors or rich_palette()
+    if tool == "subagent":
+        return _subagent_header(status, title, colors)
     label = title or f"Ran {tool}"
     out = Text()
     if status == "running":
@@ -519,6 +521,22 @@ def render_tool_header(
         out.append("✗ ", style=colors.error)
         out.append(label, style=colors.error_msg)
         return out
+    out.append(label, style=colors.muted)
+    return out
+
+
+def _subagent_header(status: str, title: str, colors: RichPalette) -> Text:
+    label = title or "subagent"
+    out = Text()
+    if status == "running":
+        out.append("… ", style=colors.muted)
+        out.append(label, style=colors.muted)
+        return out
+    if status == "error":
+        out.append("✗ ", style=colors.error)
+        out.append(label, style=colors.error_msg)
+        return out
+    out.append("✓ ", style=colors.muted)
     out.append(label, style=colors.muted)
     return out
 

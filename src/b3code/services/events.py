@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -70,13 +69,13 @@ def question_event(questions: tuple[Question, ...]) -> ChatEvent:
 
 
 def task_event(record: TaskRecord, *, terminal: bool) -> ChatEvent:
-    elapsed = max(0, int(time.monotonic() - record.started))
     return ChatEvent(
         kind="task",
+        text=record.status if terminal else "running",
         tool="subagent",
-        detail=_task_title(record, terminal, elapsed),
-        output=preview_output(record.output) if terminal else "",
-        call_id=_task_call_id(record, terminal),
+        detail=_task_title(record, terminal, record.elapsed),
+        output=_task_output(record) if terminal else "",
+        call_id=record.id,
     )
 
 
@@ -87,22 +86,25 @@ def _question_block(item: Question) -> str:
 
 
 def _task_title(record: TaskRecord, terminal: bool, elapsed: int) -> str:
-    desc = record.description
-    if not terminal and record.background:
-        return f'Subagent started: "{desc}"'
-    if not terminal:
-        suffix = f" — {record.activity}" if record.activity else ""
-        return f'Subagent running: "{desc}" ({record.kind}){suffix}'
-    label = {"done": "completed", "failed": "failed", "cancelled": "cancelled"}.get(
-        record.status, record.status
-    )
-    return f'Subagent {label} in {elapsed}s: "{desc}"'
+    parts = [record.kind, record.description]
+    if not terminal and record.activity:
+        parts.append(record.activity)
+    if terminal and record.status in {"failed", "cancelled"}:
+        parts.append(record.status)
+    parts.append(f"{elapsed}s")
+    return " · ".join(part for part in parts if part)
 
 
-def _task_call_id(record: TaskRecord, terminal: bool) -> str:
-    if terminal and record.background:
-        return f"{record.id}:end"
-    return record.id
+def _task_output(record: TaskRecord) -> str:
+    chunks = list(record.steps)
+    body = record.output.strip()
+    if body:
+        if chunks:
+            chunks.append("—")
+        chunks.append(body)
+    elif record.status != "done":
+        chunks.append(record.status)
+    return preview_output("\n".join(chunks)) if chunks else record.status
 
 
 def map_agent_event(event: Any) -> list[ChatEvent]:

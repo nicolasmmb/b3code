@@ -284,12 +284,13 @@ class ChatView:
         self.scroll_end()
 
     def _event_task(self, event: ChatEvent) -> None:
-        terminal = bool(event.output) or event.call_id.endswith(":end")
         status = "running"
-        if terminal:
-            status = "error" if "failed" in event.detail else "done"
+        if event.text == "failed":
+            status = "error"
+        elif event.text in {"done", "cancelled"}:
+            status = "done"
         self.upsert_tool(event, status)
-        if terminal:
+        if event.text != "running":
             self.scroll_end()
 
     def _event_error(self, event: ChatEvent) -> None:

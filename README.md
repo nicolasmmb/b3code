@@ -503,12 +503,12 @@ Regras:
 - `background=False`: o pai espera o filho (teto 180 s).
 - `Esc` com o agent busy e `/new` cancelam os filhos.
 
-UI no scroll do pai (um `ToolRow` por filho):
+UI no scroll do pai (um `ToolRow` por filho, o mesmo bloco do start ao fim):
 
-- Background: `Subagent started: "desc"` e, no fim,
-  `Subagent completed/failed/cancelled in Xs: "desc"`.
-- Foreground: o mesmo bloco muda de `running` para o estado final.
-- Fold (`▶ See More`) mostra o output. Sem vista fullscreen do filho.
+- Header compacto, ao vivo: `… explore · desc · Read README.md · 12s`.
+- No fim: `✓ explore · desc · 34s` ou `✗ explore · desc · failed · 8s`.
+- Fold (`▶ See More`) mostra o diário de tools do filho e o resumo. Sem vista fullscreen do filho.
+- `get_command_or_subagent_output` devolve elapsed, últimos passos e o output.
 
 ### 13.3 Mapa de ficheiros
 

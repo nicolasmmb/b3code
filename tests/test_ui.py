@@ -12,6 +12,8 @@ from b3code.config.schema import AppConfig, McpServerConfig, ThemeColors
 from b3code.config.store import ConfigStore
 from b3code.container import AppContainer
 from b3code.services.chat import ChatEvent
+from b3code.services.events import task_event
+from b3code.services.tasks import TaskRecord
 from b3code.ui.app import B3App
 from b3code.ui.coalesce import count_markdown_updates
 from b3code.ui.prompt_bar import PromptBar, PromptInput
@@ -1050,3 +1052,61 @@ async def test_fence_copy_survives_markdown_update(tmp_path: Path):
         await pilot.press("c")
         await pilot.pause()
         assert app.clipboard == "print(1)\n"
+
+
+async def test_subagent_reuses_one_row_and_shows_log(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        rec = TaskRecord(
+            id="sa-deadbeef",
+            kind="explore",
+            description="look around",
+            background=True,
+        )
+        rec.note("Read README.md")
+        rec.note('Searched "TaskHub" in src')
+        screen._apply_event(task_event(rec, terminal=False))
+        await pilot.pause()
+        rows = [row for row in screen.query(ToolRow) if row.tool == "subagent"]
+        assert len(rows) == 1
+        assert rows[0].status == "running"
+        header = str(rows[0]._header.render())
+        assert "explore" in header
+        assert "look around" in header
+        assert "Read README.md" not in rows[0].output
+        rec.status = "done"
+        rec.output = "found 3 sites"
+        screen._apply_event(task_event(rec, terminal=True))
+        await pilot.pause()
+        rows = [row for row in screen.query(ToolRow) if row.tool == "subagent"]
+        assert len(rows) == 1
+        assert rows[0].status == "done"
+        assert "Read README.md" in rows[0].output
+        assert 'Searched "TaskHub" in src' in rows[0].output
+        assert "found 3 sites" in rows[0].output
+        assert rows[0].expandable
+        done_header = str(rows[0]._header.render())
+        assert "✓" in done_header
+        assert "explore" in done_header
+
+
+async def test_subagent_failed_row_is_error(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        rec = TaskRecord(
+            id="sa-fail", kind="explore", description="boom", background=True
+        )
+        rec.status = "failed"
+        rec.output = "nope"
+        screen._apply_event(task_event(rec, terminal=True))
+        await pilot.pause()
+        row = screen.query_one(ToolRow)
+        assert row.status == "error"
+        assert "failed" in row.detail
+        assert "✗" in str(row._header.render())
