@@ -11,7 +11,7 @@ dependencies = [
     "pathspec>=1.1.1",
     "pydantic>=2.10",
     "pydantic-ai-harness[codemode]>=0.18.1",
-    "pydantic-ai-slim[mcp,openai]>=2.28.0",
+    "pydantic-ai-slim[duckduckgo,mcp,openai]>=2.28.0",
     "rapidfuzz>=3.14.5",
     "textual>=1.0",
 ]

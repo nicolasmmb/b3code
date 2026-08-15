@@ -10,7 +10,7 @@ from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.capabilities import WebSearch
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models import Model
-from pydantic_ai_harness import CodeMode, FileSystem, Shell
+from pydantic_ai_harness import CodeMode, Shell
 from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS
 from pydantic_monty import MountDir
 
@@ -64,7 +64,14 @@ HOST_TOOLS = SHELL_TOOLS | {
     "spawn_subagent",
     "get_command_or_subagent_output",
     "kill_command_or_subagent",
+    "duckduckgo_search",
 }
+
+
+# OpenAIChatModel (gateway / DeepSeek) has no native WebSearchTool.
+# local=True keeps the capability and falls back to DuckDuckGo.
+def _web_search() -> WebSearch:
+    return WebSearch(local=True)
 
 
 async def ensure_shell_args(gate: PermissionGate | None, args: Any) -> Any:
@@ -130,8 +137,7 @@ def build_coder(
                 ),
                 max_retries=3,
             ),
-            # FileSystem(),
-            WebSearch(),
+            _web_search(),
             hooks,
         ],
     )
@@ -149,11 +155,7 @@ def build_planner_agent(
 ) -> Agent[None, str]:
     model = injected_model or build_model(config)
     if injected_model is not None:
-        return Agent(
-            model,
-            instructions="You are b3code's planner. Do not implement.",
-            capabilities=[WebSearch()],
-        )
+        return Agent(model, instructions="You are b3code's planner. Do not implement.")
     return build_planner(
         model,
         cwd,

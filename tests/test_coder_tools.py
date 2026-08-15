@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
+from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.models.test import TestModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.tools import ToolDefinition
 
 from b3code.config.schema import AppConfig
 from b3code.services.agents import (
@@ -27,13 +31,14 @@ def _capability_names(agent) -> set[str]:
 
 
 def test_instructions_teach_run_code():
-    assert "run_code" in CODER_INSTRUCTIONS
-    assert "not in the schema" in CODER_INSTRUCTIONS
-    assert "search_tools" in CODER_INSTRUCTIONS
-    assert "todo_write" not in CODER_INSTRUCTIONS
-    assert "ask_user_question" in CODER_INSTRUCTIONS
-    assert "spawn_subagent" in CODER_INSTRUCTIONS
-    assert "use_tool" not in CODER_INSTRUCTIONS
+    text = " ".join(CODER_INSTRUCTIONS)
+    assert "run_code" in text
+    assert "not in the schema" in text
+    assert "search_tools" in text
+    assert "todo_write" not in text
+    assert "ask_user_question" in text
+    assert "spawn_subagent" in text
+    assert "use_tool" not in text
 
 
 def test_orchestration_tools_stay_native():
@@ -50,7 +55,37 @@ def test_coder_has_codemode_and_shell_not_planning(tmp_path: Path):
     caps = _capability_names(_coder(tmp_path))
     assert "CodeMode" in caps
     assert "Shell" in caps
+    assert "WebSearch" in caps
     assert "Planning" not in caps
+
+
+def test_websearch_falls_back_on_gateway_chat_model(tmp_path: Path):
+    agent = _coder(tmp_path)
+    web = next(
+        cap
+        for cap in agent.root_capability.capabilities
+        if type(cap).__name__ == "WebSearch"
+    )
+    inner = web.get_toolset().wrapped
+    params = ModelRequestParameters(
+        native_tools=list(web.get_native_tools()),
+        function_tools=[
+            ToolDefinition(
+                name=name,
+                description=name,
+                parameters_json_schema={"type": "object", "properties": {}},
+                unless_native=web._native_unique_id(),
+            )
+            for name in inner.tools
+        ],
+    )
+    model = OpenAIChatModel(
+        "deepseek-v4-pro",
+        provider=OpenAIProvider(api_key="x", base_url="https://example.invalid/v1"),
+    )
+    model.prepare_request(None, params)
+    assert "duckduckgo_search" in inner.tools
+    assert "duckduckgo_search" in HOST_TOOLS
 
 
 def test_approve_plan_sends_implementer_through_run_code(tmp_path: Path):
