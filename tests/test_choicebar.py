@@ -42,3 +42,31 @@ async def test_plan_bar_paint_and_move():
         assert bar.current() == "quit"
         bar.hide()
         assert bar.display is False
+
+
+async def test_choicebar_set_choices_and_wrap():
+    from b3code.ui.widgets.choicebar import ChoiceBar
+
+    class Dynamic(ChoiceBar):
+        CHOICES = (("a", "a", ""),)
+        SUMMARY_ID = "dyn-summary"
+        OPTIONS_ID = "dyn-options"
+        FALLBACK = "a"
+
+    class Mini(App):
+        def compose(self):
+            yield Dynamic(id="dyn")
+
+    app = Mini()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        bar = app.query_one(Dynamic)
+        bar.set_choices((("a", "a", ""), ("b", "b", ""), ("c", "c", "")))
+        bar.set_summary("pick")
+        assert bar.current() == "a"
+        bar.move(1, wrap=True)
+        assert bar.current() == "b"
+        bar.move(-1, wrap=True)
+        assert bar.current() == "a"
+        bar.move(-1, wrap=True)
+        assert bar.current() == "c"

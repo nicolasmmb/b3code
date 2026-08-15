@@ -19,11 +19,13 @@ from b3code.ui.effects import CommandHooks, dispatch_command
 from b3code.ui.permission_controller import PermissionController
 from b3code.ui.plan_controller import PlanController
 from b3code.ui.prompt_bar import PromptBar, PromptInput
+from b3code.ui.question_controller import QuestionController
 from b3code.ui.stream import FlushScheduler, TextBuffer
 from b3code.ui.stream_host import ChatStreamMixin
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.planbar import PlanBar
+from b3code.ui.widgets.question import QuestionBar
 from b3code.ui.widgets.topbar import TopBar
 from b3code.utils.attachments import Attachment
 from b3code.utils.prompt import build_user_content
@@ -48,6 +50,8 @@ class ChatScreen(ChatStreamMixin, Screen):
         self._flush: FlushScheduler | None = None
         self.plan_controller: PlanController | None = None
         self.permission_controller: PermissionController | None = None
+        self.question_controller: QuestionController | None = None
+        self._pending_task: dict = {}
 
     @property
     def awaiting_plan(self) -> bool:
@@ -72,6 +76,7 @@ class ChatScreen(ChatStreamMixin, Screen):
         with VerticalScroll(id="chat"):
             yield Welcome()
         yield PermissionPicker(id="permission")
+        yield QuestionBar(id="question")
         yield PlanBar(id="plan-bar")
         yield PromptBar(
             self.deps.commands,
@@ -89,6 +94,7 @@ class ChatScreen(ChatStreamMixin, Screen):
         bar = self.query_one(PlanBar)
         picker.display = False
         bar.display = False
+        self.query_one(QuestionBar).display = False
         prompt_bar = self.query_one(PromptBar)
         self.plan_controller = PlanController(
             self.deps.chat,
@@ -103,6 +109,9 @@ class ChatScreen(ChatStreamMixin, Screen):
         )
         self.permission_controller = PermissionController(
             self.deps.chat, picker, self.deps.config.accent
+        )
+        self.question_controller = QuestionController(
+            self.deps.chat, self.query_one(QuestionBar), self.deps.config.accent
         )
         self._flush = FlushScheduler(
             self.call_later, self.set_timer, FLUSH_INTERVAL, self._flush_text
@@ -141,6 +150,8 @@ class ChatScreen(ChatStreamMixin, Screen):
         if self.plan_controller and self.plan_controller.consume_key(event):
             return
         if self.permission_controller and self.permission_controller.consume_key(event):
+            return
+        if self.question_controller and self.question_controller.consume_key(event):
             return
         self.query_one(PromptBar).consume_key(event)
 
@@ -233,6 +244,8 @@ class ChatScreen(ChatStreamMixin, Screen):
             self.plan_controller.set_accent(self.deps.config.accent)
         if self.permission_controller is not None:
             self.permission_controller.set_accent(self.deps.config.accent)
+        if self.question_controller is not None:
+            self.question_controller.set_accent(self.deps.config.accent)
         self.chat_view.rebuild(self.deps.sessions.display_turns())
         self.query_one(TopBar).set_model(self.deps.config.selected_model)
 
@@ -261,6 +274,8 @@ class ChatScreen(ChatStreamMixin, Screen):
         if event.kind not in {"done", "error"}:
             return
         if self.awaiting_plan or self.awaiting_permission:
+            return
+        if self.question_controller and self.question_controller.awaiting:
             return
         self.query_one(PromptBar).enable_input()
 
@@ -292,8 +307,12 @@ class ChatScreen(ChatStreamMixin, Screen):
         if self._flush is not None:
             self._flush.cancel()
         self.text_buffer.reset()
+        self._pending_task = {}
+        self.deps.chat.reset_side_state()
         self.chat_view.clear()
         if self.permission_controller is not None:
             self.permission_controller.reset()
         if self.plan_controller is not None:
             self.plan_controller.reset()
+        if self.question_controller is not None:
+            self.question_controller.reset()

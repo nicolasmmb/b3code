@@ -40,13 +40,16 @@ class TopBar(Horizontal):
         self.query_one("#model-label", Static).update(name)
 
     def set_plan_badge(self, active: bool) -> None:
-        flag = self.query_one("#mode-flag", Static)
-        if not active:
-            flag.update("")
-            flag.display = False
-            return
-        flag.update("plan")
-        flag.display = True
+        _set_flag(self.query_one("#mode-flag", Static), "plan" if active else "")
+
+
+def _set_flag(flag: Static, text: str) -> None:
+    if not text:
+        flag.update("")
+        flag.display = False
+        return
+    flag.update(text)
+    flag.display = True
 
 
 def short_cwd(cwd: Path, home: Path | None = None) -> str:

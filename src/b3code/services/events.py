@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -15,6 +16,8 @@ from pydantic_ai import (
 from pydantic_ai.messages import TextPart, TextPartDelta, ToolReturnPart
 
 from b3code.services.permission import PermissionRequest
+from b3code.services.questions import Question
+from b3code.services.tasks import TaskRecord
 from b3code.utils.diffview import FileChange
 from b3code.utils.diffview import summary as diff_summary
 from b3code.utils.toolview import preview_output, tool_title
@@ -29,6 +32,8 @@ ChatEventKind = Literal[
     "plan_ready",
     "plan_draft",
     "permission",
+    "question",
+    "task",
 ]
 
 
@@ -57,6 +62,47 @@ def diff_event(change: FileChange) -> ChatEvent:
 
 def permission_event(req: PermissionRequest) -> ChatEvent:
     return ChatEvent(kind="permission", text=req.command, detail=", ".join(req.paths))
+
+
+def question_event(questions: tuple[Question, ...]) -> ChatEvent:
+    blocks = [_question_block(item) for item in questions]
+    return ChatEvent(kind="question", text="\n\n".join(blocks))
+
+
+def task_event(record: TaskRecord, *, terminal: bool) -> ChatEvent:
+    elapsed = max(0, int(time.monotonic() - record.started))
+    return ChatEvent(
+        kind="task",
+        tool="subagent",
+        detail=_task_title(record, terminal, elapsed),
+        output=preview_output(record.output) if terminal else "",
+        call_id=_task_call_id(record, terminal),
+    )
+
+
+def _question_block(item: Question) -> str:
+    lines = [item.question]
+    lines.extend(f"{opt.label} — {opt.description}" for opt in item.options)
+    return "\n".join(lines)
+
+
+def _task_title(record: TaskRecord, terminal: bool, elapsed: int) -> str:
+    desc = record.description
+    if not terminal and record.background:
+        return f'Subagent started: "{desc}"'
+    if not terminal:
+        suffix = f" — {record.activity}" if record.activity else ""
+        return f'Subagent running: "{desc}" ({record.kind}){suffix}'
+    label = {"done": "completed", "failed": "failed", "cancelled": "cancelled"}.get(
+        record.status, record.status
+    )
+    return f'Subagent {label} in {elapsed}s: "{desc}"'
+
+
+def _task_call_id(record: TaskRecord, terminal: bool) -> str:
+    if terminal and record.background:
+        return f"{record.id}:end"
+    return record.id
 
 
 def map_agent_event(event: Any) -> list[ChatEvent]:

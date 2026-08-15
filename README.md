@@ -17,6 +17,8 @@ sessões entre execuções. Construído com **Textual** (interface), **Pydantic 
 - **Gate de permissão de shell**: comandos dentro do workspace rodam livres; caminhos fora pedem `once / always / deny`.
 - **Sessões persistentes**: índice + mensagens em `.b3code/`, com retomada (`/resume`).
 - **Diffs coloridos** com número de linha à esquerda, bandas verde/vermelha na linha inteira e *fold* (`▸`) para recolher/expandir linhas omitidas.
+- **Pergunta ao utilizador** (`ask_user_question`): card de escolha no meio do turno.
+- **Subagentes**: o coder lança um filho (`explore`, `plan` ou `general-purpose`) com contexto próprio.
 
 ## 3. Stack e requisitos
 
@@ -268,9 +270,9 @@ a UI só conhece `ChatEvent`.
 |---|---|
 | `config/` | Schema (`AppConfig`), load/save atômico (`ConfigStore`), único escritor (`ConfigService`), checagem de credencial. |
 | `commands/` | Registry de comandos `/`, parser de decisão do Enter (`apply.py`), efeitos puros que a UI aplica (`effects.py`). |
-| `services/` | `ChatService` (orquestra 1 request por vez, lock FIFO), `agents.py` (factories), `mcp.py` (`McpHub`, `search_tool`/`use_tool`), `events.py` (fronteira de eventos), `session.py`, `permission.py`, `plan.py`, `planner.py`, `files.py`, `catalog.py`. |
-| `tools/` | `workspace_toolset`: `read_file`, `list_dir`, `grep`, `write_file`, `replace_in_file`, `delete_file`, `move_file`, com guard de escrita e recorte de saída. |
-| `ui/` | `B3App` + `ChatScreen` (wiring), `ChatView`, `PromptBar`, controllers de plano/permissão, stream com coalesce, widgets (`topbar`, `messages`, `planbar`, `permission`, `spinner`, `autocomplete`). |
+| `services/` | `ChatService` (orquestra 1 request por vez, lock FIFO), `agents.py` (factories), `mcp.py` (`McpHub`), `events.py`, `session.py`, `permission.py`, `plan.py`, `planner.py`, `questions.py`, `tasks.py`, `subagents.py`, `files.py`, `catalog.py`. |
+| `tools/` | `workspace_toolset` (file tools no `run_code`) mais `ask_user_question`, `spawn_subagent` / `get_command_or_subagent_output` / `kill_command_or_subagent` no schema de topo. |
+| `ui/` | `B3App` + `ChatScreen` (wiring), `ChatView`, `PromptBar`, controllers de plano/permissão/pergunta, stream com coalesce, widgets (`topbar`, `messages`, `planbar`, `permission`, `question`, `spinner`, `autocomplete`). |
 | `utils/` | Paths seguros (`/work` → cwd), expansão de `@arquivo`, diff unificado, fuzzy, helpers de texto. |
 | `libs/` | `models.py` — escolha do backend de modelo (gateway vs catálogo). |
 
@@ -300,7 +302,7 @@ flowchart TB
     PLANQ{"plan.active?"}
     CODER["build_coder · INSTRUCTIONS"]
     PLANNER["build_planner_agent · PLAN_INSTRUCTIONS"]
-    TOOLS["tools/workspace.py: read_file, list_dir, grep, write_file, replace_in_file, delete_file, move_file"]
+    TOOLS["workspace + ask_user_question + spawn_subagent"]
     SHELL["Shell (run_command) + CodeMode (/work)"]
     GATE["PermissionGate · once / always / deny"]
     PLANMD[".b3code/plan.md"]
@@ -338,7 +340,104 @@ flowchart TB
     SESS --> BLOBS
 ```
 
-## 13. Testes
+## 13. Tools de topo
+
+O modelo vê dois sítios de tools. As file tools vivem **só** dentro de
+`run_code` (caminhos sob `/work`). As tools desta secção ficam no schema de
+topo. `HOST_TOOLS` em `agents.py` tira-as do CodeMode.
+
+| tool | sítio | quem vê |
+|---|---|---|
+| `read_file`, `list_dir`, `grep`, `write_file`, `replace_in_file`, `delete_file`, `move_file` | só em `run_code` | coder |
+| `run_command`, `start_command`, `check_command`, `stop_command` | topo | coder |
+| `search_tools` | topo | coder e planner |
+| `ask_user_question` | topo | só coder |
+| `spawn_subagent`, `get_command_or_subagent_output`, `kill_command_or_subagent` | topo | só coder |
+| `write_plan_file`, `exit_plan_mode` | topo | só planner |
+
+### 13.1 `ask_user_question`
+
+O coder chama a tool quando uma escolha é mais barata do que um palpite.
+`QuestionGate` espera num `Future`, como o `PermissionGate`. A UI mostra um
+**card** acima do prompt. Não é um bubble no chat.
+
+Schema:
+
+```
+ask_user_question(questions=[{
+  question: str,
+  options: [{label, description}],
+  multi_select?: bool
+}])
+```
+
+Regras:
+
+- Sempre acrescenta a opção `Other` (`type your own answer`).
+- Recusa `multi_select`. Máximo 4 perguntas e 6 opções por pergunta.
+- `Other` escreve-se **no card**, não no PromptBar.
+- O turno do pai continua à espera. O PromptBar fica bloqueado até o card fechar.
+
+| tecla | ação |
+|---|---|
+| `↑` `↓` | move nas opções (não envolve) |
+| `Tab` / `Shift+Tab` | envolve as opções desta pergunta |
+| `←` `→` | pergunta anterior / seguinte |
+| `1`–`9` | escolhe a opção N |
+| `z` ou Other + Enter | abre o campo livre no card |
+| `Enter` | escolhe e avança; na última pergunta, envia |
+| `Esc` | estaciona. O card fica no ecrã. `Tab` volta |
+| `Shift+X` | dispensa. O modelo recebe `skipped` |
+
+Prioridade de teclado: plan → permission → question → prompt.
+
+### 13.2 Subagentes
+
+O coder chama `spawn_subagent` para explorar, planear ou implementar noutro
+contexto. O filho **não** passa por `ChatService.enqueue`. Isso evita deadlock
+no lock FIFO do pai.
+
+```
+spawn_subagent(prompt, description, subagent_type="general-purpose", background=True)
+get_command_or_subagent_output(task_ids, timeout_ms=None)
+kill_command_or_subagent(task_id)
+```
+
+| tipo | ficheiros | shell |
+|---|---|---|
+| `explore` | só leitura | sim (mesmo `PermissionGate`) |
+| `plan` | só leitura | não. Devolve o plano no output. Não grava `.b3code/plan.md` |
+| `general-purpose` | leitura e escrita | sim. Diffs aparecem no chat do pai |
+
+Regras:
+
+- Sem ninho. O filho não tem `spawn_subagent` nem `ask_user_question`.
+- Sem MCP no filho. Sem CodeMode. File tools são nativas.
+- Máximo 3 filhos `running`. Id `sa-` + 8 hex.
+- `background=True` (default): devolve o id na hora. O pai faz poll com
+  `get_command_or_subagent_output`. Sem `timeout_ms` = snapshot. Com timeout =
+  espera até esse prazo (`asyncio.wait`).
+- `background=False`: o pai espera o filho (teto 180 s).
+- `Esc` com o agent busy e `/new` cancelam os filhos.
+
+UI no scroll do pai (um `ToolRow` por filho):
+
+- Background: `Subagent started: "desc"` e, no fim,
+  `Subagent completed/failed/cancelled in Xs: "desc"`.
+- Foreground: o mesmo bloco muda de `running` para o estado final.
+- Fold (`▶ See More`) mostra o output. Sem vista fullscreen do filho.
+
+### 13.3 Mapa de ficheiros
+
+| núcleo | factory | UI |
+|---|---|---|
+| `services/questions.py` | `tools/ask.py` | `QuestionBar` + `QuestionController` |
+| `services/tasks.py` + `subagents.py` | `tools/tasks.py` | `ToolRow` (`kind=task`) |
+
+Nesta versão: sem `multi_select`, sem pane `Ctrl+G`, sem isolation por worktree,
+sem MCP no filho.
+
+## 14. Testes
 
 ```bash
 uv run pytest
@@ -353,12 +452,13 @@ cada família cobre:
 - **Permissão** (`test_permission.py`) — detecção de path fora do cwd e respostas once/always/deny.
 - **Sessão** (`test_session.py`) — round-trip de mensagens nativas e retomada.
 - **Tools / paths** (`test_tools.py`, `test_paths.py`, `test_files.py`) — guard de escrita, escape do workspace, índice de arquivos.
+- **Pergunta / subagentes** (`test_questions.py`, `test_tasks.py`) — `QuestionGate`, card, `TaskHub`, tipos de filho.
 - **Config** (`test_config.py`, `test_config_service.py`, `test_catalog.py`) — schema, persistência, catálogo de modelos.
 - **Comandos** (`test_commands.py`, `test_effects.py`) — registry, decisão do Enter, efeitos.
 - **Diff** (`test_diffview.py`) — diff unificado, recorte e fold.
 - **Memória/perf** (`test_mem_gains.py`, `test_perf.py`) — regressões de pico de memória e tempo.
 
-## 14. Scripts de dev
+## 15. Scripts de dev
 
 | Script | Uso |
 |---|---|
@@ -367,7 +467,7 @@ cada família cobre:
 | `scripts/check_topbar.py` | Inspeção visual da topbar via Pilot (abre a TUI sem LLM). `uv run python scripts/check_topbar.py` |
 | `scripts/repro_plan_cancel.py` | Reproduz cancel no plan mode contra a LLM real. `uv run python scripts/repro_plan_cancel.py` |
 
-## 15. Estrutura de diretórios
+## 16. Estrutura de diretórios
 
 ```
 src/b3code/
@@ -393,10 +493,15 @@ src/b3code/
 │   ├── permission.py      # PermissionGate
 │   ├── plan.py            # PlanMode (só plan.md gravável)
 │   ├── planner.py         # agente especialista de plan
+│   ├── questions.py       # QuestionGate (ask_user_question)
+│   ├── tasks.py           # TaskHub (spawn / snapshot / kill)
+│   ├── subagents.py       # factories do filho
 │   ├── files.py           # FileIndex (@arquivo)
 │   └── catalog.py         # ModelCatalog
 ├── tools/
-│   └── workspace.py       # workspace_toolset
+│   ├── workspace.py       # file tools (vão para o run_code)
+│   ├── ask.py             # ask_user_question
+│   └── tasks.py           # spawn / get / kill
 ├── ui/
 │   ├── app.py             # B3App (Textual)
 │   ├── palette.py         # Theme JSON → Textual Theme + Rich
@@ -405,10 +510,11 @@ src/b3code/
 │   ├── prompt_bar.py      # PromptBar + Autocomplete
 │   ├── plan_controller.py # barra de aprovação do plano
 │   ├── permission_controller.py
+│   ├── question_controller.py
 │   ├── stream.py          # TextBuffer + FlushScheduler
 │   ├── stream_host.py     # ChatStreamMixin (_on_event)
 │   ├── coalesce.py        # 1 update de markdown por frame
-│   └── widgets/           # topbar, messages, planbar, permission, choicebar, spinner, autocomplete
+│   └── widgets/           # topbar, messages, planbar, permission, question, choicebar, spinner, autocomplete
 └── utils/
     ├── paths.py           # paths seguros, /work, escrita atômica
     ├── prompt.py          # @arquivo → bloco <file>
@@ -418,7 +524,7 @@ src/b3code/
     └── text.py            # ellipsize / truncate
 ```
 
-## 16. Notas / troubleshooting
+## 17. Notas / troubleshooting
 
 - **Credencial faltando**: sem `api_key`/`api_endpoint` no JSON (com o gateway
   ligado), o turno não roda e a UI mostra `missing api_key or api_endpoint in

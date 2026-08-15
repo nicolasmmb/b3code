@@ -65,6 +65,9 @@ def test_planner_has_no_write_or_shell(tmp_path: Path):
     assert "run_command" not in names
     assert "write_plan_file" in names
     assert "exit_plan_mode" in names
+    assert "todo_write" not in names
+    assert "ask_user_question" not in names
+    assert "spawn_subagent" not in names
     assert "read_file" in names
     assert "grep" in names
     assert "search_tool" not in names

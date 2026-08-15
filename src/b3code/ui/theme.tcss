@@ -361,6 +361,38 @@ PermissionPicker {
     background: $background;
 }
 
+QuestionBar {
+    display: none;
+    height: auto;
+    background: $background;
+    border-top: solid $surface;
+    padding: 1 2;
+}
+
+#question-summary {
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#question-options {
+    height: auto;
+    max-height: 8;
+    border: none;
+    background: $background;
+    padding: 0;
+}
+
+#question-options > .option-list--option-highlighted {
+    background: $background;
+}
+
+#question-other {
+    display: none;
+    margin-top: 1;
+    border: solid $border;
+    height: 3;
+}
+
 .role {
     color: $text-muted;
     text-style: bold;

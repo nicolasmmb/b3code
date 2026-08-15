@@ -19,6 +19,10 @@ from b3code.services.mcp import McpHub, is_mcp_tool
 from b3code.services.permission import PermissionDenied, PermissionGate
 from b3code.services.plan import PlanMode
 from b3code.services.planner import build_planner
+from b3code.services.questions import QuestionGate
+from b3code.services.tasks import TaskHub
+from b3code.tools.ask import ask_toolset
+from b3code.tools.tasks import task_toolset
 from b3code.tools.workspace import workspace_toolset
 from b3code.utils.diffview import FileChange
 
@@ -33,6 +37,9 @@ INSTRUCTIONS = (
     "Use run_command only for git, tests, and lint — never to write "
     "project files (no cat, heredoc, or echo redirects). "
     "Use search_tools for MCP integrations; names are server_tool. "
+    "Use ask_user_question when a choice is cheaper than an assumption. "
+    "Use spawn_subagent to explore or review in a child context. "
+    "Poll with get_command_or_subagent_output. Do not nest. "
     "Last expression in run_code is the return value. "
     "Respond in the language the user is using. "
     "Follow ASD-STE100 Simplified Technical English style: short sentences, "
@@ -42,6 +49,12 @@ INSTRUCTIONS = (
 SHELL_TOOLS = frozenset(
     {"run_command", "start_command", "check_command", "stop_command"}
 )
+HOST_TOOLS = SHELL_TOOLS | {
+    "ask_user_question",
+    "spawn_subagent",
+    "get_command_or_subagent_output",
+    "kill_command_or_subagent",
+}
 async def ensure_shell_args(gate: PermissionGate | None, args: Any) -> Any:
     if gate is None:
         return args
@@ -56,7 +69,7 @@ async def ensure_shell_args(gate: PermissionGate | None, args: Any) -> Any:
 
 
 def _host_tool(_ctx: Any, tool_def: Any) -> bool:
-    return tool_def.name not in SHELL_TOOLS and not is_mcp_tool(tool_def)
+    return tool_def.name not in HOST_TOOLS and not is_mcp_tool(tool_def)
 
 
 def build_coder(
@@ -67,6 +80,8 @@ def build_coder(
     on_change: Callable[[FileChange], None] | None = None,
     injected_model: Model | None = None,
     mcp: McpHub | None = None,
+    questions: QuestionGate | None = None,
+    tasks: TaskHub | None = None,
 ) -> Agent[None, str]:
     model = injected_model or build_model(config)
     if injected_model is not None:
@@ -83,6 +98,8 @@ def build_coder(
         instructions=INSTRUCTIONS,
         toolsets=[
             workspace_toolset(cwd, on_change=on_change),
+            ask_toolset(questions or QuestionGate()),
+            task_toolset(tasks or TaskHub()),
             *hub.toolsets(mutate=True),
         ],
         capabilities=[

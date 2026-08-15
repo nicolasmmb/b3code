@@ -53,6 +53,7 @@ class ChatView:
         self._plan_active = plan_active
         self._plan_ready_hook: Callable[[ChatEvent], None] | None = None
         self._permission_hook: Callable[[ChatEvent], None] | None = None
+        self._question_hook: Callable[[ChatEvent], None] | None = None
 
     @property
     def thinking(self) -> Spinner | None:
@@ -222,9 +223,11 @@ class ChatView:
         *,
         on_plan_ready: Callable[[ChatEvent], None] | None = None,
         on_permission: Callable[[ChatEvent], None] | None = None,
+        on_question: Callable[[ChatEvent], None] | None = None,
     ) -> None:
         self._plan_ready_hook = on_plan_ready
         self._permission_hook = on_permission
+        self._question_hook = on_question
         handlers = {
             "tool_start": self._event_tool_start,
             "tool_end": self._event_tool_end,
@@ -232,6 +235,8 @@ class ChatView:
             "plan_draft": self._event_plan_draft,
             "plan_ready": self._event_plan_ready,
             "permission": self._event_permission,
+            "question": self._event_question,
+            "task": self._event_task,
             "error": self._event_error,
             "done": self._event_done,
         }
@@ -272,6 +277,20 @@ class ChatView:
         if self._permission_hook is not None:
             self._permission_hook(event)
         self.scroll_end()
+
+    def _event_question(self, event: ChatEvent) -> None:
+        if self._question_hook is not None:
+            self._question_hook(event)
+        self.scroll_end()
+
+    def _event_task(self, event: ChatEvent) -> None:
+        terminal = bool(event.output) or event.call_id.endswith(":end")
+        status = "running"
+        if terminal:
+            status = "error" if "failed" in event.detail else "done"
+        self.upsert_tool(event, status)
+        if terminal:
+            self.scroll_end()
 
     def _event_error(self, event: ChatEvent) -> None:
         self.stop_thinking()

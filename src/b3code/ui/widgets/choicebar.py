@@ -28,32 +28,43 @@ class ChoiceBar(Vertical):
         super().__init__(**kwargs)
         self.accent = accent
         self.muted = muted
+        self._choices = self.CHOICES
 
     def compose(self) -> ComposeResult:
         yield Static("", id=self.SUMMARY_ID)
         yield QuietOptions(id=self.OPTIONS_ID)
 
+    def set_choices(self, choices: tuple[tuple[str, str, str], ...]) -> None:
+        self._choices = choices
+
     def hide(self) -> None:
         self.display = False
 
-    def move(self, delta: int) -> None:
+    def move(self, delta: int, *, wrap: bool = False) -> None:
         options = self.query_one(f"#{self.OPTIONS_ID}", QuietOptions)
         idx = options.highlighted or 0
-        idx = max(0, min(len(self.CHOICES) - 1, idx + delta))
+        last = max(len(self._choices) - 1, 0)
+        if wrap and self._choices:
+            idx = (idx + delta) % len(self._choices)
+        else:
+            idx = max(0, min(last, idx + delta))
         self.paint(idx)
 
     def current(self) -> str:
         idx = self.query_one(f"#{self.OPTIONS_ID}", OptionList).highlighted
-        if idx is None:
+        if idx is None or idx >= len(self._choices):
             return self.FALLBACK
-        return self.CHOICES[idx][0]
+        return self._choices[idx][0]
+
+    def highlighted(self) -> int:
+        return self.query_one(f"#{self.OPTIONS_ID}", OptionList).highlighted or 0
 
     def paint(self, idx: int) -> None:
         accent, muted = self._active_colors()
         options = self.query_one(f"#{self.OPTIONS_ID}", QuietOptions)
         options.clear_options()
         rows: list[Option] = []
-        for i, (_value, label, hint) in enumerate(self.CHOICES):
+        for i, (_value, label, hint) in enumerate(self._choices):
             mark = "›" if i == idx else " "
             body = f"{mark}  {label:<8} {hint}".rstrip()
             style = accent if i == idx else muted

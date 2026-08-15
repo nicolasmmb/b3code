@@ -25,12 +25,17 @@ from b3code.services.events import (
     diff_event,
     map_agent_event,
     permission_event,
+    question_event,
+    task_event,
 )
 from b3code.services.mcp import McpHub
 from b3code.services.permission import PermissionGate
 from b3code.services.plan import PlanMode
 from b3code.services.planner import slim_plan_note
+from b3code.services.questions import QuestionGate
 from b3code.services.session import SessionStore
+from b3code.services.subagents import child_runner
+from b3code.services.tasks import TaskHub, TaskRecord
 from b3code.utils.diffview import FileChange
 from b3code.utils.errors import format_error
 
@@ -51,12 +56,25 @@ class ChatService:
         cwd: Path,
         model: Model | None = None,
         gate: PermissionGate | None = None,
+        questions: QuestionGate | None = None,
+        tasks: TaskHub | None = None,
     ) -> None:
         self.config = config
         self.session = session
         self.cwd = cwd
         self.gate = gate
         self.plan = PlanMode(cwd)
+        self.questions = questions or QuestionGate()
+        self.tasks = tasks or TaskHub(
+            runner=child_runner(
+                config=config,
+                cwd=cwd,
+                gate=gate,
+                on_change=self._emit_change,
+                model=model,
+            )
+        )
+        self.tasks.on_event = self._emit_task
         # Testes injetam TestModel e pulam o Azure.
         self._injected_model = model
         self.mcp = McpHub(config, cwd=cwd)
@@ -98,9 +116,21 @@ class ChatService:
         if self.gate is not None:
             self.gate.answer(choice)
 
+    def answer_question(self, text: str) -> None:
+        self.questions.answer(text)
+
+    def dismiss_question(self) -> None:
+        self.questions.dismiss()
+
     def cancel_current(self) -> None:
         if self._cancel is not None:
             self._cancel.cancel()
+        self.questions.cancel_pending()
+        self.tasks.cancel_all()
+
+    def reset_side_state(self) -> None:
+        self.questions.cancel_pending()
+        self.tasks.cancel_all()
 
     async def enqueue(
         self, prompt: str | Sequence[UserContent], on_event: OnEvent
@@ -137,12 +167,15 @@ class ChatService:
     def _bind_permission(self, on_event: OnEvent) -> None:
         if self.gate is not None:
             self.gate.on_ask = lambda req: on_event(permission_event(req))
+        self.questions.on_ask = lambda qs: on_event(question_event(qs))
 
     def _unbind_turn(self) -> None:
         self._cancel = None
         self._on_event = None
         if self.gate is not None:
             self.gate.on_ask = None
+        self.questions.on_ask = None
+        self.questions.cancel_pending()
 
     async def _dispatch_turn(
         self,
@@ -221,6 +254,8 @@ class ChatService:
                 on_change=self._emit_change,
                 injected_model=self._injected_model,
                 mcp=self.mcp,
+                questions=self.questions,
+                tasks=self.tasks,
             )
         return self._coder
 
@@ -248,3 +283,7 @@ class ChatService:
     def _emit_change(self, change: FileChange) -> None:
         if self._on_event is not None:
             self._on_event(diff_event(change))
+
+    def _emit_task(self, record: TaskRecord, terminal: bool) -> None:
+        if self._on_event is not None:
+            self._on_event(task_event(record, terminal=terminal))

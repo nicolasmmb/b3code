@@ -5,7 +5,7 @@ from pathlib import Path
 from pydantic_ai.models.test import TestModel
 
 from b3code.config.schema import AppConfig
-from b3code.services.agents import INSTRUCTIONS, build_coder
+from b3code.services.agents import HOST_TOOLS, INSTRUCTIONS, _host_tool, build_coder
 from b3code.services.chat import ChatService
 from b3code.services.session import SessionStore
 
@@ -25,7 +25,20 @@ def test_instructions_teach_run_code():
     assert "run_code" in INSTRUCTIONS
     assert "not in the schema" in INSTRUCTIONS
     assert "search_tools" in INSTRUCTIONS
+    assert "todo_write" not in INSTRUCTIONS
+    assert "ask_user_question" in INSTRUCTIONS
+    assert "spawn_subagent" in INSTRUCTIONS
     assert "use_tool" not in INSTRUCTIONS
+
+
+def test_orchestration_tools_stay_native():
+    class _Def:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    for name in HOST_TOOLS:
+        assert _host_tool(None, _Def(name)) is False
+    assert _host_tool(None, _Def("read_file")) is True
 
 
 def test_coder_has_codemode_and_shell_not_planning(tmp_path: Path):
