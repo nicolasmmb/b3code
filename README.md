@@ -507,7 +507,8 @@ UI no scroll do pai (um `ToolRow` por filho, o mesmo bloco do start ao fim):
 
 - Header compacto, ao vivo: `… explore · desc · Read README.md · 12s`.
 - No fim: `✓ explore · desc · 34s` ou `✗ explore · desc · failed · 8s`.
-- Fold (`▶ See More`) mostra o diário de tools do filho e o resumo. Sem vista fullscreen do filho.
+- Fold (`▶ 8 steps`) mostra o diário de tools do filho e o resumo. Sem vista fullscreen do filho.
+- `spawn_subagent` / `get_command_or_subagent_output` / `kill_command_or_subagent` não aparecem no scroll — o card é a única linha. No resume, spawn+get viram o mesmo card.
 - `get_command_or_subagent_output` devolve elapsed, últimos passos e o output.
 
 ### 13.3 Mapa de ficheiros

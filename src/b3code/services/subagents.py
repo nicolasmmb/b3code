@@ -19,7 +19,7 @@ from b3code.services.permission import PermissionGate
 from b3code.services.tasks import TaskRecord
 from b3code.tools.workspace import workspace_toolset
 from b3code.utils.diffview import FileChange
-from b3code.utils.toolview import tool_title
+from b3code.utils.toolview import is_placeholder_title, tool_title
 
 KINDS = ("general-purpose", "explore", "plan")
 
@@ -100,7 +100,10 @@ def note_child_event(record: TaskRecord, event: Any) -> None:
     name = getattr(part, "tool_name", "") or ""
     if not name:
         return
-    record.note(tool_title(name, getattr(part, "args", None)))
+    title = tool_title(name, getattr(part, "args", None))
+    if is_placeholder_title(title, name):
+        return
+    record.note(title)
 
 
 def _caps(kind: str, cwd: Path, gate: PermissionGate | None) -> list[Any]:

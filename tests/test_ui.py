@@ -36,6 +36,8 @@ from b3code.ui.widgets.messages import (
     fence_lang,
     render_diff,
     render_lines,
+    render_subagent_body,
+    tool_fold_label,
 )
 from b3code.ui.widgets.permission import PermissionPicker
 from b3code.ui.widgets.planbar import PlanBar
@@ -1073,10 +1075,12 @@ async def test_subagent_reuses_one_row_and_shows_log(tmp_path: Path):
         rows = [row for row in screen.query(ToolRow) if row.tool == "subagent"]
         assert len(rows) == 1
         assert rows[0].status == "running"
+        assert rows[0].has_class("subagent")
         header = str(rows[0]._header.render())
         assert "explore" in header
         assert "look around" in header
-        assert "Read README.md" not in rows[0].output
+        assert "Read README.md" in rows[0].output
+        assert rows[0].expandable
         rec.status = "done"
         rec.output = "found 3 sites"
         screen._apply_event(task_event(rec, terminal=True))
@@ -1084,6 +1088,7 @@ async def test_subagent_reuses_one_row_and_shows_log(tmp_path: Path):
         rows = [row for row in screen.query(ToolRow) if row.tool == "subagent"]
         assert len(rows) == 1
         assert rows[0].status == "done"
+        assert rows[0].has_class("subagent")
         assert "Read README.md" in rows[0].output
         assert 'Searched "TaskHub" in src' in rows[0].output
         assert "found 3 sites" in rows[0].output
@@ -1091,6 +1096,86 @@ async def test_subagent_reuses_one_row_and_shows_log(tmp_path: Path):
         done_header = str(rows[0]._header.render())
         assert "✓" in done_header
         assert "explore" in done_header
+        assert "▶  2 steps" in str(rows[0]._fold.render())
+
+
+def test_subagent_fold_and_body():
+    diary = '· Read README.md\n· Searched "x"\n—\nfound 3 sites'
+    assert tool_fold_label(diary, expanded=False, tool="subagent") == "▶  2 steps ·"
+    assert tool_fold_label("found 3 sites", expanded=False, tool="subagent") == (
+        "▶  See output ·"
+    )
+    painted = str(render_subagent_body(diary))
+    assert "Read README.md" in painted
+    assert "found 3 sites" in painted
+    assert "—" not in painted
+
+
+async def test_orchestration_tools_do_not_mount(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_start",
+                tool="spawn_subagent",
+                detail="explore · look around",
+                call_id="c1",
+            )
+        )
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_end",
+                tool="spawn_subagent",
+                output="started sa-deadbeef (explore): look around",
+                call_id="c1",
+            )
+        )
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_start",
+                tool="get_command_or_subagent_output",
+                detail="Check subagent",
+                call_id="c2",
+            )
+        )
+        screen._apply_event(
+            ChatEvent(
+                kind="tool_end",
+                tool="get_command_or_subagent_output",
+                output="sa-deadbeef running (explore) 1s — Read a",
+                call_id="c2",
+            )
+        )
+        await pilot.pause()
+        assert list(screen.query(ToolRow)) == []
+
+
+async def test_running_subagent_survives_next_assistant_turn(tmp_path: Path):
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ChatScreen)
+        rec = TaskRecord(
+            id="sa-deadbeef",
+            kind="explore",
+            description="look around",
+            background=True,
+        )
+        rec.note("Read README.md")
+        screen._apply_event(task_event(rec, terminal=False))
+        await pilot.pause()
+        screen.chat_view.start_assistant()
+        rec.note('Searched "TaskHub" in src')
+        screen._apply_event(task_event(rec, terminal=False))
+        await pilot.pause()
+        rows = [row for row in screen.query(ToolRow) if row.tool == "subagent"]
+        assert len(rows) == 1
+        assert rows[0].status == "running"
+        assert "TaskHub" in rows[0].output
 
 
 async def test_subagent_failed_row_is_error(tmp_path: Path):

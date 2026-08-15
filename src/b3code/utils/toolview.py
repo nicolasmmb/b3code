@@ -8,6 +8,14 @@ from typing import Any
 PREVIEW_LINES = 20
 PREVIEW_CHARS = 4000
 
+ORCHESTRATION_TOOLS = frozenset(
+    {
+        "spawn_subagent",
+        "get_command_or_subagent_output",
+        "kill_command_or_subagent",
+    }
+)
+
 _Args = dict[str, Any]
 _SKIP = frozenset(
     {
@@ -24,9 +32,22 @@ _SKIP = frozenset(
         "end_line",
         "start",
         "end",
+        "task_ids",
+        "task_id",
+        "timeout_ms",
+        "background",
+        "subagent_type",
     }
 )
 _SHORT = 120
+
+
+def is_orchestration_tool(name: str) -> bool:
+    return name in ORCHESTRATION_TOOLS
+
+
+def is_placeholder_title(title: str, name: str) -> bool:
+    return title == f"Ran {name}"
 
 
 def parse_args(raw: Any) -> _Args:
@@ -46,6 +67,9 @@ def parse_args(raw: Any) -> _Args:
 
 def tool_title(name: str, args: Any) -> str:
     parsed = parse_args(args)
+    orchestrated = _orchestration_title(name, parsed)
+    if orchestrated:
+        return orchestrated
     command = _short(parsed.get("command"))
     if command:
         return f"$ {command}"
@@ -58,6 +82,18 @@ def tool_title(name: str, args: Any) -> str:
     verb = _verb(name)
     extra = _range_suffix(parsed)
     return f"{verb} {subject}{extra}"
+
+
+def _orchestration_title(name: str, parsed: _Args) -> str:
+    if name == "spawn_subagent":
+        kind = _short(parsed.get("subagent_type")) or "general-purpose"
+        desc = _short(parsed.get("description"))
+        return f"{kind} · {desc}" if desc else kind
+    if name == "get_command_or_subagent_output":
+        return "Check subagent"
+    if name == "kill_command_or_subagent":
+        return "Stop subagent"
+    return ""
 
 
 def preview_output(text: str) -> str:
@@ -107,7 +143,7 @@ def _range_suffix(parsed: _Args) -> str:
 
 
 def _short(value: Any) -> str:
-    if value is None:
+    if value is None or isinstance(value, (list, dict, tuple)):
         return ""
     text = str(value).strip()
     if not text:

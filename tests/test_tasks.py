@@ -5,7 +5,7 @@ from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.models.test import TestModel
 
 from b3code.config.schema import AppConfig
-from b3code.services.events import task_event
+from b3code.services.events import format_elapsed, task_event
 from b3code.services.subagents import build_subagent, note_child_event
 from b3code.services.tasks import MAX_RUNNING, STEPS_CAP, TaskHub, TaskRecord
 from b3code.tools.tasks import task_toolset
@@ -140,7 +140,7 @@ def test_task_event_stable_id_and_compact_title():
     start = task_event(rec, terminal=False)
     assert start.call_id == "sa-deadbeef"
     assert start.text == "running"
-    assert start.output == ""
+    assert "· Read README.md" in start.output
     assert start.tool == "subagent"
     assert start.detail.startswith("explore · look around · Read README.md ·")
     assert start.detail.endswith("s")
@@ -186,6 +186,28 @@ def test_note_child_event_uses_tool_title():
     note_child_event(rec, object())
     assert rec.activity == "Read README.md"
     assert rec.steps == ["Read README.md"]
+
+
+def test_format_elapsed():
+    assert format_elapsed(8) == "8s"
+    assert format_elapsed(60) == "1m"
+    assert format_elapsed(162) == "2m 42s"
+    assert format_elapsed(3600) == "1h"
+
+
+def test_note_child_event_skips_placeholder_title():
+    rec = TaskRecord(id="sa-x", kind="explore", description="x", background=True)
+
+    class Part:
+        tool_name = "read_file"
+        args = {}
+
+    class Ev:
+        part = Part()
+
+    note_child_event(rec, Ev())
+    assert rec.steps == []
+    assert rec.activity == ""
 
 
 def _names(agent) -> set[str]:

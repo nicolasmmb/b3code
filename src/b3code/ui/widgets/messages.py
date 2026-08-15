@@ -442,6 +442,8 @@ class ToolRow(Vertical, can_focus=False):
         self.output = output
         self.status = status
         self.expanded = False
+        if tool == "subagent":
+            self.add_class("subagent")
         self._header = Static("", classes="tool-header")
         self._body = Static("", markup=False, classes="tool-body")
         self._fold = ToolFold("")
@@ -477,6 +479,8 @@ class ToolRow(Vertical, can_focus=False):
         if output is not None:
             self.output = output
         self.set_classes(status)
+        if self.tool == "subagent":
+            self.add_class("subagent")
         self._paint()
 
     def toggle(self) -> None:
@@ -496,12 +500,17 @@ class ToolRow(Vertical, can_focus=False):
         colors = rich_palette(theme_of(self))
         header = render_tool_header(self.status, self.detail, self.tool, colors)
         self._header.update(header)
-        self._body.update(Text(self.output, style=colors.muted))
+        if self.tool == "subagent":
+            self._body.update(render_subagent_body(self.output, colors))
+        else:
+            self._body.update(Text(self.output, style=colors.muted))
         can_open = self.expandable
         self._body.display = self.expanded and can_open
         self._fold.display = can_open
         if can_open:
-            self._fold.update(tool_fold_label(self.output, expanded=self.expanded))
+            self._fold.update(
+                tool_fold_label(self.output, expanded=self.expanded, tool=self.tool)
+            )
         self.refresh(layout=True)
 
 
@@ -526,19 +535,43 @@ def render_tool_header(
 
 
 def _subagent_header(status: str, title: str, colors: RichPalette) -> Text:
-    label = title or "subagent"
+    kind, desc, activity, elapsed = _split_subagent_title(title)
+    mark = "…" if status == "running" else ("✗" if status == "error" else "✓")
+    mark_style = colors.error if status == "error" else colors.muted
+    label_style = colors.error_msg if status == "error" else colors.muted
     out = Text()
-    if status == "running":
-        out.append("… ", style=colors.muted)
-        out.append(label, style=colors.muted)
-        return out
-    if status == "error":
-        out.append("✗ ", style=colors.error)
-        out.append(label, style=colors.error_msg)
-        return out
-    out.append("✓ ", style=colors.muted)
-    out.append(label, style=colors.muted)
+    out.append(f"{mark} ", style=mark_style)
+    out.append(kind or "subagent", style=label_style)
+    if desc:
+        out.append(" · ", style=label_style)
+        out.append(desc, style=label_style)
+    if activity and status == "running":
+        out.append(" · ", style=label_style)
+        out.append(activity, style=colors.file)
+    elif activity:
+        out.append(" · ", style=label_style)
+        out.append(activity, style=label_style)
+    if elapsed:
+        out.append(" · ", style=label_style)
+        out.append(elapsed, style=label_style)
     return out
+
+
+def _split_subagent_title(title: str) -> tuple[str, str, str, str]:
+    parts = [part.strip() for part in (title or "").split(" · ") if part.strip()]
+    elapsed = ""
+    if parts and _looks_like_elapsed(parts[-1]):
+        elapsed = parts.pop()
+    kind = parts[0] if parts else ""
+    desc = parts[1] if len(parts) > 1 else ""
+    activity = " · ".join(parts[2:]) if len(parts) > 2 else ""
+    return kind, desc, activity, elapsed
+
+
+def _looks_like_elapsed(part: str) -> bool:
+    return (
+        bool(part) and part[-1] in {"s", "m", "h"} and any(ch.isdigit() for ch in part)
+    )
 
 
 def _running_subject(title: str) -> str:
@@ -548,11 +581,46 @@ def _running_subject(title: str) -> str:
     return rest or title
 
 
-def tool_fold_label(output: str, *, expanded: bool) -> str:
+def tool_fold_label(output: str, *, expanded: bool, tool: str = "") -> str:
     if expanded:
         return "▲  See Less · -> Press C to copy"
+    if tool == "subagent":
+        steps = subagent_step_count(output)
+        if steps:
+            noun = "step" if steps == 1 else "steps"
+            return f"▶  {steps} {noun} ·"
+        return "▶  See output ·"
     lines = output.count("\n") + (0 if output.endswith("\n") else 1)
     return f"▶  See More {max(lines, 1)} Lines ·"
+
+
+def subagent_step_count(output: str) -> int:
+    return sum(1 for line in output.splitlines() if line.startswith("· "))
+
+
+def render_subagent_body(output: str, colors: RichPalette | None = None) -> Text:
+    colors = colors or rich_palette()
+    text = output.rstrip("\n")
+    if "\n—\n" in text:
+        diary, _, summary = text.partition("\n—\n")
+    elif text.startswith("—\n"):
+        diary, summary = "", text[2:]
+    else:
+        diary, summary = text, ""
+        if diary and not any(line.startswith("· ") for line in diary.splitlines()):
+            diary, summary = "", text
+    out = Text()
+    for line in diary.splitlines():
+        step = line[2:] if line.startswith("· ") else line
+        if not step.strip():
+            continue
+        out.append("  · ", style=colors.muted)
+        out.append(step + "\n", style=colors.muted)
+    if summary.strip():
+        if out:
+            out.append("\n")
+        out.append(summary.strip() + "\n", style=colors.muted)
+    return out
 
 
 class SystemNote(Static):

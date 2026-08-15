@@ -171,9 +171,10 @@ class TaskHub:
             return head + extra
         parts = [head]
         for step in record.steps[-SNAPSHOT_STEPS:]:
-            parts.append(f"  {step}")
+            parts.append(f"  · {step}")
         body = record.output.replace("\n", " ").strip()
         if body:
+            parts.append("  —")
             parts.append(f"  {body[:200]}")
         return "\n".join(parts)
 

@@ -65,6 +65,20 @@ def test_unknown_tools_use_args_not_whitelist():
     assert tool_title("use_tool", {"tool_name": "github__create_issue"}) == (
         "Use github__create_issue"
     )
+    assert (
+        tool_title(
+            "spawn_subagent",
+            {"description": "look around", "subagent_type": "explore"},
+        )
+        == "explore · look around"
+    )
+    assert (
+        tool_title("get_command_or_subagent_output", {"task_ids": ["sa-deadbeef"]})
+        == "Check subagent"
+    )
+    assert tool_title("kill_command_or_subagent", {"task_id": "sa-deadbeef"}) == (
+        "Stop subagent"
+    )
 
 
 def test_preview_output_caps_lines():
@@ -129,3 +143,62 @@ def test_turns_keep_user_prompts():
     turns = turns_from_messages(msgs)
     assert turns[0].role == "user"
     assert turns[0].text == "oi"
+
+
+def test_turns_collapse_spawn_and_get_into_one_card():
+    msgs = [
+        ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name="spawn_subagent",
+                    args={
+                        "prompt": "hi",
+                        "description": "look around",
+                        "subagent_type": "explore",
+                    },
+                    tool_call_id="s1",
+                )
+            ]
+        ),
+        ModelRequest(
+            parts=[
+                ToolReturnPart(
+                    tool_name="spawn_subagent",
+                    content="started sa-deadbeef (explore): look around",
+                    tool_call_id="s1",
+                )
+            ]
+        ),
+        ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name="get_command_or_subagent_output",
+                    args={"task_ids": ["sa-deadbeef"]},
+                    tool_call_id="g1",
+                )
+            ]
+        ),
+        ModelRequest(
+            parts=[
+                ToolReturnPart(
+                    tool_name="get_command_or_subagent_output",
+                    content=(
+                        "sa-deadbeef done (explore) 4s\n"
+                        "  · Read README.md\n"
+                        "  —\n"
+                        "  found 3 sites\n"
+                    ),
+                    tool_call_id="g1",
+                )
+            ]
+        ),
+    ]
+    turns = turns_from_messages(msgs)
+    tools = [t for t in turns if t.role == "tool"]
+    assert len(tools) == 1
+    assert tools[0].tool == "subagent"
+    assert tools[0].detail == "explore · look around"
+    assert tools[0].call_id == "sa-deadbeef"
+    assert "Read README.md" in tools[0].output
+    assert "found 3 sites" in tools[0].output
+    assert "started sa-" not in tools[0].output

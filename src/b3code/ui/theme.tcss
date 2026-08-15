@@ -182,6 +182,14 @@ ToolRow.error > .tool-header {
     color: $error;
 }
 
+ToolRow.subagent {
+    padding: 0 1;
+}
+
+ToolRow.subagent > .tool-body {
+    padding: 0 1 0 2;
+}
+
 .tool-body {
     height: auto;
     color: $text-muted;

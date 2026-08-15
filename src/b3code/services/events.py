@@ -74,7 +74,7 @@ def task_event(record: TaskRecord, *, terminal: bool) -> ChatEvent:
         text=record.status if terminal else "running",
         tool="subagent",
         detail=_task_title(record, terminal, record.elapsed),
-        output=_task_output(record) if terminal else "",
+        output=_task_output(record),
         call_id=record.id,
     )
 
@@ -91,20 +91,30 @@ def _task_title(record: TaskRecord, terminal: bool, elapsed: int) -> str:
         parts.append(record.activity)
     if terminal and record.status in {"failed", "cancelled"}:
         parts.append(record.status)
-    parts.append(f"{elapsed}s")
+    parts.append(format_elapsed(elapsed))
     return " · ".join(part for part in parts if part)
 
 
+def format_elapsed(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, rest = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {rest}s" if rest else f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+
+
 def _task_output(record: TaskRecord) -> str:
-    chunks = list(record.steps)
+    chunks = [f"· {step}" for step in record.steps]
     body = record.output.strip()
     if body:
         if chunks:
             chunks.append("—")
         chunks.append(body)
-    elif record.status != "done":
+    elif record.status not in {"running", "done"}:
         chunks.append(record.status)
-    return preview_output("\n".join(chunks)) if chunks else record.status
+    return "\n".join(chunks)
 
 
 def map_agent_event(event: Any) -> list[ChatEvent]:

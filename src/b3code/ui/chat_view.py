@@ -22,6 +22,7 @@ from b3code.ui.widgets.messages import (
 )
 from b3code.ui.widgets.spinner import Spinner
 from b3code.utils.diffview import FileChange
+from b3code.utils.toolview import is_orchestration_tool
 
 
 def visible_turns(
@@ -109,6 +110,8 @@ class ChatView:
             self.scroll.mount(AssistantMessage(turn.text))
             return
         if turn.role == "tool":
+            if is_orchestration_tool(turn.tool):
+                return
             self.scroll.mount(
                 ToolRow(turn.tool, turn.detail, status="done", output=turn.output)
             )
@@ -119,7 +122,11 @@ class ChatView:
         self.scroll.mount(UserMessage(text))
 
     def start_assistant(self) -> None:
-        self._tools = {}
+        self._tools = {
+            key: row
+            for key, row in self._tools.items()
+            if row.tool == "subagent" and row.status == "running"
+        }
         self._buffer = ""
         self._assistant = AssistantMessage("")
         self.scroll.mount(RoleLabel("assistant"))
@@ -160,6 +167,8 @@ class ChatView:
             kids[idx - 1].remove()
 
     def upsert_tool(self, event: ChatEvent, status: str) -> None:
+        if is_orchestration_tool(event.tool):
+            return
         key = event.call_id or event.tool
         row = self._tools.get(key)
         if row is not None:

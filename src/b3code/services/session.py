@@ -192,7 +192,117 @@ def turns_from_messages(messages: list[ModelMessage]) -> list[DisplayTurn]:
     turns: list[DisplayTurn] = []
     for msg in messages:
         turns.extend(_turns_from_message(msg, returns))
-    return turns
+    return _collapse_subagent_turns(turns)
+
+
+def _collapse_subagent_turns(turns: list[DisplayTurn]) -> list[DisplayTurn]:
+    cards: dict[str, DisplayTurn] = {}
+    pending: dict[str, str] = {}
+    out: list[DisplayTurn] = []
+    for turn in turns:
+        if turn.tool == "spawn_subagent":
+            out.append(_card_from_spawn(turn, cards, pending))
+        elif turn.tool == "get_command_or_subagent_output":
+            _apply_snapshots(turn.output, cards, pending)
+        elif turn.tool != "kill_command_or_subagent":
+            out.append(turn)
+    return out
+
+
+def _card_from_spawn(
+    turn: DisplayTurn,
+    cards: dict[str, DisplayTurn],
+    pending: dict[str, str],
+) -> DisplayTurn:
+    content = (turn.output or "").strip()
+    card = DisplayTurn(
+        role="tool",
+        text="",
+        tool="subagent",
+        detail=turn.detail,
+        output="" if content.startswith("started ") else content,
+        call_id=turn.call_id,
+    )
+    task_id = _sa_id(content)
+    if not task_id:
+        return card
+    card.call_id = task_id
+    cards[task_id] = card
+    if task_id in pending:
+        card.output = pending.pop(task_id)
+    return card
+
+
+def _apply_snapshots(
+    text: str, cards: dict[str, DisplayTurn], pending: dict[str, str]
+) -> None:
+    for task_id, body in _snapshot_bodies(text):
+        if task_id in cards:
+            cards[task_id].output = body
+        else:
+            pending[task_id] = body
+
+
+def _sa_id(text: str) -> str:
+    for token in (text or "").replace("(", " ").replace(")", " ").split():
+        if token.startswith("sa-") and len(token) == 11:
+            return token
+    return ""
+
+
+def _snapshot_bodies(text: str) -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    current = ""
+    steps: list[str] = []
+    summary: list[str] = []
+    in_summary = False
+    for raw in (text or "").splitlines():
+        line = raw.rstrip()
+        if line.startswith("sa-") and " (" in line:
+            _flush_snapshot(found, current, steps, summary)
+            current = line.split()[0]
+            steps, summary, in_summary = [], [], False
+            continue
+        step, summary_line, in_summary = _snapshot_line(line, current, in_summary)
+        if step is not None:
+            steps.append(step)
+        elif summary_line is not None:
+            summary.append(summary_line)
+    _flush_snapshot(found, current, steps, summary)
+    return found
+
+
+def _snapshot_line(
+    line: str, current: str, in_summary: bool
+) -> tuple[str | None, str | None, bool]:
+    if not current:
+        return None, None, in_summary
+    content = line[2:] if line.startswith("  ") else line
+    if content == "—":
+        return None, None, True
+    if content.startswith("· "):
+        content = content[2:]
+    if in_summary:
+        return None, content, True
+    return content, None, False
+
+
+def _flush_snapshot(
+    found: list[tuple[str, str]],
+    current: str,
+    steps: list[str],
+    summary: list[str],
+) -> None:
+    if not current:
+        return
+    chunks = [f"· {step}" for step in steps]
+    body = "\n".join(summary).strip()
+    if body:
+        if chunks:
+            chunks.append("—")
+        chunks.append(body)
+    if chunks:
+        found.append((current, "\n".join(chunks)))
 
 
 def _collect_returns(messages: list[ModelMessage]) -> dict[str, ToolReturnPart]:
