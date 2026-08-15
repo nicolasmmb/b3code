@@ -129,6 +129,26 @@ def test_refresh_is_coroutine():
     assert inspect.iscoroutinefunction(FileIndex.search_async)
 
 
+async def test_search_async_skips_scan_inside_ttl(tmp_path: Path):
+    (tmp_path / "a.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    scanned_at = idx._scanned_at
+    (tmp_path / "late.py").write_text("x")
+    hits = await idx.search_async("late")
+    assert "late.py" not in [str(p) for p in hits]
+    assert idx._scanned_at == scanned_at
+
+
+async def test_search_async_sees_disk_after_ttl(tmp_path: Path):
+    (tmp_path / "a.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    (tmp_path / "late.py").write_text("x")
+    hits = await idx.search_async("late", max_age=0)
+    assert "late.py" in [str(p) for p in hits]
+
+
 async def test_refresh_does_not_block_loop(tmp_path: Path):
     for i in range(80):
         (tmp_path / f"f{i:03d}.txt").write_text("x")

@@ -16,7 +16,6 @@ from b3code.ui.chat_view import ChatView, Welcome
 from b3code.ui.coalesce import FLUSH_INTERVAL
 from b3code.ui.deps import ScreenDeps
 from b3code.ui.effects import CommandHooks, dispatch_command
-from b3code.ui.index_controller import IndexController
 from b3code.ui.permission_controller import PermissionController
 from b3code.ui.plan_controller import PlanController
 from b3code.ui.prompt_bar import PromptBar, PromptInput
@@ -52,7 +51,6 @@ class ChatScreen(ChatStreamMixin, Screen):
         self.plan_controller: PlanController | None = None
         self.permission_controller: PermissionController | None = None
         self.question_controller: QuestionController | None = None
-        self.index_controller: IndexController | None = None
         self._pending_task: dict = {}
 
     @property
@@ -114,11 +112,6 @@ class ChatScreen(ChatStreamMixin, Screen):
         )
         self.question_controller = QuestionController(
             self.deps.chat, self.query_one(QuestionBar), self.deps.config.accent
-        )
-        self.index_controller = IndexController(
-            self.deps.files,
-            on_listed=prompt_bar.refresh_suggestions,
-            on_refresh=prompt_bar.refresh_index,
         )
         self._flush = FlushScheduler(
             self.call_later, self.set_timer, FLUSH_INTERVAL, self._flush_text
@@ -302,8 +295,6 @@ class ChatScreen(ChatStreamMixin, Screen):
 
     def _apply_event(self, event) -> None:
         super()._apply_event(event)
-        if self.index_controller is not None:
-            self.index_controller.on_event(event)
         if event.kind not in {"done", "error"}:
             return
         if self.awaiting_plan or self.awaiting_permission:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from pathlib import Path
 
 import pathspec
@@ -22,11 +23,16 @@ class FileIndex:
         self._spec: pathspec.PathSpec | None = None
         self._files: list[str] = []
         self._ready = False
+        self._scanned_at = 0.0
         self._lock = threading.Lock()
+        self._scan_lock = threading.Lock()
 
     def scan(self) -> None:
-        spec = self._load_gitignore()
-        self._install(spec, self._collect(spec))
+        with self._scan_lock:
+            spec = self._load_gitignore()
+            self._install(spec, self._collect(spec))
+            with self._lock:
+                self._scanned_at = time.monotonic()
 
     async def refresh(self) -> None:
         await asyncio.to_thread(self.scan)
@@ -36,10 +42,19 @@ class FileIndex:
             return
         await self.refresh()
 
+    async def ensure_fresh(self, *, max_age: float = 0.3) -> None:
+        if self._ready and (time.monotonic() - self._scanned_at) < max_age:
+            return
+        await self.refresh()
+
     def search(self, query: str, limit: int = 20) -> list[Path]:
         return rank_paths(query, self._listed(), limit=limit)
 
-    async def search_async(self, query: str, limit: int = 20) -> list[Path]:
+    async def search_async(
+        self, query: str, limit: int = 20, *, max_age: float = 0.3
+    ) -> list[Path]:
+        """Porta da UI: atualiza o índice se o scan é velho e depois ranqueia."""
+        await self.ensure_fresh(max_age=max_age)
         return await asyncio.to_thread(self.search, query, limit)
 
     def read(self, rel: str, *, limit: int | None = ATTACH_CHAR_LIMIT) -> str:
