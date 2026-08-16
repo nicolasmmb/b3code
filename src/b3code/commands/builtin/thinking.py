@@ -24,7 +24,7 @@ def build_thinking(config_service: ConfigService, chat: ChatService) -> Command:
         needle = prefix.lower()
         return [
             Suggestion(
-                value=level, label=level, hint="effort", kind="arg", consume=True
+                value=level, label="effort", hint=level, kind="arg", consume=True
             )
             for level in THINKING_LEVELS
             if level.startswith(needle)

@@ -1,20 +1,21 @@
 """Config persistida. JSON antigo (sem os campos novos) continua válido."""
 
 import re
+from itertools import chain
+from typing import get_args
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic_ai.settings import ThinkingEffort, ThinkingLevel
 
 DEFAULT_ACCENT = "#00b0e6"
 DEFAULT_THEME_NAME = "b3code"
-THINKING_LEVELS = (
-    "off",
-    "auto",
-    "minimal",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-)
+
+
+# 2. Achata a lista de forma eficiente
+# gera um flat list de todos os valores possíveis do ThinkingLevel, incluindo os subtipos.
+THINKING_LEVELS: list[str] = list(
+    chain.from_iterable([get_args(arg) or (arg,) for arg in get_args(ThinkingEffort)])
+) + ["off", "auto"]
 DEFAULT_THINKING = "off"
 
 
@@ -23,7 +24,9 @@ def thinking_badge(level: str) -> str:
         return ""
     if level == "auto":
         return "think"
-    return f"think {level}"
+    return f"[think {level}]"
+
+
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _SLUG_CHUNK = re.compile(r"[^a-z0-9]+")
 _MCP_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -255,7 +258,7 @@ class AppConfig(BaseModel):
     # false = composer de uma linha (Enter envia; newline não entra).
     multiline: bool = True
     # Unified Pydantic AI Thinking effort. off = do not send the setting.
-    thinking: str = DEFAULT_THINKING
+    thinking: ThinkingLevel = DEFAULT_THINKING
     mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
 
     @field_validator("mcp_servers", mode="before")
@@ -277,9 +280,7 @@ class AppConfig(BaseModel):
             return DEFAULT_THINKING
         level = value.strip().lower()
         if level not in THINKING_LEVELS:
-            raise ValueError(
-                f"thinking must be one of {', '.join(THINKING_LEVELS)}"
-            )
+            raise ValueError(f"thinking must be one of {', '.join(THINKING_LEVELS)}")
         return level
 
     @field_validator("exclude_directories", mode="before")
