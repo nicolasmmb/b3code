@@ -13,7 +13,7 @@ class ModelCatalog:
 
     def available(self, cfg: AppConfig) -> list[str]:
         if cfg.use_provider_gateway:
-            return list(cfg.api_models)
+            return list(cfg.gateway_api_models)
         if self._known is None:
             self._known = list(known_model_names())
         return self._known

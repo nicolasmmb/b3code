@@ -48,9 +48,9 @@ def test_split_error_summary_type_and_plain():
         "ConnectError",
         "dns failed",
     )
-    assert split_error_summary("missing api_key or api_endpoint") == (
+    assert split_error_summary("missing gateway_api_key or gateway_api_endpoint") == (
         "",
-        "missing api_key or api_endpoint",
+        "missing gateway_api_key or gateway_api_endpoint",
     )
 
 

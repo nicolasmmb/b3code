@@ -11,9 +11,9 @@ from b3code.services.session import SessionStore
 
 def _service(tmp_path: Path) -> ChatService:
     cfg = AppConfig(
-        api_key="test",
-        api_endpoint="https://example.openai.azure.com/openai/v1/",
-        api_models=["test"],
+        gateway_api_key="test",
+        gateway_api_endpoint="https://example.openai.azure.com/openai/v1/",
+        gateway_api_models=["test"],
     )
     sessions = SessionStore(tmp_path / "sessions.json")
     return ChatService(cfg, sessions, tmp_path, model=TestModel())

@@ -34,7 +34,11 @@ class AppContainer:
         cfg_svc = ConfigService(store, catalog=catalog)
         config = cfg_svc.config
         sessions = SessionStore.for_cwd(cwd)
-        files = FileIndex(cwd)
+        files = FileIndex(
+            cwd,
+            skip_dirs=config.exclude_directories,
+            skip_exts=config.exclude_extensions,
+        )
         gate = PermissionGate(cfg_svc, cwd)
         chat = ChatService(config=config, session=sessions, cwd=cwd, gate=gate)
         commands = CommandRegistry.build(

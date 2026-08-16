@@ -109,12 +109,17 @@ def planner_toolsets(
     on_exit: Callable[[], None] | None = None,
     on_write: Callable[[str], None] | None = None,
     mcp: McpHub | None = None,
+    *,
+    skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
 ) -> list:
     files = workspace_toolset(
         cwd,
         include_write=False,
         max_file_chars=PLAN_READ_CHARS,
         max_hits=PLAN_GREP_HITS,
+        skip_dirs=skip_dirs,
+        skip_exts=skip_exts,
     )
 
     def write_plan_file(content: str) -> str:
@@ -141,9 +146,17 @@ def planner_toolsets(
     return [files, extra, *hub.toolsets(mutate=False)]
 
 
-def planner_tool_names(cwd: Path, plan: PlanMode) -> set[str]:
+def planner_tool_names(
+    cwd: Path,
+    plan: PlanMode,
+    *,
+    skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+) -> set[str]:
     names: set[str] = set()
-    for toolset in planner_toolsets(cwd, plan):
+    for toolset in planner_toolsets(
+        cwd, plan, skip_dirs=skip_dirs, skip_exts=skip_exts
+    ):
         tools = getattr(toolset, "tools", None)
         if tools is not None:
             names.update(tools)
@@ -157,11 +170,22 @@ def build_planner(
     on_exit: Callable[[], None] | None = None,
     on_write: Callable[[str], None] | None = None,
     mcp: McpHub | None = None,
+    *,
+    skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
 ) -> Agent[None, str]:
     return Agent(
         model,
         instructions=PLAN_INSTRUCTIONS,
-        toolsets=planner_toolsets(cwd, plan, on_exit, on_write, mcp=mcp),
+        toolsets=planner_toolsets(
+            cwd,
+            plan,
+            on_exit,
+            on_write,
+            mcp=mcp,
+            skip_dirs=skip_dirs,
+            skip_exts=skip_exts,
+        ),
     )
 
 

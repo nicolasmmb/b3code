@@ -15,6 +15,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
+from b3code.config.schema import DEFAULT_EXCLUDE_DIRECTORIES
 from b3code.services.files import FileIndex
 from b3code.services.session import SessionStore, turns_from_messages
 from b3code.tools.workspace import workspace_toolset
@@ -45,7 +46,7 @@ def test_index_skips_target_dir(tmp_path: Path):
     junk = tmp_path / "target"
     junk.mkdir()
     (junk / "out.o").write_text("no")
-    idx = FileIndex(tmp_path)
+    idx = FileIndex(tmp_path, skip_dirs=DEFAULT_EXCLUDE_DIRECTORIES)
     idx.scan()
     names = [str(p) for p in idx.search("", limit=1000)]
     assert "keep.py" in names

@@ -8,27 +8,8 @@ from __future__ import annotations
 
 import os
 import shlex
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
-
-SKIP_DIRS = frozenset(
-    {
-        ".git",
-        ".venv",
-        ".b3code",
-        "node_modules",
-        "__pycache__",
-        "dist",
-        "target",
-        "build",
-        "vendor",
-        ".tox",
-        ".mypy_cache",
-        ".ruff_cache",
-        "coverage",
-        ".pytest_cache",
-    }
-)
 
 
 def resolve_agent_path(path: str, cwd: Path) -> Path:
@@ -71,12 +52,15 @@ def escaped_paths(command: str, cwd: Path) -> list[Path]:
 def iter_workspace_files(
     root: Path,
     *,
-    skip_dirs: frozenset[str] = SKIP_DIRS,
+    skip_dirs: Iterable[str] = (),
+    skip_exts: Iterable[str] = (),
     max_size: int | None = None,
     skip_rel: Callable[[Path], bool] | None = None,
 ) -> Iterator[Path]:
     """Walk files under `root`, pruning skip_dirs at each level (no post-filter rglob)."""
     root = root.resolve()
+    skip_dirs = frozenset(skip_dirs)
+    skip_exts = frozenset(ext.lower() for ext in skip_exts)
     if root.is_file():
         yield root
         return
@@ -96,6 +80,8 @@ def iter_workspace_files(
                             stack.append(Path(entry.path))
                             continue
                         if not entry.is_file(follow_symlinks=False):
+                            continue
+                        if skip_exts and Path(entry.path).suffix.lower() in skip_exts:
                             continue
                         if (
                             max_size is not None

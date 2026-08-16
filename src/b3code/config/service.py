@@ -37,19 +37,22 @@ class ConfigService:
         if name not in allowed:
             raise ValueError(f"model {name!r} not in catalog")
         self._config.selected_model = name
-        if self._config.use_provider_gateway and name in self._config.api_models:
-            self._config.api_models.remove(name)
-            self._config.api_models.insert(0, name)
+        if (
+            self._config.use_provider_gateway
+            and name in self._config.gateway_api_models
+        ):
+            self._config.gateway_api_models.remove(name)
+            self._config.gateway_api_models.insert(0, name)
         self.store.save(self._config)
 
     def toggle_gateway(self, on: bool) -> None:
         self._config.use_provider_gateway = on
         if (
             on
-            and self._config.api_models
-            and self._config.selected_model not in self._config.api_models
+            and self._config.gateway_api_models
+            and self._config.selected_model not in self._config.gateway_api_models
         ):
-            self._config.selected_model = self._config.api_models[0]
+            self._config.selected_model = self._config.gateway_api_models[0]
         self.store.save(self._config)
 
     def persist_allowed_path(self, path: Path) -> None:

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from b3code.config.schema import (
+    DEFAULT_EXCLUDE_DIRECTORIES,
     THEME_COLOR_DEFAULTS,
     AppConfig,
     McpServerConfig,
@@ -16,17 +17,17 @@ from b3code.config.store import ConfigStore
 
 def test_select_model_moves_to_front(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["a", "b", "c"])
+    cfg = AppConfig(gateway_api_models=["a", "b", "c"])
     store.save(cfg)
     service = ConfigService(store, cfg)
     service.select_model("c")
-    assert cfg.api_models == ["c", "a", "b"]
+    assert cfg.gateway_api_models == ["c", "a", "b"]
     assert cfg.selected_model == "c"
 
 
 def test_select_unknown_model(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["a"])
+    cfg = AppConfig(gateway_api_models=["a"])
     store.save(cfg)
     service = ConfigService(store, cfg)
     with pytest.raises(ValueError):
@@ -40,6 +41,9 @@ def test_legacy_json_defaults_gateway(tmp_path: Path):
     )
     loaded = ConfigStore(path).load()
     assert loaded.use_provider_gateway is True
+    assert loaded.gateway_api_key == "k"
+    assert loaded.gateway_api_endpoint == "https://x/"
+    assert loaded.gateway_api_models == ["m1"]
     assert loaded.selected_model == "m1"
     assert loaded.shell_allowed_paths == []
     assert loaded.accent == "#00b0e6"
@@ -47,6 +51,10 @@ def test_legacy_json_defaults_gateway(tmp_path: Path):
     assert loaded.theme.name == "b3code"
     assert loaded.multiline is True
     assert loaded.mcp_servers == {}
+    payload = json.loads(path.read_text())
+    assert "api_key" not in payload
+    assert "api_endpoint" not in payload
+    assert "api_models" not in payload
 
 
 def test_accent_rejects_bad_hex():
@@ -132,10 +140,14 @@ def test_shell_allowed_paths_roundtrip(tmp_path: Path):
 def test_roundtrip(tmp_path: Path):
     path = tmp_path / ".b3code" / "config.json"
     store = ConfigStore(path)
-    cfg = AppConfig(api_key="k", api_endpoint="https://x/openai/v1/", api_models=["m1"])
+    cfg = AppConfig(
+        gateway_api_key="k",
+        gateway_api_endpoint="https://x/openai/v1/",
+        gateway_api_models=["m1"],
+    )
     store.save(cfg)
     loaded = store.load()
-    assert loaded.api_key == "k"
+    assert loaded.gateway_api_key == "k"
     assert loaded.selected_model == "m1"
     assert loaded.use_provider_gateway is True
 
@@ -143,7 +155,7 @@ def test_roundtrip(tmp_path: Path):
 def test_load_creates_default(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = store.load()
-    assert cfg.api_models
+    assert cfg.gateway_api_models
     assert store.path.exists()
 
 
@@ -182,3 +194,62 @@ def test_first_run_creates_project_settings_with_all_fields(tmp_path: Path):
     payload = json.loads(settings.read_text())
     assert payload == cfg.model_dump(mode="json")
     assert set(payload) == set(AppConfig.model_fields)
+
+
+def test_first_run_writes_gateway_and_exclude_defaults(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = store.load()
+    payload = json.loads(store.path.read_text())
+    assert payload["exclude_directories"] == DEFAULT_EXCLUDE_DIRECTORIES
+    assert payload["exclude_extensions"] == []
+    assert payload["gateway_api_key"] == ""
+    assert payload["gateway_api_endpoint"] == ""
+    assert payload["gateway_api_models"] == ["gpt-4o"]
+    assert cfg.exclude_directories == DEFAULT_EXCLUDE_DIRECTORIES
+
+
+def test_load_adds_missing_exclude_directories(tmp_path: Path):
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"gateway_api_models": ["m1"], "exclude_extensions": [".log"]}\n'
+    )
+    loaded = ConfigStore(path).load()
+    assert loaded.exclude_directories == DEFAULT_EXCLUDE_DIRECTORIES
+    payload = json.loads(path.read_text())
+    assert payload["exclude_directories"] == DEFAULT_EXCLUDE_DIRECTORIES
+
+
+def test_load_adds_missing_exclude_extensions(tmp_path: Path):
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"gateway_api_models": ["m1"], "exclude_directories": ["dist"]}\n'
+    )
+    loaded = ConfigStore(path).load()
+    assert loaded.exclude_extensions == []
+    payload = json.loads(path.read_text())
+    assert payload["exclude_extensions"] == []
+
+
+def test_legacy_gateway_keys_migrate_and_leave_disk_clean(tmp_path: Path):
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"api_key": "k", "api_endpoint": "https://x/", "api_models": ["m1"]}\n'
+    )
+    loaded = ConfigStore(path).load()
+    assert loaded.gateway_api_key == "k"
+    assert loaded.gateway_api_endpoint == "https://x/"
+    assert loaded.gateway_api_models == ["m1"]
+    payload = json.loads(path.read_text())
+    assert "api_key" not in payload
+    assert "api_endpoint" not in payload
+    assert "api_models" not in payload
+
+
+def test_exclude_fields_normalize_on_load():
+    cfg = AppConfig(
+        exclude_directories=[" dist ", "", " node_modules "],
+        exclude_extensions=["PYC", ".Log", "  "],
+    )
+    assert cfg.exclude_directories == ["dist", "node_modules"]
+    assert cfg.exclude_extensions == [".pyc", ".log"]
+

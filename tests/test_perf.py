@@ -112,7 +112,7 @@ def _registry(tmp_path: Path, *, sessions: int = 1) -> CommandRegistry:
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(
         use_provider_gateway=False,
-        api_models=["gpt-4o"],
+        gateway_api_models=["gpt-4o"],
         mcp_servers=_many_mcp(),
     )
     store.save(cfg)
@@ -153,7 +153,7 @@ def _plan_work(tmp_path: Path) -> dict[str, Callable[[], object]]:
     mode = PlanMode(tmp_path)
     target = tmp_path / "a.py"
     chat = ChatService(
-        AppConfig(api_models=["gpt-4o"], mcp_servers=_many_mcp()),
+        AppConfig(gateway_api_models=["gpt-4o"], mcp_servers=_many_mcp()),
         SessionStore(tmp_path / "perf-sessions.json"),
         tmp_path,
         model=TestModel(),

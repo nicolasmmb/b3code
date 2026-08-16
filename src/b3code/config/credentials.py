@@ -6,6 +6,6 @@ from b3code.config.schema import AppConfig
 def missing_gateway_credentials(config: AppConfig) -> str | None:
     if not config.use_provider_gateway:
         return None
-    if config.api_key and config.api_endpoint:
+    if config.gateway_api_key and config.gateway_api_endpoint:
         return None
-    return "missing api_key or api_endpoint in .b3code/config.json"
+    return "missing gateway_api_key or gateway_api_endpoint in .b3code/config.json"

@@ -116,7 +116,12 @@ def build_coder(
         model,
         instructions=CODER_INSTRUCTIONS,
         toolsets=[
-            workspace_toolset(cwd, on_change=on_change),
+            workspace_toolset(
+                cwd,
+                on_change=on_change,
+                skip_dirs=config.exclude_directories,
+                skip_exts=config.exclude_extensions,
+            ),
             ask_toolset(questions or QuestionGate()),
             task_toolset(tasks or TaskHub()),
             *hub.toolsets(mutate=True),
@@ -163,4 +168,6 @@ def build_planner_agent(
         on_exit=on_exit,
         on_write=on_write,
         mcp=mcp or McpHub(config),
+        skip_dirs=config.exclude_directories,
+        skip_exts=config.exclude_extensions,
     )

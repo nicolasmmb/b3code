@@ -18,9 +18,9 @@ from b3code.ui.screens.chat import ChatScreen
 
 def _service(tmp_path: Path) -> ChatService:
     cfg = AppConfig(
-        api_key="test",
-        api_endpoint="https://example.openai.azure.com/openai/v1/",
-        api_models=["test"],
+        gateway_api_key="test",
+        gateway_api_endpoint="https://example.openai.azure.com/openai/v1/",
+        gateway_api_models=["test"],
     )
     return ChatService(cfg, SessionStore(tmp_path / "sessions.json"), tmp_path, model=TestModel())
 
@@ -42,7 +42,7 @@ async def test_cancel_current_stops_function_model_planner(tmp_path: Path):
         yield "should not finish"
 
     chat = ChatService(
-        AppConfig(api_models=["test"]),
+        AppConfig(gateway_api_models=["test"]),
         SessionStore(tmp_path / "sessions.json"),
         tmp_path,
         model=FunctionModel(hang, stream_function=hang_stream),

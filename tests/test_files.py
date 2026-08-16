@@ -6,6 +6,7 @@ import pytest
 
 from b3code.commands.apply import apply_suggestion
 from b3code.commands.types import Suggestion
+from b3code.config.schema import DEFAULT_EXCLUDE_DIRECTORIES
 from b3code.services.files import FileIndex
 from b3code.utils.prompt import current_token, expand_attachments
 
@@ -34,7 +35,7 @@ def test_scan_prunes_skip_dirs(tmp_path: Path):
     junk = tmp_path / "node_modules"
     junk.mkdir()
     (junk / "pkg.js").write_text("no")
-    idx = FileIndex(tmp_path)
+    idx = FileIndex(tmp_path, skip_dirs=DEFAULT_EXCLUDE_DIRECTORIES)
     idx.scan()
     names = [str(p) for p in idx.search("")]
     assert "keep.py" in names
@@ -98,7 +99,7 @@ def test_add_path_is_searchable(tmp_path: Path):
 
 def test_add_path_idempotent_and_skips_junk(tmp_path: Path):
     (tmp_path / "a.py").write_text("ok")
-    idx = FileIndex(tmp_path)
+    idx = FileIndex(tmp_path, skip_dirs=DEFAULT_EXCLUDE_DIRECTORIES)
     idx.scan()
     idx.add_path("a.py")
     idx.add_path("node_modules/pkg.js")
@@ -122,6 +123,28 @@ def test_mutate_before_scan_is_ignored(tmp_path: Path):
     idx.add_path("ghost.py")
     idx.remove_path("ghost.py")
     assert idx.search("") == []
+
+
+def test_scan_omits_excluded_dir(tmp_path: Path):
+    (tmp_path / "keep.py").write_text("ok")
+    junk = tmp_path / "vendor"
+    junk.mkdir()
+    (junk / "pkg.py").write_text("no")
+    idx = FileIndex(tmp_path, skip_dirs=["vendor"])
+    idx.scan()
+    names = [str(p) for p in idx.search("")]
+    assert "keep.py" in names
+    assert not any("vendor" in n for n in names)
+
+
+def test_scan_omits_excluded_extension(tmp_path: Path):
+    (tmp_path / "keep.py").write_text("ok")
+    (tmp_path / "blob.pyc").write_bytes(b"no")
+    idx = FileIndex(tmp_path, skip_exts=[".pyc"])
+    idx.scan()
+    names = [str(p) for p in idx.search("")]
+    assert "keep.py" in names
+    assert "blob.pyc" not in names
 
 
 def test_refresh_is_coroutine():

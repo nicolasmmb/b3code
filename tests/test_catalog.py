@@ -3,7 +3,7 @@ from b3code.services.catalog import complete_models, list_models
 
 
 def test_gateway_lists_json_models():
-    cfg = AppConfig(use_provider_gateway=True, api_models=["a", "b"])
+    cfg = AppConfig(use_provider_gateway=True, gateway_api_models=["a", "b"])
     assert list_models(cfg) == ["a", "b"]
 
 

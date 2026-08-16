@@ -25,6 +25,7 @@ from pydantic_ai.messages import (  # noqa: E402
     UserPromptPart,
 )
 
+from b3code.config.schema import DEFAULT_EXCLUDE_DIRECTORIES  # noqa: E402
 from b3code.services.files import FileIndex  # noqa: E402
 from b3code.services.session import SessionStore, turns_from_messages  # noqa: E402
 from b3code.tools.workspace import workspace_toolset  # noqa: E402
@@ -96,7 +97,7 @@ def run() -> dict:
         root = Path(raw)
         big = _write_tree(root)
 
-        idx = FileIndex(root)
+        idx = FileIndex(root, skip_dirs=DEFAULT_EXCLUDE_DIRECTORIES)
         idx.scan()
         stored = [str(p) for p in idx.search("", limit=100_000)]
         rows.append(

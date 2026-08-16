@@ -684,13 +684,13 @@ async def test_short_error_has_no_fold(tmp_path: Path):
         screen._apply_event(
             ChatEvent(
                 kind="error",
-                text="missing api_key or api_endpoint in .b3code/config.json",
+                text="missing gateway_api_key or gateway_api_endpoint in .b3code/config.json",
             )
         )
         await pilot.pause()
         block = screen.query_one(ErrorBlock)
         assert "Error" in str(block._header.render())
-        assert "missing api_key" in str(block._message.render())
+        assert "missing gateway_api_key" in str(block._message.render())
         assert block._fold.display is False
 
 

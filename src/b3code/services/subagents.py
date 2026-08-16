@@ -53,7 +53,11 @@ def build_subagent(
     resolved = model or build_model(config)
     write = kind == "general-purpose"
     files = workspace_toolset(
-        cwd, on_change=on_change if write else None, include_write=write
+        cwd,
+        on_change=on_change if write else None,
+        include_write=write,
+        skip_dirs=config.exclude_directories,
+        skip_exts=config.exclude_extensions,
     )
     return Agent(
         resolved,

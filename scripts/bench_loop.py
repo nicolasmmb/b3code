@@ -38,7 +38,10 @@ from pydantic_ai.models.test import TestModel  # noqa: E402
 from b3code.commands.apply import apply_suggestion, decide_submit  # noqa: E402
 from b3code.commands.registry import CommandRegistry  # noqa: E402
 from b3code.commands.types import Suggestion  # noqa: E402
-from b3code.config.schema import AppConfig  # noqa: E402
+from b3code.config.schema import (  # noqa: E402
+    DEFAULT_EXCLUDE_DIRECTORIES,
+    AppConfig,
+)
 from b3code.config.store import ConfigStore  # noqa: E402
 from b3code.services.catalog import list_models  # noqa: E402
 from b3code.services.chat import ChatService  # noqa: E402
@@ -105,7 +108,7 @@ def _synth_messages() -> list[Any]:
 
 def _ready_index(cwd: Path) -> FileIndex:
     """Index usable for search — works before (eager ctor) and after (lazy + scan)."""
-    idx = FileIndex(cwd)
+    idx = FileIndex(cwd, skip_dirs=DEFAULT_EXCLUDE_DIRECTORIES)
     files = getattr(idx, "_files", None)
     if files:
         return idx
@@ -120,7 +123,7 @@ def _ready_index(cwd: Path) -> FileIndex:
 
 async def _app_index_build(cwd: Path) -> FileIndex:
     """Path the TUI will take: ctor today (blocks); ensure_scanned after (thread)."""
-    idx = FileIndex(cwd)
+    idx = FileIndex(cwd, skip_dirs=DEFAULT_EXCLUDE_DIRECTORIES)
     ensure = getattr(idx, "ensure_scanned", None)
     if callable(ensure):
         result = ensure()
@@ -323,7 +326,7 @@ async def run_bench() -> dict[str, Any]:
 
     results["delta_updates"] = _delta_updates()
 
-    cfg = AppConfig(use_provider_gateway=False, api_models=["gpt-4o"])
+    cfg = AppConfig(use_provider_gateway=False, gateway_api_models=["gpt-4o"])
     ConfigStore(tmp / "config.json").save(cfg)
     chat = ChatService(cfg, store, tmp, model=TestModel())
     reg = CommandRegistry.build(ConfigStore(tmp / "config.json"), cfg, store, chat)

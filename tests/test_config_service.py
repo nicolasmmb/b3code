@@ -15,14 +15,14 @@ def _service(tmp_path: Path, **kwargs) -> ConfigService:
 
 
 def test_select_model_persists(tmp_path: Path):
-    service = _service(tmp_path, api_models=["a", "b"])
+    service = _service(tmp_path, gateway_api_models=["a", "b"])
     service.select_model("b")
     assert service.config.selected_model == "b"
     assert service.store.load().selected_model == "b"
 
 
 def test_toggle_gateway(tmp_path: Path):
-    service = _service(tmp_path, api_models=["a"])
+    service = _service(tmp_path, gateway_api_models=["a"])
     service.toggle_gateway(False)
     assert service.config.use_provider_gateway is False
     assert service.store.load().use_provider_gateway is False
@@ -32,7 +32,7 @@ def test_toggle_gateway_snaps_to_api_model(tmp_path: Path):
     service = _service(
         tmp_path,
         use_provider_gateway=False,
-        api_models=["a"],
+        gateway_api_models=["a"],
         selected_model="openai:gpt-4o",
     )
     service.toggle_gateway(True)

@@ -107,3 +107,47 @@ def test_mutate_tools_block_escape(tmp_path: Path):
         fns["delete_file"]("../secret")
     with pytest.raises(ValueError):
         fns["move_file"]("a.py", "../secret")
+
+
+def test_list_dir_omits_excluded_dirs_and_exts(tmp_path: Path):
+    (tmp_path / "keep.py").write_text("ok")
+    (tmp_path / "blob.pyc").write_bytes(b"x")
+    (tmp_path / "vendor").mkdir()
+    (tmp_path / "vendor" / "pkg.py").write_text("x")
+    fns = {
+        name: tool.function
+        for name, tool in workspace_toolset(
+            tmp_path, skip_dirs=["vendor"], skip_exts=[".pyc"]
+        ).tools.items()
+    }
+    names = fns["list_dir"](".")
+    assert "keep.py" in names
+    assert "vendor/" not in names
+    assert "blob.pyc" not in names
+
+
+def test_grep_omits_excluded_dirs_and_exts(tmp_path: Path):
+    (tmp_path / "hit.py").write_text("class Foo:\n    pass\n")
+    (tmp_path / "blob.pyc").write_bytes(b"class Hidden\n")
+    (tmp_path / "vendor").mkdir()
+    (tmp_path / "vendor" / "pkg.py").write_text("class Hidden\n")
+    fns = {
+        name: tool.function
+        for name, tool in workspace_toolset(
+            tmp_path, skip_dirs=["vendor"], skip_exts=[".pyc"]
+        ).tools.items()
+    }
+    out = fns["grep"]("class")
+    assert "hit.py" in out
+    assert "vendor" not in out
+    assert "blob.pyc" not in out
+
+
+def test_read_file_explicit_path_ignores_exclusions(tmp_path: Path):
+    (tmp_path / "blob.pyc").write_text("hidden text")
+    fns = {
+        name: tool.function
+        for name, tool in workspace_toolset(tmp_path, skip_exts=[".pyc"]).tools.items()
+    }
+    assert fns["read_file"]("blob.pyc") == "hidden text"
+

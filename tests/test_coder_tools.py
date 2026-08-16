@@ -90,7 +90,7 @@ def test_websearch_falls_back_on_gateway_chat_model(tmp_path: Path):
 
 def test_approve_plan_sends_implementer_through_run_code(tmp_path: Path):
     chat = ChatService(
-        AppConfig(api_models=["test"]),
+        AppConfig(gateway_api_models=["test"]),
         SessionStore(tmp_path / "sessions.json"),
         tmp_path,
         model=TestModel(),

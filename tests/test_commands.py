@@ -21,7 +21,7 @@ from b3code.services.session import SessionStore
 
 def _registry(tmp_path: Path) -> CommandRegistry:
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["gpt-4o", "gpt-4o-mini"])
+    cfg = AppConfig(gateway_api_models=["gpt-4o", "gpt-4o-mini"])
     store.save(cfg)
     sessions = SessionStore(tmp_path / "sessions.json")
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
@@ -51,7 +51,7 @@ def test_execute_help(tmp_path: Path):
 
 def test_execute_model_switch(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["gpt-4o", "gpt-4o-mini"])
+    cfg = AppConfig(gateway_api_models=["gpt-4o", "gpt-4o-mini"])
     store.save(cfg)
     sessions = SessionStore(tmp_path / "sessions.json")
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
@@ -64,7 +64,7 @@ def test_execute_model_switch(tmp_path: Path):
 
 def test_gateway_toggle(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["gpt-4o"])
+    cfg = AppConfig(gateway_api_models=["gpt-4o"])
     store.save(cfg)
     sessions = SessionStore(tmp_path / "sessions.json")
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
@@ -105,7 +105,7 @@ def test_theme_list_and_set(tmp_path: Path):
 def test_theme_set_and_save_accept_spaces(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(
-        api_models=["gpt-4o"],
+        gateway_api_models=["gpt-4o"],
         themes=[
             {"name": "B3 Light", "accent": "#1818b7"},
             {"name": "b3code"},
@@ -131,7 +131,7 @@ def test_theme_set_and_save_accept_spaces(tmp_path: Path):
 
 def test_complete_catalog_models(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(use_provider_gateway=False, api_models=["gpt-4o"])
+    cfg = AppConfig(use_provider_gateway=False, gateway_api_models=["gpt-4o"])
     store.save(cfg)
     sessions = SessionStore(tmp_path / "sessions.json")
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
@@ -202,7 +202,7 @@ def test_complete_resume_lists_sessions(tmp_path: Path):
     sid = sessions.current_id
     sessions.new()
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["gpt-4o"])
+    cfg = AppConfig(gateway_api_models=["gpt-4o"])
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
     reg = CommandRegistry.build(store, cfg, sessions, chat)
     ids = [s.value for s in reg.complete("/resume")]
@@ -222,7 +222,7 @@ def test_complete_partial_still_lists_command(tmp_path: Path):
 
 def test_multiline_toggle(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["gpt-4o"])
+    cfg = AppConfig(gateway_api_models=["gpt-4o"])
     store.save(cfg)
     sessions = SessionStore(tmp_path / "sessions.json")
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
@@ -245,7 +245,7 @@ def test_multiline_toggle(tmp_path: Path):
 
 def test_mcp_add_enable_disable_remove(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["gpt-4o"])
+    cfg = AppConfig(gateway_api_models=["gpt-4o"])
     store.save(cfg)
     sessions = SessionStore(tmp_path / "sessions.json")
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())
@@ -321,7 +321,7 @@ def test_parse_mcp_add_flags():
 
 def test_plan_on_off_and_view(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
-    cfg = AppConfig(api_models=["gpt-4o"])
+    cfg = AppConfig(gateway_api_models=["gpt-4o"])
     store.save(cfg)
     sessions = SessionStore(tmp_path / "sessions.json")
     chat = ChatService(cfg, sessions, tmp_path, model=TestModel())

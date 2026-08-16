@@ -50,10 +50,12 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | Campo | Tipo | Default | Descrição |
 |---|---|---|---|
 | `use_provider_gateway` | bool | `true` | `true` = usa o Azure do JSON (gateway); `false` = catálogo do Pydantic AI. |
-| `api_key` | string | `""` | Chave da API do Azure. |
-| `api_endpoint` | string | `""` | Endpoint do recurso Azure (ex.: `https://SEU-RECURSO.openai.azure.com/openai/v1/`). |
-| `api_models` | list | `["gpt-4o"]` | Modelos listados pelo `/model` quando o gateway está ligado. |
-| `selected_model` | string | primeiro de `api_models` | Modelo ativo. No gateway é um item de `api_models`; no catálogo é `provider:model`. |
+| `gateway_api_key` | string | `""` | Chave da API do Azure. |
+| `gateway_api_endpoint` | string | `""` | Endpoint do recurso Azure (ex.: `https://SEU-RECURSO.openai.azure.com/openai/v1/`). |
+| `gateway_api_models` | list | `["gpt-4o"]` | Modelos listados pelo `/model` quando o gateway está ligado. |
+| `selected_model` | string | primeiro de `gateway_api_models` | Modelo ativo. No gateway é um item de `gateway_api_models`; no catálogo é `provider:model`. |
+| `exclude_directories` | list | ver lista default | Pastas omitidas na descoberta (walk, índice, `list_dir`, `grep`). Compara o `basename`. |
+| `exclude_extensions` | list | `[]` | Extensões omitidas na descoberta. Normalizadas com ponto e minúsculas (`pyc` vira `.pyc`). |
 | `shell_allowed_paths` | list | `[]` | Paths absolutos que o shell pode usar sem perguntar de novo. |
 | `selected_theme` | string | `"b3code"` | Slug do tema ativo (o `name` de um item de `themes`). |
 | `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. JSON antigo com `accent` no topo migra para o tema default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
@@ -65,9 +67,11 @@ Exemplo:
 ```json
 {
   "use_provider_gateway": true,
-  "api_key": "...",
-  "api_endpoint": "https://SEU-RECURSO.openai.azure.com/openai/v1/",
-  "api_models": ["gpt-4o"],
+  "gateway_api_key": "...",
+  "gateway_api_endpoint": "https://SEU-RECURSO.openai.azure.com/openai/v1/",
+  "gateway_api_models": ["gpt-4o"],
+  "exclude_directories": [".git", ".venv", ".b3code", "node_modules", "__pycache__", "dist", "target", "build", "vendor", ".tox", ".mypy_cache", ".ruff_cache", "coverage", ".pytest_cache"],
+  "exclude_extensions": [],
   "selected_model": "gpt-4o",
   "shell_allowed_paths": [],
   "selected_theme": "b3code",
@@ -164,8 +168,8 @@ funcionam. A listagem mostra o label, nunca o slug.
 Há dois modos, trocáveis em runtime com `/gateway on|off` (a flag é persistida
 no JSON) e `/model <nome>`:
 
-- **Gateway (default)** — usa `api_key` + `api_endpoint` do JSON e monta um
-  `OpenAIChatModel` com `AzureProvider`. `/model` lista apenas `api_models`.
+- **Gateway (default)** — usa `gateway_api_key` + `gateway_api_endpoint` do JSON e monta um
+  `OpenAIChatModel` com `AzureProvider`. `/model` lista apenas `gateway_api_models`.
 - **Catálogo Pydantic AI** — o modelo é um id nativo `provider:model`
   (ex.: `openai:gpt-5.2`, `anthropic:claude-sonnet-4-6`). O provider lê a
   credencial dele do ambiente (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …).
@@ -610,8 +614,8 @@ src/b3code/
 
 ## 17. Notas / troubleshooting
 
-- **Credencial faltando**: sem `api_key`/`api_endpoint` no JSON (com o gateway
-  ligado), o turno não roda e a UI mostra `missing api_key or api_endpoint in
+- **Credencial faltando**: sem `gateway_api_key`/`gateway_api_endpoint` no JSON (com o gateway
+  ligado), o turno não roda e a UI mostra `missing gateway_api_key or gateway_api_endpoint in
   .b3code/config.json`. Desligue o gateway (`/gateway off`) ou preencha o JSON.
 - **Busy**: só uma request roda por vez (lock FIFO). Se a barra de input está
   travada com um turno em andamento, `escape` cancela.

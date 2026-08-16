@@ -11,7 +11,7 @@ from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.toolsets import FunctionToolset
 
 from b3code.utils.diffview import FileChange, diff_texts
-from b3code.utils.paths import SKIP_DIRS, iter_workspace_files, safe_workspace_path
+from b3code.utils.paths import iter_workspace_files, safe_workspace_path
 from b3code.utils.text import truncate_chars
 
 _MAX_HITS = 50
@@ -26,7 +26,12 @@ def workspace_toolset(
     include_write: bool = True,
     max_file_chars: int = _MAX_FILE_CHARS,
     max_hits: int = _MAX_HITS,
+    skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
 ) -> FunctionToolset:
+    skip_dirs = frozenset(skip_dirs)
+    skip_exts = frozenset(ext.lower() for ext in skip_exts)
+
     def _rel(target: Path) -> str:
         return str(target.relative_to(cwd.resolve()))
 
@@ -65,9 +70,14 @@ def workspace_toolset(
         target = safe_workspace_path(path, cwd)
         names: list[str] = []
         for child in sorted(target.iterdir(), key=lambda p: p.name.lower()):
-            if child.name in SKIP_DIRS:
-                continue
-            names.append(child.name + ("/" if child.is_dir() else ""))
+            if child.is_dir():
+                if child.name in skip_dirs:
+                    continue
+                names.append(child.name + "/")
+            else:
+                if _ext_excluded(child.name, skip_exts):
+                    continue
+                names.append(child.name)
         return names
 
     def grep(pattern: str, path: str = ".") -> str:
@@ -75,7 +85,7 @@ def workspace_toolset(
         rx = re.compile(pattern)
         root = safe_workspace_path(path, cwd)
         hits: list[str] = []
-        for file in _iter_text_files(root):
+        for file in _iter_text_files(root, skip_dirs, skip_exts):
             rel = file.relative_to(cwd.resolve())
             for i, line in enumerate(_iter_grep_lines(file), 1):
                 if not rx.search(line):
@@ -181,8 +191,14 @@ def _require_unique_span(text: str, old: str, path: str, replace_all: bool) -> i
     return count
 
 
-def _iter_text_files(root: Path):
-    yield from iter_workspace_files(root, max_size=1_000_000)
+def _iter_text_files(root: Path, skip_dirs: frozenset[str], skip_exts: frozenset[str]):
+    yield from iter_workspace_files(
+        root, skip_dirs=skip_dirs, skip_exts=skip_exts, max_size=1_000_000
+    )
+
+
+def _ext_excluded(name: str, exts: frozenset[str]) -> bool:
+    return bool(exts) and Path(name).suffix.lower() in exts
 
 
 def _iter_grep_lines(path: Path):

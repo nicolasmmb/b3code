@@ -11,12 +11,14 @@ def build_model(cfg: AppConfig) -> Model | str:
     if not cfg.use_provider_gateway:
         # "openai:gpt-5.2" — infer_model lê OPENAI_API_KEY (e o resto) do ambiente.
         return cfg.selected_model
-    if not cfg.api_key or not cfg.api_endpoint:
-        raise RuntimeError("set api_key and api_endpoint in .b3code/config.json")
+    if not cfg.gateway_api_key or not cfg.gateway_api_endpoint:
+        raise RuntimeError(
+            "set gateway_api_key and gateway_api_endpoint in .b3code/config.json"
+        )
     return OpenAIChatModel(
         cfg.selected_model,
         provider=AzureProvider(
-            azure_endpoint=cfg.api_endpoint,
-            api_key=cfg.api_key,
+            azure_endpoint=cfg.gateway_api_endpoint,
+            api_key=cfg.gateway_api_key,
         ),
     )

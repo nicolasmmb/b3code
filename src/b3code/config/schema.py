@@ -10,6 +10,23 @@ _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _SLUG_CHUNK = re.compile(r"[^a-z0-9]+")
 _MCP_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
+DEFAULT_EXCLUDE_DIRECTORIES: list[str] = [
+    ".git",
+    ".venv",
+    ".b3code",
+    "node_modules",
+    "__pycache__",
+    "dist",
+    "target",
+    "build",
+    "vendor",
+    ".tox",
+    ".mypy_cache",
+    ".ruff_cache",
+    "coverage",
+    ".pytest_cache",
+]
+
 # B3 institucional (guia da marca): ciano #00b0e6 / navy #003475.
 # Fundo e superfícies ficam cinza-neutro — navy de canvas quebra contraste.
 THEME_COLOR_DEFAULTS: dict[str, str] = {
@@ -41,6 +58,31 @@ def parse_theme_name(value: object, default: str = DEFAULT_THEME_NAME) -> str:
     if not isinstance(value, str):
         return default
     return slugify_theme(value) or default
+
+
+def _normalize_exclude_directories(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return value
+    result: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def _normalize_exclude_extensions(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return value
+    result: list[str] = []
+    for item in value:
+        text = str(item).strip().lower()
+        if not text:
+            continue
+        if not text.startswith("."):
+            text = "." + text
+        result.append(text)
+    return result
 
 
 class ThemeColors(BaseModel):
@@ -176,16 +218,22 @@ def _infer_mcp_transport(has_cmd: bool, url: str) -> str:
 class AppConfig(BaseModel):
     # true = Azure do JSON é o gateway. false = catálogo pydantic-ai.
     use_provider_gateway: bool = True
-    api_key: str = ""
-    api_endpoint: str = ""
-    api_models: list[str] = Field(default_factory=lambda: ["gpt-4o"])
-    # Modelo ativo. No gateway é um item de api_models; no catálogo é provider:model.
+    gateway_api_key: str = ""
+    gateway_api_endpoint: str = ""
+    gateway_api_models: list[str] = Field(default_factory=lambda: ["gpt-4o"])
+    # Modelo ativo. No gateway é um item de gateway_api_models; no catálogo é provider:model.
     selected_model: str = ""
+    # Pastas omitidas na descoberta (walk, índice, list_dir, grep).
+    exclude_directories: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_EXCLUDE_DIRECTORIES)
+    )
+    # Extensões omitidas na descoberta. Normalizadas com ponto e minúsculas.
+    exclude_extensions: list[str] = Field(default_factory=list)
     # Paths absolutos que o Shell pode usar sem perguntar de novo.
     shell_allowed_paths: list[str] = Field(default_factory=list)
     selected_theme: str = DEFAULT_THEME_NAME
     themes: list[ThemeColors] = Field(default_factory=default_themes)
-    # true = paste preserva \\n; Shift+Enter / Alt+Enter inserem newline.
+    # true = paste preserva \n; Shift+Enter / Alt+Enter inserem newline.
     # false = composer de uma linha (Enter envia; newline não entra).
     multiline: bool = True
     mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
@@ -201,6 +249,33 @@ class AppConfig(BaseModel):
     @classmethod
     def _selected_theme_name(cls, value: object) -> str:
         return parse_theme_name(value)
+
+    @field_validator("exclude_directories", mode="before")
+    @classmethod
+    def _normalize_exclude_dirs(cls, value: object) -> object:
+        return _normalize_exclude_directories(value)
+
+    @field_validator("exclude_extensions", mode="before")
+    @classmethod
+    def _normalize_exclude_exts(cls, value: object) -> object:
+        return _normalize_exclude_extensions(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_gateway_fields(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for old, new in (
+            ("api_key", "gateway_api_key"),
+            ("api_endpoint", "gateway_api_endpoint"),
+            ("api_models", "gateway_api_models"),
+        ):
+            if old in data:
+                if new not in data:
+                    data[new] = data[old]
+                del data[old]
+        return data
 
     @model_validator(mode="before")
     @classmethod
@@ -222,7 +297,9 @@ class AppConfig(BaseModel):
     @model_validator(mode="after")
     def _default_selected(self) -> "AppConfig":
         if not self.selected_model:
-            self.selected_model = self.api_models[0] if self.api_models else "gpt-4o"
+            self.selected_model = (
+                self.gateway_api_models[0] if self.gateway_api_models else "gpt-4o"
+            )
         if not self.themes:
             self.themes = default_themes()
         names = {item.name for item in self.themes}

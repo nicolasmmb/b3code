@@ -14,7 +14,7 @@ from pathlib import Path
 import pathspec
 
 from b3code.utils.fuzzy import rank_paths
-from b3code.utils.paths import SKIP_DIRS, iter_workspace_files, safe_workspace_path
+from b3code.utils.paths import iter_workspace_files, safe_workspace_path
 from b3code.utils.prompt import ATTACH_CHAR_LIMIT
 from b3code.utils.text import truncate_chars
 
@@ -22,8 +22,16 @@ INDEX_FILE_CAP = 20_000
 
 
 class FileIndex:
-    def __init__(self, cwd: Path) -> None:
+    def __init__(
+        self,
+        cwd: Path,
+        *,
+        skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+        skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    ) -> None:
         self.cwd = cwd.resolve()
+        self._skip_dirs = frozenset(skip_dirs)
+        self._skip_exts = frozenset(ext.lower() for ext in skip_exts)
         self._spec: pathspec.PathSpec | None = None
         self._files: list[str] = []
         self._ready = False
@@ -76,7 +84,7 @@ class FileIndex:
         if not self._ready:
             return
         posix = _posix(rel)
-        if not _indexable(posix):
+        if not self._indexable(posix):
             return
         files = self._listed()
         if posix in files or len(files) >= INDEX_FILE_CAP:
@@ -105,6 +113,12 @@ class FileIndex:
             self._files = files
             self._ready = True
 
+    def _indexable(self, posix: str) -> bool:
+        if any(part in self._skip_dirs for part in posix.split("/")):
+            return False
+        ext = Path(posix).suffix.lower()
+        return not (ext and ext in self._skip_exts)
+
     def _load_gitignore(self) -> pathspec.PathSpec | None:
         gi = self.cwd / ".gitignore"
         if not gi.exists():
@@ -114,7 +128,10 @@ class FileIndex:
     def _collect(self, spec: pathspec.PathSpec | None) -> list[str]:
         found: list[str] = []
         for path in iter_workspace_files(
-            self.cwd, skip_rel=lambda rel: _skip_rel(spec, rel)
+            self.cwd,
+            skip_dirs=self._skip_dirs,
+            skip_exts=self._skip_exts,
+            skip_rel=lambda rel: _skip_rel(spec, rel),
         ):
             posix = path.relative_to(self.cwd).as_posix()
             if spec and spec.match_file(posix):
@@ -127,10 +144,6 @@ class FileIndex:
 
 def _posix(rel: str) -> str:
     return rel.replace("\\", "/")
-
-
-def _indexable(posix: str) -> bool:
-    return not any(part in SKIP_DIRS for part in posix.split("/"))
 
 
 def _skip_rel(spec: pathspec.PathSpec | None, rel: Path) -> bool:
