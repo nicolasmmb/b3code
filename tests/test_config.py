@@ -34,29 +34,6 @@ def test_select_unknown_model(tmp_path: Path):
         service.select_model("nope")
 
 
-def test_legacy_json_defaults_gateway(tmp_path: Path):
-    path = tmp_path / "config.json"
-    path.write_text(
-        '{"api_key": "k", "api_endpoint": "https://x/", "api_models": ["m1"]}\n'
-    )
-    loaded = ConfigStore(path).load()
-    assert loaded.use_provider_gateway is True
-    assert loaded.gateway_api_key == "k"
-    assert loaded.gateway_api_endpoint == "https://x/"
-    assert loaded.gateway_api_models == ["m1"]
-    assert loaded.selected_model == "m1"
-    assert loaded.shell_allowed_paths == []
-    assert loaded.accent == "#00b0e6"
-    assert loaded.selected_theme == "b3code"
-    assert loaded.theme.name == "b3code"
-    assert loaded.multiline is True
-    assert loaded.mcp_servers == {}
-    payload = json.loads(path.read_text())
-    assert "api_key" not in payload
-    assert "api_endpoint" not in payload
-    assert "api_models" not in payload
-
-
 def test_accent_rejects_bad_hex():
     assert AppConfig(accent="red").accent == "#00b0e6"
     assert AppConfig(accent="#fff").accent == "#fff"
@@ -228,21 +205,6 @@ def test_load_adds_missing_exclude_extensions(tmp_path: Path):
     assert loaded.exclude_extensions == []
     payload = json.loads(path.read_text())
     assert payload["exclude_extensions"] == []
-
-
-def test_legacy_gateway_keys_migrate_and_leave_disk_clean(tmp_path: Path):
-    path = tmp_path / "config.json"
-    path.write_text(
-        '{"api_key": "k", "api_endpoint": "https://x/", "api_models": ["m1"]}\n'
-    )
-    loaded = ConfigStore(path).load()
-    assert loaded.gateway_api_key == "k"
-    assert loaded.gateway_api_endpoint == "https://x/"
-    assert loaded.gateway_api_models == ["m1"]
-    payload = json.loads(path.read_text())
-    assert "api_key" not in payload
-    assert "api_endpoint" not in payload
-    assert "api_models" not in payload
 
 
 def test_exclude_fields_normalize_on_load():

@@ -7,8 +7,6 @@ from pathlib import Path
 from b3code.config.schema import AppConfig
 from b3code.utils.paths import atomic_write_text
 
-_LEGACY_GATEWAY_KEYS = frozenset({"api_key", "api_endpoint", "api_models"})
-
 
 class ConfigStore:
     def __init__(self, path: Path) -> None:
@@ -26,11 +24,7 @@ class ConfigStore:
 
         raw = json.loads(self.path.read_text(encoding="utf-8"))
         cfg = AppConfig.model_validate(raw)
-        needs_save = (
-            "exclude_directories" not in raw
-            or "exclude_extensions" not in raw
-            or any(key in raw for key in _LEGACY_GATEWAY_KEYS)
-        )
+        needs_save = "exclude_directories" not in raw or "exclude_extensions" not in raw
         if needs_save:
             self.save(cfg)
         return cfg
