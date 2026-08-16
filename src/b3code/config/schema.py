@@ -2,10 +2,10 @@
 
 import re
 from itertools import chain
-from typing import get_args
+from typing import Literal, TypeAlias, get_args
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
-from pydantic_ai.settings import ThinkingEffort, ThinkingLevel
+from pydantic_ai.settings import ThinkingEffort
 
 DEFAULT_ACCENT = "#00b0e6"
 DEFAULT_THEME_NAME = "b3code"
@@ -16,6 +16,9 @@ DEFAULT_THEME_NAME = "b3code"
 THINKING_LEVELS: list[str] = list(
     chain.from_iterable([get_args(arg) or (arg,) for arg in get_args(ThinkingEffort)])
 ) + ["off", "auto"]
+
+ThinkingEffortLevels: TypeAlias = Literal[*THINKING_LEVELS + ["off", "auto"]]  # noqa: UP040
+
 DEFAULT_THINKING = "off"
 
 
@@ -258,7 +261,7 @@ class AppConfig(BaseModel):
     # false = composer de uma linha (Enter envia; newline não entra).
     multiline: bool = True
     # Unified Pydantic AI Thinking effort. off = do not send the setting.
-    thinking: ThinkingLevel = DEFAULT_THINKING
+    thinking: ThinkingEffortLevels = DEFAULT_THINKING
     mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
 
     @field_validator("mcp_servers", mode="before")
