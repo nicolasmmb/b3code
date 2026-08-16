@@ -18,20 +18,32 @@ class ConfigStore:
 
     def load(self) -> AppConfig:
         if not self.path.exists():
-            cfg = AppConfig()
-            self.save(cfg)
-            return cfg
+            return self._create_default()
 
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        raw = self._read_json()
         cfg = AppConfig.model_validate(raw)
-        needs_save = "exclude_directories" not in raw or "exclude_extensions" not in raw
-        if needs_save:
+        if self._missing_exclude_fields(raw):
             self.save(cfg)
         return cfg
 
     def save(self, cfg: AppConfig) -> None:
-        atomic_write_text(self.path, cfg.model_dump_json(indent=2) + "\n")
+        atomic_write_text(self.path, self._dump(cfg))
 
     async def save_async(self, cfg: AppConfig) -> None:
-        text = cfg.model_dump_json(indent=2) + "\n"
-        await asyncio.to_thread(atomic_write_text, self.path, text)
+        await asyncio.to_thread(atomic_write_text, self.path, self._dump(cfg))
+
+    def _create_default(self) -> AppConfig:
+        cfg = AppConfig()
+        self.save(cfg)
+        return cfg
+
+    def _read_json(self) -> dict[str, object]:
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _missing_exclude_fields(raw: dict[str, object]) -> bool:
+        return "exclude_directories" not in raw or "exclude_extensions" not in raw
+
+    @staticmethod
+    def _dump(cfg: AppConfig) -> str:
+        return cfg.model_dump_json(indent=2) + "\n"

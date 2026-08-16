@@ -34,20 +34,6 @@ def test_select_unknown_model(tmp_path: Path):
         service.select_model("nope")
 
 
-def test_accent_rejects_bad_hex():
-    assert AppConfig(accent="red").accent == "#00b0e6"
-    assert AppConfig(accent="#fff").accent == "#fff"
-    assert AppConfig(accent="#c9a227").accent == "#c9a227"
-
-
-def test_legacy_accent_migrates_into_default_theme():
-    cfg = AppConfig(accent="#DC143C")
-    assert cfg.theme.name == "b3code"
-    assert cfg.theme.accent == "#DC143C"
-    assert "accent" not in cfg.model_dump()
-    assert cfg.themes[0].accent == "#DC143C"
-
-
 def test_theme_color_rejects_bad_hex():
     theme = AppConfig(themes=[{"name": "x", "background": "blue"}]).theme
     assert theme.background == "#1c1d1f"

@@ -58,7 +58,7 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `exclude_extensions` | list | `[]` | Extensões omitidas na descoberta. Normalizadas com ponto e minúsculas (`pyc` vira `.pyc`). |
 | `shell_allowed_paths` | list | `[]` | Paths absolutos que o shell pode usar sem perguntar de novo. |
 | `selected_theme` | string | `"b3code"` | Slug do tema ativo (o `name` de um item de `themes`). |
-| `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. JSON antigo com `accent` no topo migra para o tema default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
+| `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
 | `multiline` | bool | `true` | `true` = paste preserva `\\n`; Shift+Enter insere newline. |
 | `mcp_servers` | object | `{}` | Servers MCP por nome. Cada um tem `command`+`args`+`env` (stdio) **ou** `url`+`headers` (HTTP/SSE), mais `enabled`, `transport` (`stdio`/`http`/`sse`), `startup_timeout_sec` (30) e `tool_timeout_sec` (120). Tudo vive neste JSON. Aceita `${VAR}` / `${VAR:-default}` na conexão. |
 
@@ -125,8 +125,7 @@ de texto e diffs.
 | `success` | `#3fba7a` | diffs `+` |
 
 `github-dark` (Primer) vem no mesmo JSON. Hex inválido em qualquer token volta
-ao default daquele token. JSON antigo com `accent` no topo migra para o tema
-`b3code`.
+ao default daquele token.
 
 ### MCP
 

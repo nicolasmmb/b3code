@@ -260,40 +260,6 @@ class AppConfig(BaseModel):
     def _normalize_exclude_exts(cls, value: object) -> object:
         return _normalize_exclude_extensions(value)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_gateway_fields(cls, data: object) -> object:
-        if not isinstance(data, dict):
-            return data
-        data = dict(data)
-        for old, new in (
-            ("api_key", "gateway_api_key"),
-            ("api_endpoint", "gateway_api_endpoint"),
-            ("api_models", "gateway_api_models"),
-        ):
-            if old in data:
-                if new not in data:
-                    data[new] = data[old]
-                del data[old]
-        return data
-
-    @model_validator(mode="before")
-    @classmethod
-    def _legacy_accent(cls, data: object) -> object:
-        if not isinstance(data, dict):
-            return data
-        data = dict(data)
-        legacy = data.pop("accent", None)
-        if data.get("themes") is not None or legacy is None:
-            return data
-        colors: dict[str, object] = {"name": DEFAULT_THEME_NAME}
-        parsed = parse_hex(legacy, "")
-        if parsed:
-            colors["accent"] = parsed
-        data["themes"] = [colors]
-        data.setdefault("selected_theme", DEFAULT_THEME_NAME)
-        return data
-
     @model_validator(mode="after")
     def _default_selected(self) -> "AppConfig":
         if not self.selected_model:
