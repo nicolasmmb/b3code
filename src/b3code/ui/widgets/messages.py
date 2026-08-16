@@ -143,6 +143,29 @@ class AssistantMessage(ChatMarkdown):
     """Resposta da LLM. `update()` a cada delta do stream."""
 
 
+class ThoughtBlock(Vertical):
+    """Raciocínio do modelo. Dim, separado da resposta."""
+
+    def __init__(self, text: str = "") -> None:
+        super().__init__(classes="thought")
+        self._text = text
+        self._body = Static(text, classes="thought-body")
+
+    def compose(self) -> ComposeResult:
+        yield Static("thought", classes="thought-head")
+        if self._text:
+            yield self._body
+
+    def append(self, chunk: str) -> None:
+        if not chunk:
+            return
+        first = not self._text
+        self._text += chunk
+        self._body.update(self._text)
+        if first and self._body.parent is None:
+            self.mount(self._body)
+
+
 class PlanDoc(ChatMarkdown):
     """Preview do plan.md (Grok: o plano inteiro, não uma linha)."""
 

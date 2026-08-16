@@ -47,6 +47,7 @@ class ChatScreen(ChatStreamMixin, Screen):
         self.deps = deps
         self.chat_view = ChatView(lambda: self.deps.chat.plan.active)
         self.text_buffer = TextBuffer()
+        self.thought_buffer = TextBuffer()
         self._flush: FlushScheduler | None = None
         self.plan_controller: PlanController | None = None
         self.permission_controller: PermissionController | None = None
@@ -72,7 +73,11 @@ class ChatScreen(ChatStreamMixin, Screen):
             self.permission_controller.awaiting = value
 
     def compose(self) -> ComposeResult:
-        yield TopBar(self.deps.cwd, self.deps.config.selected_model)
+        yield TopBar(
+            self.deps.cwd,
+            self.deps.config.selected_model,
+            self.deps.config.thinking,
+        )
         with VerticalScroll(id="chat"):
             yield Welcome()
         yield PermissionPicker(id="permission")
@@ -117,6 +122,7 @@ class ChatScreen(ChatStreamMixin, Screen):
             self.call_later, self.set_timer, FLUSH_INTERVAL, self._flush_text
         )
         self._set_plan_badge()
+        self._set_think_badge()
         prompt_bar.focus_input()
         turns = self.deps.sessions.display_turns()
         if turns:
@@ -125,6 +131,9 @@ class ChatScreen(ChatStreamMixin, Screen):
 
     def _set_plan_badge(self) -> None:
         self.query_one(TopBar).set_plan_badge(self.deps.chat.plan.active)
+
+    def _set_think_badge(self) -> None:
+        self.query_one(TopBar).set_thinking(self.deps.config.thinking)
 
     @on(PromptInput.Submitted, "#prompt")
     def on_prompt_submitted(self, event: PromptInput.Submitted) -> None:
@@ -272,6 +281,7 @@ class ChatScreen(ChatStreamMixin, Screen):
             self.question_controller.set_accent(self.deps.config.accent)
         self.chat_view.rebuild(self.deps.sessions.display_turns())
         self.query_one(TopBar).set_model(self.deps.config.selected_model)
+        self._set_think_badge()
 
     def _after_plan_off(self) -> None:
         self._set_plan_badge()
@@ -331,6 +341,7 @@ class ChatScreen(ChatStreamMixin, Screen):
         if self._flush is not None:
             self._flush.cancel()
         self.text_buffer.reset()
+        self.thought_buffer.reset()
         self._pending_task = {}
         self.deps.chat.reset_side_state()
         self.chat_view.clear()

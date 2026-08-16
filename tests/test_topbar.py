@@ -2,6 +2,7 @@ from pathlib import Path
 
 from textual.widgets import Static
 
+from b3code.config.schema import thinking_badge
 from b3code.container import AppContainer
 from b3code.ui.app import B3App
 from b3code.ui.widgets.topbar import branch_icon, git_label, short_cwd
@@ -76,6 +77,12 @@ def test_git_label_worktree_file(tmp_path: Path):
     assert label is not None
     assert label.branch == "topic"
     assert label.worktree is True
+
+
+def test_thinking_badge_labels():
+    assert thinking_badge("off") == ""
+    assert thinking_badge("auto") == "think"
+    assert thinking_badge("high") == "think high"
 
 
 def test_branch_icon_ascii_fallback(monkeypatch):

@@ -39,6 +39,16 @@ def test_toggle_gateway_snaps_to_api_model(tmp_path: Path):
     assert service.config.selected_model == "a"
 
 
+def test_set_thinking(tmp_path: Path):
+    service = _service(tmp_path)
+    assert service.config.thinking == "off"
+    service.set_thinking("high")
+    assert service.config.thinking == "high"
+    assert service.store.load().thinking == "high"
+    with pytest.raises(ValueError, match="thinking"):
+        service.set_thinking("max")
+
+
 def test_set_multiline(tmp_path: Path):
     service = _service(tmp_path)
     assert service.config.multiline is True

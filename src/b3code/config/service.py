@@ -6,6 +6,7 @@ from pathlib import Path
 
 from b3code.config.schema import (
     THEME_COLOR_DEFAULTS,
+    THINKING_LEVELS,
     AppConfig,
     McpServerConfig,
     ThemeColors,
@@ -64,6 +65,13 @@ class ConfigService:
 
     def set_multiline(self, on: bool) -> None:
         self._config.multiline = on
+        self.store.save(self._config)
+
+    def set_thinking(self, level: str) -> None:
+        name = level.strip().lower()
+        if name not in THINKING_LEVELS:
+            raise ValueError(f"thinking {level!r} not in {', '.join(THINKING_LEVELS)}")
+        self._config.thinking = name
         self.store.save(self._config)
 
     def find_theme(self, name: str) -> ThemeColors | None:

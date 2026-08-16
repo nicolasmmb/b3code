@@ -6,6 +6,24 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_va
 
 DEFAULT_ACCENT = "#00b0e6"
 DEFAULT_THEME_NAME = "b3code"
+THINKING_LEVELS = (
+    "off",
+    "auto",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+)
+DEFAULT_THINKING = "off"
+
+
+def thinking_badge(level: str) -> str:
+    if level == "off":
+        return ""
+    if level == "auto":
+        return "think"
+    return f"think {level}"
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _SLUG_CHUNK = re.compile(r"[^a-z0-9]+")
 _MCP_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -236,6 +254,8 @@ class AppConfig(BaseModel):
     # true = paste preserva \n; Shift+Enter / Alt+Enter inserem newline.
     # false = composer de uma linha (Enter envia; newline não entra).
     multiline: bool = True
+    # Unified Pydantic AI Thinking effort. off = do not send the setting.
+    thinking: str = DEFAULT_THINKING
     mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
 
     @field_validator("mcp_servers", mode="before")
@@ -249,6 +269,18 @@ class AppConfig(BaseModel):
     @classmethod
     def _selected_theme_name(cls, value: object) -> str:
         return parse_theme_name(value)
+
+    @field_validator("thinking", mode="before")
+    @classmethod
+    def _thinking_level(cls, value: object) -> str:
+        if not isinstance(value, str):
+            return DEFAULT_THINKING
+        level = value.strip().lower()
+        if level not in THINKING_LEVELS:
+            raise ValueError(
+                f"thinking must be one of {', '.join(THINKING_LEVELS)}"
+            )
+        return level
 
     @field_validator("exclude_directories", mode="before")
     @classmethod

@@ -93,6 +93,18 @@ def test_unknown_selected_theme_snaps_to_first():
     assert cfg.theme.accent == "#DC143C"
 
 
+def test_thinking_rejects_unknown():
+    with pytest.raises(ValueError, match="thinking"):
+        AppConfig(thinking="max")
+
+
+def test_thinking_roundtrip(tmp_path: Path):
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(thinking="high")
+    store.save(cfg)
+    assert store.load().thinking == "high"
+
+
 def test_shell_allowed_paths_roundtrip(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(shell_allowed_paths=["/tmp"])

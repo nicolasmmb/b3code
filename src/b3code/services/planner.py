@@ -10,6 +10,7 @@ from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.models import Model
 from pydantic_ai.toolsets import FunctionToolset
 
+from b3code.config.schema import AppConfig
 from b3code.services.mcp import McpHub
 from b3code.services.plan import PlanMode
 from b3code.tools.workspace import workspace_toolset
@@ -173,7 +174,13 @@ def build_planner(
     *,
     skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
     skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    config: AppConfig | None = None,
 ) -> Agent[None, str]:
+    from b3code.services.agents import thinking_cap
+
+    caps = []
+    if config is not None and (cap := thinking_cap(config)):
+        caps.append(cap)
     return Agent(
         model,
         instructions=PLAN_INSTRUCTIONS,
@@ -186,6 +193,7 @@ def build_planner(
             skip_dirs=skip_dirs,
             skip_exts=skip_exts,
         ),
+        capabilities=caps or None,
     )
 
 

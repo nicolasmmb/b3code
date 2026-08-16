@@ -14,6 +14,7 @@ from b3code.services.agents import (
     HOST_TOOLS,
     _host_tool,
     build_coder,
+    thinking_cap,
 )
 from b3code.services.chat import ChatService
 from b3code.services.session import SessionStore
@@ -57,6 +58,33 @@ def test_coder_has_codemode_and_shell_not_planning(tmp_path: Path):
     assert "Shell" in caps
     assert "WebSearch" in caps
     assert "Planning" not in caps
+
+
+def test_thinking_cap_follows_config():
+    assert thinking_cap(AppConfig(thinking="off")) is None
+    auto = thinking_cap(AppConfig(thinking="auto"))
+    assert auto is not None
+    assert auto.effort is True
+    high = thinking_cap(AppConfig(thinking="high"))
+    assert high is not None
+    assert high.effort == "high"
+
+
+def test_coder_includes_thinking_when_enabled(tmp_path: Path):
+    off = build_coder(
+        config=AppConfig(
+            use_provider_gateway=False, selected_model="openai:gpt-4o", thinking="off"
+        ),
+        cwd=tmp_path,
+    )
+    on = build_coder(
+        config=AppConfig(
+            use_provider_gateway=False, selected_model="openai:gpt-4o", thinking="high"
+        ),
+        cwd=tmp_path,
+    )
+    assert "Thinking" not in _capability_names(off)
+    assert "Thinking" in _capability_names(on)
 
 
 def test_websearch_falls_back_on_gateway_chat_model(tmp_path: Path):

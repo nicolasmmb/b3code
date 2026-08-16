@@ -21,6 +21,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -48,7 +49,7 @@ class SessionFile(BaseModel):
 class DisplayTurn:
     """O que a UI precisa pintar. Sem tipos do pydantic_ai."""
 
-    role: Literal["user", "assistant", "tool"]
+    role: Literal["user", "assistant", "thinking", "tool"]
     text: str
     tool: str = ""
     detail: str = ""
@@ -344,6 +345,9 @@ def _turns_from_response(
     for part in msg.parts:
         if isinstance(part, ToolCallPart):
             turns.extend(_turns_from_tool_call(part, returns.get(part.tool_call_id)))
+            continue
+        if isinstance(part, ThinkingPart) and part.content:
+            turns.append(DisplayTurn(role="thinking", text=part.content))
             continue
         if isinstance(part, TextPart) and part.content:
             turns.append(DisplayTurn(role="assistant", text=part.content))
