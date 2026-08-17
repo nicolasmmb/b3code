@@ -34,6 +34,7 @@ from b3code.services.plan import PlanMode
 from b3code.services.planner import slim_plan_note
 from b3code.services.questions import QuestionGate
 from b3code.services.session import SessionStore
+from b3code.services.skills import SkillIndex
 from b3code.services.subagents import child_runner
 from b3code.services.tasks import TaskHub, TaskRecord
 from b3code.utils.diffview import FileChange
@@ -57,12 +58,14 @@ class ChatService:
         model: Model | None = None,
         gate: PermissionGate | None = None,
         questions: QuestionGate | None = None,
+        skills: SkillIndex | None = None,
         tasks: TaskHub | None = None,
     ) -> None:
         self.config = config
         self.session = session
         self.cwd = cwd
         self.gate = gate
+        self.skills = skills or SkillIndex(cwd)
         self.plan = PlanMode(cwd)
         self.questions = questions or QuestionGate()
         self.tasks = tasks or TaskHub(
@@ -255,6 +258,7 @@ class ChatService:
                 injected_model=self._injected_model,
                 mcp=self.mcp,
                 questions=self.questions,
+                skills=self.skills,
                 tasks=self.tasks,
             )
         return self._coder

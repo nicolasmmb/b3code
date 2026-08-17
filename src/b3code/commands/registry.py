@@ -15,6 +15,7 @@ from b3code.config.schema import AppConfig
 from b3code.config.store import ConfigStore
 from b3code.services.chat import ChatService
 from b3code.services.session import SessionStore
+from b3code.services.skills import SkillIndex
 
 
 @dataclass
@@ -27,9 +28,16 @@ class Command:
 
 
 class CommandRegistry:
-    def __init__(self, roots: dict[str, Command], config: AppConfig) -> None:
+    def __init__(
+        self,
+        roots: dict[str, Command],
+        config: AppConfig,
+        skills: SkillIndex | None = None,
+    ) -> None:
         self.roots = roots
         self.config = config
+        self.skills = skills
+        self._skill_names: set[str] = set()
 
     @classmethod
     def build(
@@ -40,20 +48,45 @@ class CommandRegistry:
         chat: ChatService,
         catalog=None,
         config_service=None,
+        skills: SkillIndex | None = None,
     ) -> CommandRegistry:
         from b3code.commands.builtin import CommandServices, build_all
         from b3code.config.service import ConfigService
         from b3code.services.catalog import ModelCatalog
 
         cfg_svc = config_service or ConfigService(store, config)
+        index = skills or SkillIndex(chat.cwd, cfg_svc.config.skills)
         services = CommandServices(
             config_service=cfg_svc,
             sessions=sessions,
             chat=chat,
             catalog=catalog or ModelCatalog(),
+            skills=index,
         )
         roots = {cmd.name: cmd for cmd in build_all(services)}
-        return cls(roots, cfg_svc.config)
+        registry = cls(roots, cfg_svc.config, skills=index)
+        registry._install_skills()
+        return registry
+
+    def _install_skills(self) -> None:
+        if self.skills is None:
+            return
+        from b3code.commands.builtin.skills import build_skill_command
+
+        for skill in self.skills.skills():
+            if not skill.user_invocable:
+                continue
+            name = skill.name
+            if name in self.roots:
+                name = f"{skill.scope}:{skill.name}"
+            self.roots[name] = build_skill_command(skill, self.skills, name=name)
+            self._skill_names.add(name)
+
+    def reload_skills(self) -> None:
+        for name in self._skill_names:
+            self.roots.pop(name, None)
+        self._skill_names.clear()
+        self._install_skills()
 
     def complete(self, line: str) -> list[Suggestion]:
         if not line.startswith("/"):

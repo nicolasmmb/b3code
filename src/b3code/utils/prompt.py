@@ -22,6 +22,7 @@ from b3code.utils.attachments import (
 
 AT_TOKEN = re.compile(r"(?<!\S)@([^\s]+)")
 FILE_BLOCK = re.compile(r'<file path="([^"]+)">.*?</file>\s*', re.DOTALL)
+SKILL_BLOCK = re.compile(r'<skill\s+name="([^"]+)"[^>]*>.*?</skill>\s*', re.DOTALL)
 CHIP_TOKEN = re.compile(r"\[([A-Z0-9]+) - ([^\]]+)\]")
 ATTACH_CHAR_LIMIT = 80_000
 
@@ -60,6 +61,13 @@ def strip_file_blocks(text: str) -> str:
     return FILE_BLOCK.sub("", text).strip()
 
 
+def replace_skill_blocks(text: str) -> str:
+    """Troca blocos `<skill>` por chips `[SKILL - nome]` na exibição."""
+    return SKILL_BLOCK.sub(
+        lambda match: chip_token("SKILL", match.group(1)), text
+    )
+
+
 def split_display_chips(text: str) -> tuple[list[tuple[str, str]], str]:
     chips = [(label, name) for label, name in CHIP_TOKEN.findall(text)]
     body = CHIP_TOKEN.sub("", text)
@@ -95,6 +103,7 @@ def _display_text(text: str) -> str:
         )
         return ""
 
+    text = replace_skill_blocks(text)
     cleaned = FILE_BLOCK.sub(_keep_chip, text).strip()
     if not chips:
         return cleaned

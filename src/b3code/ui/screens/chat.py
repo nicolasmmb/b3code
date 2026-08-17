@@ -28,7 +28,7 @@ from b3code.ui.widgets.planbar import PlanBar
 from b3code.ui.widgets.question import QuestionBar
 from b3code.ui.widgets.topbar import TopBar
 from b3code.utils.attachments import Attachment
-from b3code.utils.prompt import build_user_content
+from b3code.utils.prompt import build_user_content, replace_skill_blocks
 
 
 class ChatScreen(ChatStreamMixin, Screen):
@@ -266,7 +266,12 @@ class ChatScreen(ChatStreamMixin, Screen):
             on_show_plan=self.chat_view.show_plan_doc,
             on_note=self.chat_view.mount_system,
             on_doctor=self._start_doctor,
+            on_skills_reload=self._reload_skills,
         )
+
+    def _reload_skills(self) -> None:
+        self.deps.commands.reload_skills()
+        self.deps.chat.reload(self.deps.config)
 
     def _rebuild_after_command(self) -> None:
         app = self.app
@@ -293,7 +298,7 @@ class ChatScreen(ChatStreamMixin, Screen):
         user_text: str,
         attachments: dict[str, Attachment] | None = None,
     ) -> None:
-        self.chat_view.mount_user(user_text)
+        self.chat_view.mount_user(replace_skill_blocks(user_text))
         self.chat_view.start_assistant()
         self.chat_view.stop_thinking()
         self.chat_view.ensure_thinking()

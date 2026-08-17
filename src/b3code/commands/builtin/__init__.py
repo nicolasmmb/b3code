@@ -11,6 +11,7 @@ from b3code.commands.builtin.session import (
     build_quit,
     build_resume,
 )
+from b3code.commands.builtin.skills import build_skills_command
 from b3code.commands.builtin.theme import build_theme
 from b3code.commands.builtin.thinking import build_thinking
 from b3code.commands.registry import Command
@@ -18,6 +19,7 @@ from b3code.config.service import ConfigService
 from b3code.services.catalog import ModelCatalog
 from b3code.services.chat import ChatService
 from b3code.services.session import SessionStore
+from b3code.services.skills import SkillIndex
 
 
 @dataclass
@@ -26,6 +28,7 @@ class CommandServices:
     sessions: SessionStore
     chat: ChatService
     catalog: ModelCatalog
+    skills: SkillIndex | None = None
 
 
 def build_all(services: CommandServices) -> list[Command]:
@@ -47,4 +50,10 @@ def build_all(services: CommandServices) -> list[Command]:
             build_view_plan(services.chat),
         ]
     )
+    if services.skills is None:
+        services.skills = SkillIndex(
+            services.chat.cwd, services.config_service.config.skills
+        )
+    native = frozenset(cmd.name for cmd in commands)
+    commands.append(build_skills_command(services.skills, services.chat, native=native))
     return commands

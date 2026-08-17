@@ -19,6 +19,7 @@ sessões entre execuções. Construído com **Textual** (interface), **Pydantic 
 - **Diffs coloridos** com número de linha à esquerda, bandas verde/vermelha na linha inteira e *fold* (`▸`) para recolher/expandir linhas omitidas.
 - **Pergunta ao utilizador** (`ask_user_question`): card de escolha no meio do turno.
 - **Subagentes**: o coder lança um filho (`explore`, `plan` ou `general-purpose`) com contexto próprio.
+- **Skills** (formato Grok/Claude `SKILL.md`): o modelo ativa skills em runtime (`list_skills` / `load_skill`) e você as roda como comando `/nome` — ver [Skills](#134-skills).
 
 ## 3. Stack e requisitos
 
@@ -62,6 +63,7 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `multiline` | bool | `true` | `true` = paste preserva `\\n`; Shift+Enter insere newline. |
 | `thinking` | string | `"off"` | Esforço de thinking do Pydantic AI: `off`, `auto`, `minimal`, `low`, `medium`, `high`, `xhigh`. `off` não envia o setting. |
 | `mcp_servers` | object | `{}` | Servers MCP por nome. Cada um tem `command`+`args`+`env` (stdio) **ou** `url`+`headers` (HTTP/SSE), mais `enabled`, `transport` (`stdio`/`http`/`sse`), `startup_timeout_sec` (30) e `tool_timeout_sec` (120). Tudo vive neste JSON. Aceita `${VAR}` / `${VAR:-default}` na conexão. |
+| `skills` | object | `{"enabled": true}` | Skills (ver [Skills](#134-skills)). Campos: `enabled` (false desliga tudo), `extra_paths` (paths extras de descoberta), `ignore` (prefixos de path omitidos), `disabled` (nomes de skill desativados). |
 
 Exemplo:
 
@@ -215,6 +217,9 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/mcp doctor [name]` | Testa a conexão. Não grava config. |
 | `/plan on\|off` | Entra/sai do plan mode |
 | `/view-plan` | Mostra o `.b3code/plan.md` atual |
+| `/skills` | Lista as skills (nome, escopo, disabled, colisão) |
+| `/skills reload` | Resscanela skills do disco, reinstala comandos e recria o agent |
+| `/skills paths` | Mostra os roots de descoberta |
 | `/quit` / `/exit` | Sai do app |
 
 Linhas que não começam com `/` vão para o chat. Digite `@` para anexar um
@@ -439,6 +444,7 @@ topo. `HOST_TOOLS` em `agents.py` tira-as do CodeMode.
 | `search_tools` | topo | coder e planner |
 | `ask_user_question` | topo | só coder |
 | `spawn_subagent`, `get_command_or_subagent_output`, `kill_command_or_subagent` | topo | só coder |
+| `list_skills`, `load_skill` | topo | só coder |
 | `write_plan_file`, `exit_plan_mode` | topo | só planner |
 
 ### 13.1 `ask_user_question`
@@ -526,13 +532,83 @@ UI no scroll do pai (um `ToolRow` por filho, o mesmo bloco do start ao fim):
 Nesta versão: sem `multi_select`, sem pane `Ctrl+G`, sem isolation por worktree,
 sem MCP no filho.
 
+### 13.4 Skills
+
+Uma **skill** é um pacote reutilizável de instruções no formato Grok/Claude:
+uma pasta com um arquivo `SKILL.md` (frontmatter YAML plano + corpo markdown).
+
+```markdown
+---
+name: commit
+description: create a commit
+when-to-use: user asks to commit
+argument-hint: "[message]"
+user-invocable: true
+allowed-tools:
+  - write_file
+  - run_command
+---
+
+1. Run git status.
+2. Commit with the given message.
+```
+
+Frontmatter suportado: `name`, `description`, `when-to-use`, `argument-hint`,
+`allowed-tools`, `user-invocable`, `disable-model-invocation`. Campos
+desconhecidos e `metadata` são ignorados. Booleans `true/1/yes` e
+`false/0/no`; listas por vírgula ou por linhas `- item`. Sem `name` usa o nome
+da pasta; sem `description` usa o primeiro parágrafo do corpo. Frontmatter
+malformado cai no fallback (corpo inteiro) — nunca quebra o boot.
+
+**Descoberta** (primeiro vence no dedup por nome):
+
+| root | escopo |
+|---|---|
+| `<cwd>/.b3code/skills/` | project |
+| `<cwd>/.grok/skills/` | project |
+| `<cwd>/.claude/skills/` | project |
+| `~/.b3code/skills/` | user |
+| `~/.grok/skills/` | user |
+| `~/.claude/skills/` | user |
+| `skills.extra_paths` (config) | config |
+
+**Invocação como comando** — cada skill vira `/nome` (com autocomplete). O
+corpo vai ao modelo em um bloco `<skill>` dentro do **user turn** (como
+`@arquivo`), preservando o cache do Azure:
+
+```
+<skill name="commit" scope="project">
+… corpo da skill …
+</skill>
+
+Task: fix the build
+```
+
+Sem argumentos, a última linha vira `Follow the skill instructions now.`.
+Colisão com comando nativo: o nativo fica com `/nome`; a skill fica com
+`/<scope>:<nome>` (ex.: `/project:model`). `/skills` marca a colisão.
+
+**Invocação automática** — o coder tem as tools de topo `list_skills` e
+`load_skill`: quando a tarefa casa com uma skill, o modelo chama
+`list_skills`, depois `load_skill(name)` e segue as instruções. Skills com
+`disable-model-invocation: true` não aparecem na tool; `user-invocable:
+false` não vira comando.
+
+**Recarga** — `/skills reload` resscaneia o disco, reinstala os comandos e
+recria o agent (invalida o prefixo do cache, como `/model`). Sem watcher de
+arquivos: o reload é explícito e barato.
+
+| núcleo | factory | comando | tool |
+|---|---|---|---|
+| `services/skills.py` | `tools/skills.py` | `commands/builtin/skills.py` | `list_skills` / `load_skill` |
+
 ## 14. Testes
 
 ```bash
 uv run pytest
 ```
 
-Suíte com `asyncio_mode = "auto"` e `testpaths = ["tests"]` (19 arquivos). O que
+Suíte com `asyncio_mode = "auto"` e `testpaths = ["tests"]` (20 arquivos). O que
 cada família cobre:
 
 - **UI** (`test_ui.py`, `test_choicebar.py`, `test_stream.py`) — Pilot do Textual, flush/coalesce de stream, barras de escolha.
@@ -544,6 +620,7 @@ cada família cobre:
 - **Pergunta / subagentes** (`test_questions.py`, `test_tasks.py`) — `QuestionGate`, card, `TaskHub`, tipos de filho.
 - **Config** (`test_config.py`, `test_config_service.py`, `test_catalog.py`) — schema, persistência, catálogo de modelos.
 - **Comandos** (`test_commands.py`, `test_effects.py`) — registry, decisão do Enter, efeitos.
+- **Skills** (`test_skills.py`) — descoberta, prioridade, parser de frontmatter, comandos e tools.
 - **Diff** (`test_diffview.py`) — diff unificado, recorte e fold.
 - **Memória/perf** (`test_mem_gains.py`, `test_perf.py`) — regressões de pico de memória e tempo.
 
@@ -566,7 +643,7 @@ src/b3code/
 │   ├── apply.py           # decide_submit / apply_suggestion
 │   ├── effects.py         # efeitos puros dos comandos
 │   ├── registry.py        # CommandRegistry
-│   └── builtin/           # help, model, plan, session, theme
+│   └── builtin/           # help, model, plan, session, theme, skills
 ├── config/
 │   ├── schema.py          # AppConfig
 │   ├── store.py           # ConfigStore (.b3code/config.json)
@@ -583,12 +660,14 @@ src/b3code/
 │   ├── plan.py            # PlanMode (só plan.md gravável)
 │   ├── planner.py         # agente especialista de plan
 │   ├── questions.py       # QuestionGate (ask_user_question)
+│   ├── skills.py          # SkillIndex — descoberta SKILL.md
 │   ├── tasks.py           # TaskHub (spawn / snapshot / kill)
 │   ├── subagents.py       # factories do filho
 │   ├── files.py           # FileIndex — porta search_async
 │   └── catalog.py         # ModelCatalog
 ├── tools/
 │   ├── workspace.py       # file tools (vão para o run_code)
+│   ├── skills.py          # list_skills / load_skill
 │   ├── ask.py             # ask_user_question
 │   └── tasks.py           # spawn / get / kill
 ├── ui/
@@ -621,7 +700,9 @@ src/b3code/
 - **Busy**: só uma request roda por vez (lock FIFO). Se a barra de input está
   travada com um turno em andamento, `escape` cancela.
 - **Cache do Azure**: o system prompt é estático de propósito (mudá-lo a cada
-  turno invalidaria o cache); anexos vão no turno do usuário, não no system prompt.
+  turno invalidaria o cache); anexos e o corpo de skills vão no turno do
+  usuário, não no system prompt. `/skills reload` recria o agent e invalida o
+  prefixo do cache — mesmo comportamento de `/model`.
 - **Limites de leitura**: `read_file` trunca em 200 mil caracteres e `grep`
   retorna no máximo 50 hits; anexos `@` são limitados a 80 mil caracteres.
 - **Diff**: o recorte visual (40 linhas, expandível até 250) é da UI — o diff
