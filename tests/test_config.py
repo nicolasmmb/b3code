@@ -167,8 +167,8 @@ def test_first_run_creates_project_settings_with_all_fields(tmp_path: Path):
     settings = tmp_path / ".b3code" / "config.json"
     assert settings.exists()
     payload = json.loads(settings.read_text())
-    assert payload == cfg.model_dump(mode="json")
-    assert set(payload) == set(AppConfig.model_fields)
+    assert payload == {**cfg.model_dump(mode="json"), "$schema": "./schema.json"}
+    assert set(payload) == set(AppConfig.model_fields) | {"$schema"}
 
 
 def test_first_run_writes_gateway_and_exclude_defaults(tmp_path: Path):
@@ -185,9 +185,7 @@ def test_first_run_writes_gateway_and_exclude_defaults(tmp_path: Path):
 
 def test_load_adds_missing_exclude_directories(tmp_path: Path):
     path = tmp_path / "config.json"
-    path.write_text(
-        '{"gateway_api_models": ["m1"], "exclude_extensions": [".log"]}\n'
-    )
+    path.write_text('{"gateway_api_models": ["m1"], "exclude_extensions": [".log"]}\n')
     loaded = ConfigStore(path).load()
     assert loaded.exclude_directories == DEFAULT_EXCLUDE_DIRECTORIES
     payload = json.loads(path.read_text())
@@ -196,9 +194,7 @@ def test_load_adds_missing_exclude_directories(tmp_path: Path):
 
 def test_load_adds_missing_exclude_extensions(tmp_path: Path):
     path = tmp_path / "config.json"
-    path.write_text(
-        '{"gateway_api_models": ["m1"], "exclude_directories": ["dist"]}\n'
-    )
+    path.write_text('{"gateway_api_models": ["m1"], "exclude_directories": ["dist"]}\n')
     loaded = ConfigStore(path).load()
     assert loaded.exclude_extensions == []
     payload = json.loads(path.read_text())
@@ -222,4 +218,3 @@ def test_thinking_effort_levels_single_source():
     levels = get_args(ThinkingEffortLevels)
     assert levels == ("minimal", "low", "medium", "high", "xhigh", "off", "auto")
     assert len(levels) == len(set(levels))  # sem duplicatas
-
