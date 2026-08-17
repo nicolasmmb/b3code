@@ -25,7 +25,8 @@ __all__ = [
     "slim_plan_note",
 ]
 
-PLAN_INSTRUCTIONS = """You are b3code’s Planner. You are a specialist, not an implementer.
+PLAN_INSTRUCTIONS = """
+You are b3code’s Planner. You are a specialist, not an implementer.
 
 CORE RULES (never violate)
 - Explore the repository until you fully understand the relevant code.

@@ -2,11 +2,20 @@ import asyncio
 from pathlib import Path
 
 from pydantic_ai import BinaryContent
-from pydantic_ai.models.test import TestModel
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.models.function import FunctionModel
 
 from b3code.config.schema import AppConfig
 from b3code.services.chat import ChatEvent, ChatService
 from b3code.services.session import SessionStore
+
+
+def _plain_response(_messages, _info) -> ModelResponse:
+    return ModelResponse(parts=[TextPart(content="ok")])
+
+
+async def _plain_stream(_messages, _info):
+    yield "ok"
 
 
 def _service(tmp_path: Path) -> ChatService:
@@ -16,7 +25,11 @@ def _service(tmp_path: Path) -> ChatService:
         gateway_api_models=["test"],
     )
     sessions = SessionStore(tmp_path / "sessions.json")
-    return ChatService(cfg, sessions, tmp_path, model=TestModel())
+    # FunctionModel (não TestModel): o agente completo tem tools nativas
+    # (Shell/CodeMode/WebSearch), e TestModel não suporta tools nativas.
+    return ChatService(
+        cfg, sessions, tmp_path, model=FunctionModel(_plain_response, stream_function=_plain_stream)
+    )
 
 
 async def test_saves_after_turn(tmp_path: Path):

@@ -32,7 +32,8 @@ def _capability_names(agent) -> set[str]:
 
 
 def test_instructions_teach_run_code():
-    text = " ".join(CODER_INSTRUCTIONS)
+    # CODER_INSTRUCTIONS é um bloco de texto único (não mais uma tupla).
+    text = CODER_INSTRUCTIONS
     assert "run_code" in text
     assert "not in the schema" in text
     assert "search_tools" in text

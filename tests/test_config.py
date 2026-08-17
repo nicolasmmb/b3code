@@ -213,3 +213,13 @@ def test_exclude_fields_normalize_on_load():
     assert cfg.exclude_directories == ["dist", "node_modules"]
     assert cfg.exclude_extensions == [".pyc", ".log"]
 
+
+def test_thinking_effort_levels_single_source():
+    from typing import get_args
+
+    from b3code.config.schema import ThinkingEffortLevels
+
+    levels = get_args(ThinkingEffortLevels)
+    assert levels == ("minimal", "low", "medium", "high", "xhigh", "off", "auto")
+    assert len(levels) == len(set(levels))  # sem duplicatas
+

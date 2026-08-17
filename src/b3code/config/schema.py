@@ -1,7 +1,6 @@
 """Config persistida. JSON antigo (sem os campos novos) continua válido."""
 
 import re
-from itertools import chain
 from typing import Literal, TypeAlias, get_args
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
@@ -11,13 +10,11 @@ DEFAULT_ACCENT = "#00b0e6"
 DEFAULT_THEME_NAME = "b3code"
 
 
-# 2. Achata a lista de forma eficiente
-# gera um flat list de todos os valores possíveis do ThinkingLevel, incluindo os subtipos.
-THINKING_LEVELS: list[str] = list(
-    chain.from_iterable([get_args(arg) or (arg,) for arg in get_args(ThinkingEffort)])
-) + ["off", "auto"]
-
-ThinkingEffortLevels: TypeAlias = Literal[*THINKING_LEVELS + ["off", "auto"]]  # noqa: UP040
+# Níveis do Pydantic AI (minimal..xhigh) + níveis do app:
+# "off" = não enviar o setting; "auto" = default do provider.
+# Unpacking estrelado em Literal é rejeitado pelo mypy (valid-type); ignore de propósito.
+_THINKING_EFFORTS: tuple[str, ...] = get_args(ThinkingEffort)
+ThinkingEffortLevels: TypeAlias = Literal[*_THINKING_EFFORTS, "off", "auto"]  # type: ignore[valid-type]  # noqa: UP040
 
 DEFAULT_THINKING = "off"
 
@@ -282,8 +279,10 @@ class AppConfig(BaseModel):
         if not isinstance(value, str):
             return DEFAULT_THINKING
         level = value.strip().lower()
-        if level not in THINKING_LEVELS:
-            raise ValueError(f"thinking must be one of {', '.join(THINKING_LEVELS)}")
+        if level not in get_args(ThinkingEffortLevels):
+            raise ValueError(
+                f"thinking must be one of {', '.join(get_args(ThinkingEffortLevels))}"
+            )
         return level
 
     @field_validator("exclude_directories", mode="before")

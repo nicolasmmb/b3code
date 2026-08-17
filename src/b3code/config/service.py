@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import get_args
 
 from b3code.config.schema import (
     THEME_COLOR_DEFAULTS,
-    THINKING_LEVELS,
     AppConfig,
     McpServerConfig,
     ThemeColors,
+    ThinkingEffortLevels,
     parse_hex,
     parse_mcp_name,
     slugify_theme,
@@ -69,8 +70,10 @@ class ConfigService:
 
     def set_thinking(self, level: str) -> None:
         name = level.strip().lower()
-        if name not in THINKING_LEVELS:
-            raise ValueError(f"thinking {level!r} not in {', '.join(THINKING_LEVELS)}")
+        if name not in get_args(ThinkingEffortLevels):
+            valid = ", ".join(get_args(ThinkingEffortLevels))
+            raise ValueError(f"thinking {level!r} not in {valid}")
+
         self._config.thinking = name
         self.store.save(self._config)
 

@@ -1,11 +1,13 @@
+from typing import get_args
+
 from b3code.commands.effects import Refresh
 from b3code.commands.registry import Command
 from b3code.commands.types import CommandResult, Suggestion
-from b3code.config.schema import THINKING_LEVELS
+from b3code.config.schema import ThinkingEffortLevels
 from b3code.config.service import ConfigService
 from b3code.services.chat import ChatService
 
-_USAGE = "usage: /thinking " + "|".join(THINKING_LEVELS)
+_USAGE = "usage: /thinking " + "|".join(get_args(ThinkingEffortLevels))
 
 
 def build_thinking(config_service: ConfigService, chat: ChatService) -> Command:
@@ -26,7 +28,7 @@ def build_thinking(config_service: ConfigService, chat: ChatService) -> Command:
             Suggestion(
                 value=level, label="effort", hint=level, kind="arg", consume=True
             )
-            for level in THINKING_LEVELS
+            for level in get_args(ThinkingEffortLevels)
             if level.startswith(needle)
         ]
 
