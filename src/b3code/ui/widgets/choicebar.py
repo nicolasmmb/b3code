@@ -31,7 +31,7 @@ class ChoiceBar(Vertical):
         self._choices = self.CHOICES
 
     def compose(self) -> ComposeResult:
-        yield Static("", id=self.SUMMARY_ID)
+        yield Static("", markup=False, id=self.SUMMARY_ID)
         yield QuietOptions(id=self.OPTIONS_ID)
 
     def set_choices(self, choices: tuple[tuple[str, str, str], ...]) -> None:
