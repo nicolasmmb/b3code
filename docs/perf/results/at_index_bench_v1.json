@@ -1,0 +1,120 @@
+{
+  "benchmark": "at-index",
+  "run": "v1-pre-fix",
+  "date": "2026-08-17 18:58:37",
+  "python": "3.14.0",
+  "files_indexed": 50000,
+  "scan_ms": 1619.27,
+  "memory_peak_mb": 7.16,
+  "rank_paths": {
+    "": {
+      "old": {
+        "min_ms": 0.0054,
+        "median_ms": 0.0055,
+        "p95_ms": 0.0055
+      },
+      "new": {
+        "min_ms": 0.0054,
+        "median_ms": 0.0055,
+        "p95_ms": 0.0055
+      }
+    },
+    "ap": {
+      "old": {
+        "min_ms": 64.9494,
+        "median_ms": 65.9804,
+        "p95_ms": 67.8761
+      },
+      "new": {
+        "min_ms": 83.5185,
+        "median_ms": 86.0378,
+        "p95_ms": 89.9965
+      }
+    },
+    "app/main": {
+      "old": {
+        "min_ms": 59.4597,
+        "median_ms": 60.3141,
+        "p95_ms": 69.3971
+      },
+      "new": {
+        "min_ms": 52.9587,
+        "median_ms": 54.8697,
+        "p95_ms": 58.2594
+      }
+    },
+    "mod_0123": {
+      "old": {
+        "min_ms": 52.4826,
+        "median_ms": 55.2164,
+        "p95_ms": 57.6518
+      },
+      "new": {
+        "min_ms": 27.6869,
+        "median_ms": 28.4138,
+        "p95_ms": 29.4668
+      }
+    },
+    "apl.py": {
+      "old": {
+        "min_ms": 53.8523,
+        "median_ms": 55.2503,
+        "p95_ms": 61.8614
+      },
+      "new": {
+        "min_ms": 65.5962,
+        "median_ms": 66.5936,
+        "p95_ms": 67.5353
+      }
+    },
+    "a": {
+      "old": {
+        "min_ms": 61.0628,
+        "median_ms": 62.9728,
+        "p95_ms": 64.6563
+      },
+      "new": {
+        "min_ms": 83.0739,
+        "median_ms": 84.1172,
+        "p95_ms": 85.4391
+      }
+    }
+  },
+  "search_async_warm": {
+    "": {
+      "median_ms": 0.2065,
+      "min_ms": 0.1594,
+      "p95_ms": 1.6927
+    },
+    "ap": {
+      "median_ms": 101.0059,
+      "min_ms": 89.2132,
+      "p95_ms": 115.2902
+    },
+    "app/main": {
+      "median_ms": 69.8112,
+      "min_ms": 59.7555,
+      "p95_ms": 80.9908
+    },
+    "mod_0123": {
+      "median_ms": 41.4172,
+      "min_ms": 31.1181,
+      "p95_ms": 42.2457
+    },
+    "apl.py": {
+      "median_ms": 80.9082,
+      "min_ms": 69.8564,
+      "p95_ms": 81.8479
+    },
+    "a": {
+      "median_ms": 99.6001,
+      "min_ms": 87.8247,
+      "p95_ms": 111.5695
+    }
+  },
+  "refresh_if_stale": {
+    "skip_us": 1378.59,
+    "stale_scan_ms": 408.17,
+    "note": "skip_us contaminado: primeira chamada re-scaneou (índice velho); medido de novo na v2"
+  }
+}
