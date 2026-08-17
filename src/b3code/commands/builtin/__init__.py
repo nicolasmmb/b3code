@@ -11,7 +11,7 @@ from b3code.commands.builtin.session import (
     build_quit,
     build_resume,
 )
-from b3code.commands.builtin.skills import build_skill_run, build_skills_command
+from b3code.commands.builtin.skills import build_skills_command
 from b3code.commands.builtin.theme import build_theme
 from b3code.commands.builtin.thinking import build_thinking
 from b3code.commands.registry import Command
@@ -54,6 +54,5 @@ def build_all(services: CommandServices) -> list[Command]:
         services.skills = SkillIndex(
             services.chat.cwd, services.config_service.config.skills
         )
-    commands.append(build_skill_run(services.skills))
     commands.append(build_skills_command(services.skills))
     return commands

@@ -293,7 +293,7 @@ def test_catalog_and_load(tmp_path: Path):
 # --- registry -------------------------------------------------------------
 
 
-def test_skill_run_in_autocomplete_and_run_prompt(tmp_path: Path):
+def test_skills_run_in_autocomplete_and_run_prompt(tmp_path: Path):
     _write_skill(
         tmp_path / ".b3code" / "skills",
         "commit",
@@ -302,71 +302,71 @@ def test_skill_run_in_autocomplete_and_run_prompt(tmp_path: Path):
     reg = _registry(tmp_path)
     names = [s.label for s in reg.complete("/")]
     assert "/commit" not in names  # sem comando por skill
-    assert "/skill" in names
+    assert "/skill" not in names  # só /skills
     assert "/skills" in names
-    completed = [s.value for s in reg.complete("/skill run ")]
+    completed = [s.value for s in reg.complete("/skills run ")]
     assert "commit" in completed
-    result = reg.execute("/skill run commit fix the build")
+    result = reg.execute("/skills run commit fix the build")
     assert isinstance(result.effect, RunPrompt)
     assert "Task: fix the build" in result.effect.text
     assert '<skill name="commit" scope="project">' in result.effect.text
     assert "1. git status" in result.effect.text
 
 
-def test_skill_run_completes_partial_name(tmp_path: Path):
+def test_skills_run_completes_partial_name(tmp_path: Path):
     _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nBODY\n")
     _write_skill(tmp_path / ".b3code" / "skills", "review", "---\nname: review\n---\nBODY\n")
     reg = _registry(tmp_path)
-    values = [s.value for s in reg.complete("/skill run co")]
+    values = [s.value for s in reg.complete("/skills run co")]
     assert values == ["commit"]
-    assert all(not s.consume for s in reg.complete("/skill run "))
-    assert all(s.hint for s in reg.complete("/skill run "))
+    assert all(not s.consume for s in reg.complete("/skills run "))
+    assert all(s.hint for s in reg.complete("/skills run "))
 
 
-def test_skill_run_no_args_sends_follow(tmp_path: Path):
+def test_skills_run_no_args_sends_follow(tmp_path: Path):
     _write_skill(
         tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nSteps\n"
     )
     reg = _registry(tmp_path)
-    result = reg.execute("/skill run commit")
+    result = reg.execute("/skills run commit")
     assert isinstance(result.effect, RunPrompt)
     assert "Follow the skill instructions now." in result.effect.text
 
 
-def test_skill_run_usage_and_unknown(tmp_path: Path):
+def test_skills_run_usage_and_unknown(tmp_path: Path):
     _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nBODY\n")
     reg = _registry(tmp_path)
-    usage = reg.execute("/skill run")
+    usage = reg.execute("/skills run")
     assert "usage" in usage.message
     assert usage.effect is None
-    missing = reg.execute("/skill run nope")
+    missing = reg.execute("/skills run nope")
     assert "unknown or disabled skill" in missing.message
     assert missing.effect is None
 
 
-def test_skill_run_user_invocable_false_blocked(tmp_path: Path):
+def test_skills_run_user_invocable_false_blocked(tmp_path: Path):
     _write_skill(
         tmp_path / ".b3code" / "skills",
         "hidden",
         "---\nname: hidden\nuser-invocable: false\n---\nBODY\n",
     )
     reg = _registry(tmp_path)
-    values = [s.value for s in reg.complete("/skill run ")]
+    values = [s.value for s in reg.complete("/skills run ")]
     assert "hidden" not in values
-    result = reg.execute("/skill run hidden")
+    result = reg.execute("/skills run hidden")
     assert "unknown or disabled skill" in result.message
 
 
-def test_skill_run_skips_disabled(tmp_path: Path):
+def test_skills_run_skips_disabled(tmp_path: Path):
     _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nBODY\n")
     reg = _registry(
         tmp_path,
         home=tmp_path / "home",
         settings=SkillSettings(disabled=["commit"]),
     )
-    values = [s.value for s in reg.complete("/skill run ")]
+    values = [s.value for s in reg.complete("/skills run ")]
     assert "commit" not in values
-    result = reg.execute("/skill run commit")
+    result = reg.execute("/skills run commit")
     assert "unknown or disabled skill" in result.message
 
 
@@ -378,6 +378,8 @@ def test_skills_list_reload_paths(tmp_path: Path):
     listed = reg.execute("/skills")
     assert "commit  project" in listed.message
     assert listed.effect is None
+    sub_commands = [s.value for s in reg.complete("/skills ")]
+    assert set(sub_commands) >= {"run", "reload", "paths"}
     reloaded = reg.execute("/skills reload")
     assert isinstance(reloaded.effect, ReloadSkills)
     paths = reg.execute("/skills paths")
@@ -385,18 +387,18 @@ def test_skills_list_reload_paths(tmp_path: Path):
     assert "project" in paths.message
 
 
-def test_skill_run_picks_up_new_skill(tmp_path: Path):
+def test_skills_run_picks_up_new_skill(tmp_path: Path):
     reg = _registry(tmp_path)
-    assert "fresh" not in [s.value for s in reg.complete("/skill run ")]
+    assert "fresh" not in [s.value for s in reg.complete("/skills run ")]
     _write_skill(
         tmp_path / ".b3code" / "skills",
         "fresh",
         "---\nname: fresh\n---\nFRESH BODY\n",
     )
     reg.roots["skills"].children["reload"].handler()
-    values = [s.value for s in reg.complete("/skill run ")]
+    values = [s.value for s in reg.complete("/skills run ")]
     assert "fresh" in values
-    result = reg.execute("/skill run fresh")
+    result = reg.execute("/skills run fresh")
     assert isinstance(result.effect, RunPrompt)
     assert "FRESH BODY" in result.effect.text
 
