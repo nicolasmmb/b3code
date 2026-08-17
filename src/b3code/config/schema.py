@@ -24,7 +24,7 @@ def thinking_badge(level: str) -> str:
         return ""
     if level == "auto":
         return "think"
-    return f"[think {level}]"
+    return f"think {level}"
 
 
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
