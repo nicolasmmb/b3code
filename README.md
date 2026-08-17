@@ -62,6 +62,7 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
 | `multiline` | bool | `true` | `true` = paste preserva `\\n`; Shift+Enter insere newline. |
 | `thinking` | string | `"off"` | Esforço de thinking do Pydantic AI: `off`, `auto`, `minimal`, `low`, `medium`, `high`, `xhigh`. `off` não envia o setting. |
+| `agent_retries` | int | `2` | Quantas retries o agent faz quando a resposta final não valida (`UnexpectedModelBehavior`). Preserva o histórico a cada tentativa. |
 | `mcp_servers` | object | `{}` | Servers MCP por nome. Cada um tem `command`+`args`+`env` (stdio) **ou** `url`+`headers` (HTTP/SSE), mais `enabled`, `transport` (`stdio`/`http`/`sse`), `startup_timeout_sec` (30) e `tool_timeout_sec` (120). Tudo vive neste JSON. Aceita `${VAR}` / `${VAR:-default}` na conexão. |
 | `skills` | object | `{"enabled": true}` | Skills (ver [Skills](#134-skills)). Campos: `enabled` (false desliga tudo), `extra_paths` (paths extras de descoberta), `ignore` (prefixos de path omitidos), `disabled` (nomes de skill desativados). |
 
@@ -434,6 +435,38 @@ Regras:
 - O índice respeita `.gitignore` e omite pastas como `node_modules` e `.git`.
 - O teto é 20 000 arquivos.
 
+### 12.2 Fluxo de retry
+
+O fluxo de retry tem quatro mecanismos, que atuam em momentos diferentes do turno:
+
+1. **Retry de tool via `ModelRetry`** — quando uma tool levanta uma exceção genérica,
+   o decorator `model_retry` (em `src/b3code/utils/retry.py`) converte em `ModelRetry`
+   com uma nota de até 200 caracteres (mensagem truncada com `…`). O PydanticAI re-invoca
+   o modelo com o histórico completo (thinking/texto/tool calls/returns já emitidos) mais
+   a nota — a LLM corrige só o passo que falhou e segue, sem reprocessar do zero.
+2. **Pass-through de segurança** — `ModelRetry`, `ValueError` (guard defensivo, ex.: path
+   escape do workspace) e `asyncio.CancelledError` passam intactos e **não** viram retry.
+3. **Retries de validação final** — `Agent(retries=config.agent_retries)` (default `2`)
+   re-tenta quando a resposta final não valida (`UnexpectedModelBehavior`). Vale para o
+   coder, o planner e os subagentes. O histórico é preservado a cada tentativa.
+4. **`PartialTurnRecorder`** — observa o event stream e reconstrói o raciocínio já emitido
+   quando o turno morre por falha dura (rede/crash). No próximo turno a sessão retoma do
+   ponto em que parou. Uma resposta com tool call ainda pendente é descartada; **cancelamento**
+   (`RunCancelled`) não persiste o parcial.
+
+```mermaid
+flowchart TD
+    U[Usuário envia turno] --> D[_dispatch_turn cria PartialTurnRecorder]
+    D --> R[agent.run com event_stream_handler]
+    R -->|tool levanta Exception genérica| M[model_retry converte em ModelRetry + nota]
+    R -->|tool levanta ModelRetry/ValueError/CancelledError| P[passa intacto - sem retry]
+    M --> R2[PydanticAI re-invoca com histórico completo + nota]
+    P --> R2
+    R -->|resposta final não valida| A[Agent retries=agent_retries re-tenta]
+    R -->|falha dura rede/crash| PART[recorder.messages -> _persist_partial -> session/plan_history]
+    R -->|RunCancelled| NOP[raise - não persiste parcial]
+```
+
 ## 13. Tools de topo
 
 O modelo vê dois sítios de tools. As file tools vivem **só** dentro de
@@ -620,7 +653,7 @@ arquivos: o reload é explícito e barato.
 uv run pytest
 ```
 
-Suíte com `asyncio_mode = "auto"` e `testpaths = ["tests"]` (20 arquivos). O que
+Suíte com `asyncio_mode = "auto"` e `testpaths = ["tests"]` (30 arquivos). O que
 cada família cobre:
 
 - **UI** (`test_ui.py`, `test_choicebar.py`, `test_stream.py`) — Pilot do Textual, flush/coalesce de stream, barras de escolha.
@@ -635,6 +668,9 @@ cada família cobre:
 - **Skills** (`test_skills.py`) — descoberta, prioridade, parser de frontmatter, comandos e tools.
 - **Diff** (`test_diffview.py`) — diff unificado, recorte e fold.
 - **Memória/perf** (`test_mem_gains.py`, `test_perf.py`) — regressões de pico de memória e tempo.
+- **Retry / parcial** (`test_retry.py`, `test_partial.py`) — conversão de erro de tool em `ModelRetry`, pass-through de `ValueError`/cancelamento, recorder parcial com retomada e não-persistência em cancelamento.
+- **Erros / MCP** (`test_errors.py`, `test_mcp.py`) — formatação de erro para a UI; servers MCP e defer/lista de toolsets.
+- **UI / coder** (`test_topbar.py`, `test_toolview.py`, `test_attachments.py`, `test_coder_tools.py`) — topbar, view de tools, anexos e o toolset do coder (CodeMode, Shell, WebSearch, `agent_retries`).
 
 ## 15. Scripts de dev
 

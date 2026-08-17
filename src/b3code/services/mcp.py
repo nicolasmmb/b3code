@@ -213,6 +213,10 @@ class McpHub:
 
         extra = expand_map(spec.env, None)
         env = {**os.environ, **extra} if extra else None
+        # O cwd real do b3code fica disponível para o server via CODE_EXPLORER_ROOT,
+        # independente do --directory do uv (que muda o cwd do processo).
+        if self.cwd is not None and not (extra and "CODE_EXPLORER_ROOT" in extra):
+            env = {**(env or {}), "CODE_EXPLORER_ROOT": str(self.cwd)}
         args = [expand_vars(item) for item in spec.args]
         return StdioTransport(
             expand_vars(spec.command), args, env=env, log_file=self._log_file(name)

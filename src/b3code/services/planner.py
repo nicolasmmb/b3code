@@ -216,6 +216,7 @@ def build_planner(
             skip_exts=skip_exts,
         ),
         capabilities=caps or None,
+        retries=config.agent_retries if config is not None else 2,
     )
 
 

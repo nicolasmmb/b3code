@@ -4,8 +4,6 @@ injected_model só troca o Model usado — nunca instructions, toolsets ou
 capabilities. Todo agente sai completo (mesmo fluxo em produção e em teste).
 """
 
-
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -16,6 +14,7 @@ from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.capabilities import Thinking, WebSearch
 from pydantic_ai.capabilities.hooks import Hooks
 from pydantic_ai.models import Model
+from pydantic_ai.usage import UsageLimits
 from pydantic_ai_harness import CodeMode, Shell
 from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS
 from pydantic_monty import MountDir
@@ -34,6 +33,13 @@ from b3code.tools.skills import skills_toolset
 from b3code.tools.tasks import task_toolset
 from b3code.tools.workspace import workspace_toolset
 from b3code.utils.diffview import FileChange
+
+# O default do pydantic-ai é request_limit=50, baixo demais para um agente coder.
+# Um turno legítimo faz >50 requests com tool calls/retries e morre com UsageLimitExceeded.
+NO_USAGE_LIMITS = UsageLimits(request_limit=None)
+STD_USAGE_LIMITS = UsageLimits(request_limit=120)
+STD_SUBAGENT_USAGE_LIMITS = UsageLimits(request_limit=75)
+
 
 # Estático de propósito: mudar instructions a cada turno invalida o cache Azure.
 CODER_INSTRUCTIONS = """
@@ -217,6 +223,7 @@ def build_coder(
             *([cap] if (cap := thinking_cap(config)) else []),
             hooks,
         ],
+        retries=config.agent_retries,
     )
 
 

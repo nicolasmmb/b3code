@@ -14,7 +14,11 @@ from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS
 
 from b3code.config.schema import AppConfig
 from b3code.libs.models import build_model
-from b3code.services.agents import ensure_shell_args, thinking_cap
+from b3code.services.agents import (
+    STD_SUBAGENT_USAGE_LIMITS,
+    ensure_shell_args,
+    thinking_cap,
+)
 from b3code.services.permission import PermissionGate
 from b3code.services.tasks import TaskRecord
 from b3code.tools.workspace import workspace_toolset
@@ -64,6 +68,7 @@ def build_subagent(
         instructions=_INSTRUCTIONS[kind],
         toolsets=[files],
         capabilities=_caps(kind, cwd, gate, config),
+        retries=config.agent_retries,
     )
 
 
@@ -93,6 +98,7 @@ def child_runner(
             prompt,
             event_stream_handler=handler,
             cancellation_token=record.token,
+            usage_limits=STD_SUBAGENT_USAGE_LIMITS,
         )
         return result.output or ""
 

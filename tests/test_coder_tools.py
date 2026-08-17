@@ -117,6 +117,30 @@ def test_websearch_falls_back_on_gateway_chat_model(tmp_path: Path):
     assert "duckduckgo_search" in HOST_TOOLS
 
 
+def test_agent_retries_follow_config(tmp_path: Path):
+    low = build_coder(
+        config=AppConfig(agent_retries=0),
+        cwd=tmp_path,
+        injected_model=TestModel(),
+    )
+    high = build_coder(
+        config=AppConfig(agent_retries=7),
+        cwd=tmp_path,
+        injected_model=TestModel(),
+    )
+    assert low._max_output_retries == 0
+    assert high._max_output_retries == 7
+
+
+def test_agent_retries_default_is_two(tmp_path: Path):
+    agent = build_coder(
+        config=AppConfig(),
+        cwd=tmp_path,
+        injected_model=TestModel(),
+    )
+    assert agent._max_output_retries == 2
+
+
 def test_approve_plan_sends_implementer_through_run_code(tmp_path: Path):
     chat = ChatService(
         AppConfig(gateway_api_models=["test"]),

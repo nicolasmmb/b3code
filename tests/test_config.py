@@ -15,6 +15,23 @@ from b3code.config.service import ConfigService
 from b3code.config.store import ConfigStore
 
 
+def test_agent_retries_default_and_roundtrip(tmp_path: Path):
+    assert AppConfig().agent_retries == 2
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = AppConfig(agent_retries=5)
+    store.save(cfg)
+    loaded = AppConfig.model_validate_json(store.path.read_text(encoding="utf-8"))
+    assert loaded.agent_retries == 5
+
+
+def test_old_config_without_agent_retries_loads(tmp_path: Path):
+    # JSON antigo sem o campo novo continua válido (default 2).
+    store = ConfigStore(tmp_path / "config.json")
+    store.path.write_text('{"gateway_api_models":["gpt-4o"]}', encoding="utf-8")
+    loaded = AppConfig.model_validate_json(store.path.read_text(encoding="utf-8"))
+    assert loaded.agent_retries == 2
+
+
 def test_select_model_moves_to_front(tmp_path: Path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = AppConfig(gateway_api_models=["a", "b", "c"])
