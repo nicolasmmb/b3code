@@ -10,13 +10,16 @@ from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.toolsets import FunctionToolset
 
 from b3code.services.skills import SkillIndex
+from b3code.utils.retry import model_retry
 
 
 def skills_toolset(index: SkillIndex) -> FunctionToolset:
+    @model_retry
     def list_skills() -> str:
         """List available skills as `name — description (when: ...)` lines. Call first when a task may match a skill."""
         return index.catalog()
 
+    @model_retry
     def load_skill(name: str) -> str:
         """Load a skill body in a <skill> block. Unknown, disabled, or model-invocation-disabled skills raise ModelRetry."""
         skill = index.get(name)

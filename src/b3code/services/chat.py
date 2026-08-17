@@ -34,6 +34,7 @@ from b3code.services.events import (
     task_event,
 )
 from b3code.services.mcp import McpHub
+from b3code.services.partial import PartialTurnRecorder
 from b3code.services.permission import PermissionGate
 from b3code.services.plan import PlanMode
 from b3code.services.planner import slim_plan_note
@@ -191,15 +192,18 @@ class ChatService:
         token: CancellationToken,
         on_event: OnEvent,
     ) -> None:
+        recorder = PartialTurnRecorder()
+
         async def handler(_ctx: Any, events: Any) -> None:
             async for event in events:
+                recorder.record(event)
                 for mapped in map_agent_event(event):
                     on_event(mapped)
 
         if self.plan.active:
-            await self._run_planner(prompt, handler, token, on_event)
+            await self._run_planner(prompt, handler, token, on_event, recorder)
             return
-        await self._run_coder(prompt, handler, token, on_event)
+        await self._run_coder(prompt, handler, token, on_event, recorder)
 
     async def _run_coder(
         self,
@@ -207,14 +211,23 @@ class ChatService:
         handler: Any,
         token: CancellationToken,
         on_event: OnEvent,
+        recorder: PartialTurnRecorder,
     ) -> None:
-        result = await self._get_coder().run(
-            prompt,
-            message_history=self.session.messages,
-            event_stream_handler=handler,
-            cancellation_token=token,
-            usage_limits=NO_USAGE_LIMITS,
-        )
+        try:
+            result = await self._get_coder().run(
+                prompt,
+                message_history=self.session.messages,
+                event_stream_handler=handler,
+                cancellation_token=token,
+                usage_limits=NO_USAGE_LIMITS,
+            )
+        except RunCancelled:
+            raise
+        except Exception:
+            await self._persist_partial(
+                recorder, prompt, self.session.messages, into_session=True
+            )
+            raise
         await self.session.replace_async(result.all_messages())
         on_event(ChatEvent(kind="done", text=result.output or ""))
 
@@ -224,19 +237,43 @@ class ChatService:
         handler: Any,
         token: CancellationToken,
         on_event: OnEvent,
+        recorder: PartialTurnRecorder,
     ) -> None:
-        result = await self._get_planner().run(
-            prompt,
-            message_history=self._plan_history,
-            event_stream_handler=handler,
-            cancellation_token=token,
-            usage_limits=NO_USAGE_LIMITS,
-        )
+        try:
+            result = await self._get_planner().run(
+                prompt,
+                message_history=self._plan_history,
+                event_stream_handler=handler,
+                cancellation_token=token,
+                usage_limits=NO_USAGE_LIMITS,
+            )
+        except RunCancelled:
+            raise
+        except Exception:
+            await self._persist_partial(
+                recorder, prompt, self._plan_history, into_session=False
+            )
+            raise
         self._plan_history = list(result.all_messages())
         await self._persist_plan_turn(prompt)
         on_event(ChatEvent(kind="done", text=result.output or ""))
         if self.plan.read():
             on_event(ChatEvent(kind="plan_ready", text=self.plan.read()))
+
+    async def _persist_partial(
+        self,
+        recorder: PartialTurnRecorder,
+        prompt: str | Sequence[UserContent],
+        prior: list[Any],
+        *,
+        into_session: bool,
+    ) -> None:
+        """Persiste o que o turno já produziu antes de falhar (retomada no próximo run)."""
+        merged = recorder.messages(prior, prompt)
+        if into_session:
+            await self.session.replace_async(merged)
+        else:
+            self._plan_history = merged
 
     async def _persist_plan_turn(self, prompt: str | Sequence[UserContent]) -> None:
         from pydantic_ai.messages import (

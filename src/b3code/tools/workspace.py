@@ -12,6 +12,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from b3code.utils.diffview import FileChange, diff_texts
 from b3code.utils.paths import iter_workspace_files, safe_workspace_path
+from b3code.utils.retry import model_retry
 from b3code.utils.text import truncate_chars
 
 _MAX_HITS = 50
@@ -55,6 +56,7 @@ def workspace_toolset(
     def _read_text(target: Path) -> str:
         return target.read_text(encoding="utf-8")
 
+    @model_retry
     def read_file(
         path: str, start_line: int | None = None, end_line: int | None = None
     ) -> str:
@@ -65,6 +67,7 @@ def workspace_toolset(
             return _truncate(text, max_file_chars)
         return _truncate(_line_range(text, start_line, end_line, path), max_file_chars)
 
+    @model_retry
     def list_dir(path: str = ".") -> list[str]:
         """List files in a directory. Directories end with /."""
         target = safe_workspace_path(path, cwd)
@@ -80,6 +83,7 @@ def workspace_toolset(
                 names.append(child.name)
         return names
 
+    @model_retry
     def grep(pattern: str, path: str = ".") -> str:
         """Search workspace files for a regex. Returns path:line:text (max 50)."""
         rx = re.compile(pattern)
@@ -96,6 +100,7 @@ def workspace_toolset(
                     return "\n".join(hits)
         return "\n".join(hits) or "(no matches)"
 
+    @model_retry
     def write_file(path: str, content: str) -> str:
         """Create or overwrite a workspace file. Prefer replace_in_file for edits."""
         target = safe_workspace_path(path, cwd)
@@ -109,6 +114,7 @@ def workspace_toolset(
         change = _commit(target, old, content)
         return f"wrote {_rel(target)} (+{change.added} -{change.removed})"
 
+    @model_retry
     def replace_in_file(
         path: str, old: str, new: str, replace_all: bool = False
     ) -> str:
@@ -125,6 +131,7 @@ def workspace_toolset(
         change = _commit(target, text, updated)
         return f"replaced {n} in {_rel(target)} (+{change.added} -{change.removed})"
 
+    @model_retry
     def delete_file(path: str) -> str:
         """Delete a workspace file (not a directory)."""
         target = safe_workspace_path(path, cwd)
@@ -137,6 +144,7 @@ def workspace_toolset(
         _commit(target, old, "")
         return f"deleted {_rel(target)}"
 
+    @model_retry
     def move_file(src: str, dest: str, overwrite: bool = False) -> str:
         """Rename or move a file inside the workspace."""
         source = safe_workspace_path(src, cwd)

@@ -5,9 +5,11 @@ from __future__ import annotations
 from pydantic_ai.toolsets import FunctionToolset
 
 from b3code.services.tasks import TaskHub
+from b3code.utils.retry import model_retry
 
 
 def task_toolset(hub: TaskHub) -> FunctionToolset:
+    @model_retry
     async def spawn_subagent(
         prompt: str,
         description: str,
@@ -17,12 +19,14 @@ def task_toolset(hub: TaskHub) -> FunctionToolset:
         """Spawn a child agent with its own context. Poll with get_command_or_subagent_output."""
         return await hub.spawn(prompt, description, subagent_type, background)
 
+    @model_retry
     async def get_command_or_subagent_output(
         task_ids: list[str], timeout_ms: int | None = None
     ) -> str:
         """Read or wait for background subagent output. Omit timeout_ms for a snapshot."""
         return await hub.snapshot(task_ids, timeout_ms)
 
+    @model_retry
     async def kill_command_or_subagent(task_id: str) -> str:
         """Cancel a running subagent."""
         return await hub.kill(task_id)
