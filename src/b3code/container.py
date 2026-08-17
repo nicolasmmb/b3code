@@ -12,6 +12,7 @@ from b3code.services.chat import ChatService
 from b3code.services.files import FileIndex
 from b3code.services.permission import PermissionGate
 from b3code.services.session import SessionStore
+from b3code.services.skills import SkillIndex
 from b3code.ui.deps import ScreenDeps
 
 
@@ -40,9 +41,18 @@ class AppContainer:
             skip_exts=config.exclude_extensions,
         )
         gate = PermissionGate(cfg_svc, cwd)
-        chat = ChatService(config=config, session=sessions, cwd=cwd, gate=gate)
+        skills = SkillIndex(cwd, config.skills)
+        chat = ChatService(
+            config=config, session=sessions, cwd=cwd, gate=gate, skills=skills
+        )
         commands = CommandRegistry.build(
-            store, config, sessions, chat, catalog=catalog, config_service=cfg_svc
+            store,
+            config,
+            sessions,
+            chat,
+            catalog=catalog,
+            config_service=cfg_svc,
+            skills=skills,
         )
         return cls(config, store, cfg_svc, sessions, files, commands, chat, cwd)
 
@@ -55,4 +65,5 @@ class AppContainer:
             commands=self.commands,
             chat=self.chat,
             files=self.file_index,
+            skills=self.chat.skills,
         )

@@ -27,8 +27,10 @@ from b3code.services.permission import PermissionDenied, PermissionGate
 from b3code.services.plan import PlanMode
 from b3code.services.planner import build_planner
 from b3code.services.questions import QuestionGate
+from b3code.services.skills import SkillIndex
 from b3code.services.tasks import TaskHub
 from b3code.tools.ask import ask_toolset
+from b3code.tools.skills import skills_toolset
 from b3code.tools.tasks import task_toolset
 from b3code.tools.workspace import workspace_toolset
 from b3code.utils.diffview import FileChange
@@ -106,6 +108,10 @@ EXECUTION MODEL
 - In run_code, the last expression is the return value.
 - Prefer the smallest change that fully solves the task.
 - Keep the repository in a runnable state after every change.
+
+SKILLS
+- Skills are reusable instruction packages (SKILL.md).
+- When a task matches a skill, call list_skills, then load_skill(name), and follow its instructions.
 """
 
 
@@ -118,6 +124,8 @@ HOST_TOOLS = SHELL_TOOLS | {
     "get_command_or_subagent_output",
     "kill_command_or_subagent",
     "duckduckgo_search",
+    "list_skills",
+    "load_skill",
 }
 
 
@@ -162,6 +170,7 @@ def build_coder(
     injected_model: Model | None = None,
     mcp: McpHub | None = None,
     questions: QuestionGate | None = None,
+    skills: SkillIndex | None = None,
     tasks: TaskHub | None = None,
 ) -> Agent[None, str]:
     # injected_model só troca o Model — nunca instructions/toolsets/capabilities.
@@ -185,6 +194,7 @@ def build_coder(
             ),
             ask_toolset(questions or QuestionGate()),
             task_toolset(tasks or TaskHub()),
+            *([skills_toolset(skills)] if skills is not None else []),
             *hub.toolsets(mutate=True),
         ],
         capabilities=[

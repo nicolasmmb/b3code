@@ -22,6 +22,9 @@ from b3code.utils.attachments import (
 
 AT_TOKEN = re.compile(r"(?<!\S)@([^\s]+)")
 FILE_BLOCK = re.compile(r'<file path="([^"]+)">.*?</file>\s*', re.DOTALL)
+SKILL_BLOCK = re.compile(r'<skill\s+name="([^"]+)"[^>]*>.*?</skill>\s*', re.DOTALL)
+SKILL_MENTION = re.compile(r"(?<!\S)!([^\s]+)")
+SKILL_CHIP = re.compile(r"\[SKILL - ([^\]]+)\]")
 CHIP_TOKEN = re.compile(r"\[([A-Z0-9]+) - ([^\]]+)\]")
 ATTACH_CHAR_LIMIT = 80_000
 
@@ -60,6 +63,42 @@ def strip_file_blocks(text: str) -> str:
     return FILE_BLOCK.sub("", text).strip()
 
 
+def replace_skill_blocks(text: str) -> str:
+    """Troca blocos `<skill>` por chips `[SKILL - nome]` na exibição."""
+    return SKILL_BLOCK.sub(
+        lambda match: chip_token("SKILL", match.group(1)), text
+    )
+
+
+def replace_skill_mentions(text: str) -> str:
+    """Troca `!nome` por chips `[SKILL - nome]` na exibição."""
+    return SKILL_MENTION.sub(
+        lambda match: chip_token("SKILL", match.group(1)), text
+    )
+
+
+def replace_skill_refs(text: str) -> str:
+    """Troca `!nome` e blocos `<skill>` por chips (exibição do user turn)."""
+    return replace_skill_blocks(replace_skill_mentions(text))
+
+
+def expand_skills(text: str, load_skill) -> str:
+    """Troca `!nome` e `[SKILL - nome]` por blocos `<skill>` (vai ao modelo)."""
+
+    def _replace(match: re.Match[str]) -> str:
+        block = load_skill(match.group(1))
+        return block or match.group(0)
+
+    text = SKILL_MENTION.sub(_replace, text)
+    return SKILL_CHIP.sub(_replace, text)
+
+
+def _maybe_expand_skills(text: str, load_skill) -> str:
+    if load_skill is None:
+        return text
+    return expand_skills(text, load_skill)
+
+
 def split_display_chips(text: str) -> tuple[list[tuple[str, str]], str]:
     chips = [(label, name) for label, name in CHIP_TOKEN.findall(text)]
     body = CHIP_TOKEN.sub("", text)
@@ -95,6 +134,7 @@ def _display_text(text: str) -> str:
         )
         return ""
 
+    text = replace_skill_blocks(text)
     cleaned = FILE_BLOCK.sub(_keep_chip, text).strip()
     if not chips:
         return cleaned
@@ -182,6 +222,7 @@ def build_user_content(
     cwd: Path,
     read_file,
     attachments: dict[str, Attachment] | None = None,
+    load_skill=None,
 ) -> str | list[str | BinaryContent]:
     leftover, chip_items = _pull_chips(text, attachments or {})
     leftover, at_binaries = _pull_at_binaries(leftover, cwd)
@@ -204,6 +245,7 @@ def build_user_content(
         if tag not in mentions:
             mentions = f"{mentions} {tag}".strip()
     leftover = mentions
+    leftover = _maybe_expand_skills(leftover, load_skill)
     expanded = expand_attachments(leftover, cwd, read_file) if leftover else ""
     if extra_blocks:
         expanded = "\n".join(

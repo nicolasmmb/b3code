@@ -70,6 +70,30 @@ async def test_app_opens_welcome(tmp_path: Path):
         assert think.display is False
 
 
+async def test_exclamation_lists_skills_and_inserts_chip(tmp_path: Path):
+    skills_dir = tmp_path / ".b3code" / "skills" / "commit"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "SKILL.md").write_text(
+        "---\nname: commit\ndescription: create a commit\n---\nSteps\n",
+        encoding="utf-8",
+    )
+    app = B3App(AppContainer.build(tmp_path))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        prompt = screen.query_one("#prompt", PromptInput)
+        prompt.focus()
+        await pilot.press("!")
+        await pilot.pause()
+        ac = screen.query_one(Autocomplete)
+        assert ac.display
+        labels = [item.label for item in ac.suggestions]
+        assert "commit" in labels
+        await pilot.press("tab")
+        await pilot.pause()
+        assert "[SKILL - commit]" in prompt.text
+
+
 async def test_app_applies_saved_theme(tmp_path: Path):
     ConfigStore.for_cwd(tmp_path).save(
         AppConfig(

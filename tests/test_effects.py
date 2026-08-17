@@ -25,6 +25,7 @@ class _Recorder:
             on_show_plan=lambda body: self.calls.append(("show_plan", body)),
             on_note=lambda text: self.calls.append(("note", text)),
             on_doctor=lambda names: self.calls.append(("doctor", ",".join(names))),
+            on_skills_reload=lambda: self.calls.append(("skills_reload", None)),
         )
 
 

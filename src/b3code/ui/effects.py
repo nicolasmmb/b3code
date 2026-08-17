@@ -11,6 +11,7 @@ from b3code.commands.effects import (
     PlanOff,
     Quit,
     Refresh,
+    ReloadSkills,
     RunPrompt,
     ShowPlanDoc,
 )
@@ -27,6 +28,7 @@ class CommandHooks:
     on_show_plan: Callable[[str], None]
     on_note: Callable[[str], None]
     on_doctor: Callable[[tuple[str, ...]], None]
+    on_skills_reload: Callable[[], None]
 
 
 def dispatch_command(result: CommandResult, hooks: CommandHooks) -> None:
@@ -72,6 +74,11 @@ def _doctor(hooks: CommandHooks, effect: DoctorMcp) -> bool:
     return True
 
 
+def _reload_skills(hooks: CommandHooks, _effect: ReloadSkills) -> bool:
+    hooks.on_skills_reload()
+    return False
+
+
 _APPLY = {
     Quit: _quit,
     NewSession: _new,
@@ -80,4 +87,5 @@ _APPLY = {
     PlanOff: _plan_off,
     ShowPlanDoc: _show_plan,
     DoctorMcp: _doctor,
+    ReloadSkills: _reload_skills,
 }

@@ -28,7 +28,7 @@ from b3code.ui.widgets.planbar import PlanBar
 from b3code.ui.widgets.question import QuestionBar
 from b3code.ui.widgets.topbar import TopBar
 from b3code.utils.attachments import Attachment
-from b3code.utils.prompt import build_user_content
+from b3code.utils.prompt import build_user_content, replace_skill_refs
 
 
 class ChatScreen(ChatStreamMixin, Screen):
@@ -87,6 +87,7 @@ class ChatScreen(ChatStreamMixin, Screen):
             self.deps.commands,
             self.deps.files,
             self.deps.config,
+            self.deps.skills,
             on_command=self._run_command,
             on_chat=self._send_chat,
             id="prompt-bar",
@@ -266,7 +267,11 @@ class ChatScreen(ChatStreamMixin, Screen):
             on_show_plan=self.chat_view.show_plan_doc,
             on_note=self.chat_view.mount_system,
             on_doctor=self._start_doctor,
+            on_skills_reload=self._reload_skills,
         )
+
+    def _reload_skills(self) -> None:
+        self.deps.chat.reload(self.deps.config)
 
     def _rebuild_after_command(self) -> None:
         app = self.app
@@ -293,7 +298,7 @@ class ChatScreen(ChatStreamMixin, Screen):
         user_text: str,
         attachments: dict[str, Attachment] | None = None,
     ) -> None:
-        self.chat_view.mount_user(user_text)
+        self.chat_view.mount_user(replace_skill_refs(user_text))
         self.chat_view.start_assistant()
         self.chat_view.stop_thinking()
         self.chat_view.ensure_thinking()
@@ -334,8 +339,15 @@ class ChatScreen(ChatStreamMixin, Screen):
             self.deps.cwd,
             self.deps.files.read,
             attachments,
+            self._load_skill,
         )
         await self.deps.chat.enqueue(prompt, self._on_event)
+
+    def _load_skill(self, name: str) -> str:
+        skill = self.deps.chat.skills.get(name)
+        if skill is None or skill.disabled or not skill.user_invocable:
+            return ""
+        return self.deps.chat.skills.load(name)
 
     def _reset_chat(self) -> None:
         if self._flush is not None:

@@ -23,7 +23,7 @@ class QuestionBar(ChoiceBar):
         self._idx = 0
 
     def compose(self) -> ComposeResult:
-        yield Static("", id=self.SUMMARY_ID)
+        yield Static("", markup=False, id=self.SUMMARY_ID)
         yield QuietOptions(id=self.OPTIONS_ID)
         with Horizontal(id="question-other-row"):
             yield Static("", id="question-other-mark")

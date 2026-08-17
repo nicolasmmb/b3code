@@ -40,6 +40,18 @@ class DoctorMcp:
     names: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ReloadSkills:
+    pass
+
+
 CommandEffect = (
-    Quit | Refresh | NewSession | RunPrompt | PlanOff | ShowPlanDoc | DoctorMcp
+    Quit
+    | Refresh
+    | NewSession
+    | RunPrompt
+    | PlanOff
+    | ShowPlanDoc
+    | DoctorMcp
+    | ReloadSkills
 )

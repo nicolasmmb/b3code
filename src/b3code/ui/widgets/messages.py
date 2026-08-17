@@ -149,7 +149,7 @@ class ThoughtBlock(Vertical):
     def __init__(self, text: str = "") -> None:
         super().__init__(classes="thought")
         self._text = text
-        self._body = Static(text, classes="thought-body")
+        self._body = Static(text, markup=False, classes="thought-body")
 
     def compose(self) -> ComposeResult:
         yield Static("thought", classes="thought-head")
@@ -648,6 +648,9 @@ def render_subagent_body(output: str, colors: RichPalette | None = None) -> Text
 
 class SystemNote(Static):
     """Saída de comando `/` e cancel — não é mensagem da LLM."""
+
+    def __init__(self, text: str) -> None:
+        super().__init__(text, markup=False)
 
 
 class RoleLabel(Static):

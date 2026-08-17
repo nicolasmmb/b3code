@@ -24,7 +24,7 @@ def thinking_badge(level: str) -> str:
         return ""
     if level == "auto":
         return "think"
-    return f"[think {level}]"
+    return f"think {level}"
 
 
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -236,6 +236,13 @@ def _infer_mcp_transport(has_cmd: bool, url: str) -> str:
     return "http"
 
 
+class SkillSettings(BaseModel):
+    enabled: bool = True
+    extra_paths: list[str] = Field(default_factory=list)
+    ignore: list[str] = Field(default_factory=list)
+    disabled: list[str] = Field(default_factory=list)
+
+
 class AppConfig(BaseModel):
     # true = Azure do JSON é o gateway. false = catálogo pydantic-ai.
     use_provider_gateway: bool = True
@@ -260,6 +267,7 @@ class AppConfig(BaseModel):
     # Unified Pydantic AI Thinking effort. off = do not send the setting.
     thinking: ThinkingEffortLevels = DEFAULT_THINKING
     mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
+    skills: SkillSettings = Field(default_factory=SkillSettings)
 
     @field_validator("mcp_servers", mode="before")
     @classmethod
