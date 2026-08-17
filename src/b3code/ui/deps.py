@@ -9,6 +9,7 @@ from b3code.config.service import ConfigService
 from b3code.services.chat import ChatService
 from b3code.services.files import FileIndex
 from b3code.services.session import SessionStore
+from b3code.services.skills import SkillIndex
 
 
 @dataclass(frozen=True)
@@ -20,3 +21,4 @@ class ScreenDeps:
     commands: CommandRegistry
     chat: ChatService
     files: FileIndex
+    skills: SkillIndex

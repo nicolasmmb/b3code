@@ -23,7 +23,10 @@ from b3code.tools.skills import skills_toolset
 from b3code.utils.prompt import (
     build_user_content,
     display_user_content,
+    expand_skills,
     replace_skill_blocks,
+    replace_skill_mentions,
+    replace_skill_refs,
 )
 
 
@@ -513,3 +516,60 @@ def test_build_user_content_keeps_skill_block(tmp_path: Path):
     assert isinstance(content, str)
     assert '<skill name="commit"' in content
     assert "</skill>" in content
+
+
+# --- invocação `!` no chat -------------------------------------------------
+
+
+def _load_skill_blocks(index: SkillIndex):
+    def _load(name: str) -> str:
+        skill = index.get(name)
+        if skill is None or skill.disabled or not skill.user_invocable:
+            return ""
+        return index.load(name)
+
+    return _load
+
+
+def test_expand_skills_mentions_and_chips(tmp_path: Path):
+    _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nSteps\n")
+    idx = _index(tmp_path)
+    load = _load_skill_blocks(idx)
+    out = expand_skills("!commit fix build", load)
+    assert '<skill name="commit" scope="project">' in out
+    assert "Steps" in out
+    assert "fix build" in out
+    chip = expand_skills("[SKILL - commit] fix build", load)
+    assert '<skill name="commit" scope="project">' in chip
+
+
+def test_expand_skills_unknown_keeps_mention(tmp_path: Path):
+    idx = _index(tmp_path)
+    out = expand_skills("!nope fix", _load_skill_blocks(idx))
+    assert out == "!nope fix"
+
+
+def test_replace_skill_mentions_makes_chip():
+    assert replace_skill_mentions("!commit fix") == "[SKILL - commit] fix"
+    assert replace_skill_refs("!commit fix") == "[SKILL - commit] fix"
+
+
+def test_build_user_content_expands_skill_mention(tmp_path: Path):
+    _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nSteps\n")
+    idx = _index(tmp_path)
+    content = build_user_content(
+        "!commit fix build", tmp_path, lambda rel: "", load_skill=_load_skill_blocks(idx)
+    )
+    assert isinstance(content, str)
+    assert '<skill name="commit"' in content
+    assert "Steps" in content
+    assert "fix build" in content
+
+
+def test_build_user_content_skips_disabled_skill(tmp_path: Path):
+    _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nSteps\n")
+    idx = _index(tmp_path, SkillSettings(disabled=["commit"]))
+    content = build_user_content(
+        "!commit fix", tmp_path, lambda rel: "", load_skill=_load_skill_blocks(idx)
+    )
+    assert content == "!commit fix"  # mantém a menção (skill disabled)

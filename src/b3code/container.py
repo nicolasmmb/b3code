@@ -65,4 +65,5 @@ class AppContainer:
             commands=self.commands,
             chat=self.chat,
             files=self.file_index,
+            skills=self.chat.skills,
         )

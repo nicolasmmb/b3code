@@ -19,7 +19,7 @@ sessões entre execuções. Construído com **Textual** (interface), **Pydantic 
 - **Diffs coloridos** com número de linha à esquerda, bandas verde/vermelha na linha inteira e *fold* (`▸`) para recolher/expandir linhas omitidas.
 - **Pergunta ao utilizador** (`ask_user_question`): card de escolha no meio do turno.
 - **Subagentes**: o coder lança um filho (`explore`, `plan` ou `general-purpose`) com contexto próprio.
-- **Skills** (formato Grok/Claude `SKILL.md`): o modelo ativa skills em runtime (`list_skills` / `load_skill`) e você as roda com `/skills run <nome>` (autocomplete) — ver [Skills](#134-skills).
+- **Skills** (formato Grok/Claude `SKILL.md`): o modelo ativa skills em runtime (`list_skills` / `load_skill`) e você as roda com `/skills run <nome>` ou `!nome` direto no chat (autocomplete) — ver [Skills](#134-skills).
 
 ## 3. Stack e requisitos
 
@@ -226,7 +226,9 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 Linhas que não começam com `/` vão para o chat. Digite `@` para anexar um
 arquivo: o autocomplete busca no workspace (fuzzy, respeitando `.gitignore`) e
 o conteúdo é expandido em um bloco `<file>` dentro do turno do usuário — isso
-mantém o prefixo do prompt estático, preservando o cache do Azure.
+mantém o prefixo do prompt estático, preservando o cache do Azure. Digite `!`
+para invocar uma skill direto no chat (autocomplete do nome): o corpo vira um
+bloco `<skill>` no turno do usuário e o bubble mostra o chip `[SKILL - nome]`.
 
 ## 8. Shell e permissões
 
@@ -588,9 +590,14 @@ Task: fix the build
 ```
 
 Sem argumentos, a última linha vira `Follow the skill instructions now.`.
-Não existe comando `/nome` por skill — `/skills run` é a única forma de
-rodar uma skill. Skills com `user-invocable: false` não aparecem no
-autocomplete nem rodam por comando.
+Não existe comando `/nome` por skill.
+
+**Invocação inline** — digite `!` no chat para rodar uma skill direto na
+mensagem: `!commit fix the build`. O autocomplete lista as skills e o Tab
+insere o chip `[SKILL - commit]` (como `@arquivo`). O corpo vira um bloco
+`<skill>` no turno do usuário e o bubble mostra o chip. Skills com
+`user-invocable: false` não aparecem no autocomplete, não rodam por `!` nem
+por comando.
 
 **Invocação automática** — o coder tem as tools de topo `list_skills` e
 `load_skill`: quando a tarefa casa com uma skill, o modelo chama

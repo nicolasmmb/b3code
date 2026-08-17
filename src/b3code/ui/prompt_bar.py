@@ -23,12 +23,14 @@ from b3code.commands.registry import CommandRegistry
 from b3code.commands.types import Suggestion
 from b3code.config.schema import AppConfig
 from b3code.services.files import FileIndex
+from b3code.services.skills import SkillIndex
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.utils.attachments import (
     AttachKind,
     Attachment,
     attachment_from_bytes,
     chip_span,
+    chip_token,
     classify_path,
     mime_suffix,
     next_paste_name,
@@ -67,7 +69,7 @@ class PromptInput(TextArea):
             show_line_numbers=False,
             compact=True,
             highlight_cursor_line=False,
-            placeholder="send a message  (@ file  / command)",
+            placeholder="send a message  (@ file  ! skill  / command)",
             **kwargs,
         )
         self._config = config
@@ -174,6 +176,7 @@ class PromptBar(Vertical):
         commands: CommandRegistry,
         files: FileIndex,
         config: AppConfig,
+        skills: SkillIndex,
         on_command: Callable[[str], None],
         on_chat: Callable[[str], None],
         **kwargs,
@@ -182,6 +185,7 @@ class PromptBar(Vertical):
         self._commands = commands
         self._files = files
         self._config = config
+        self._skills = skills
         self._on_command = on_command
         self._on_chat = on_chat
         self._ac_query: str | None = None
@@ -262,6 +266,19 @@ class PromptBar(Vertical):
         item = uniquify(item, self._attachments)
         self._attachments[item.token] = item
         return item.token
+
+    def _apply_skill_chip(
+        self, prompt_input: PromptInput, suggestion: Suggestion
+    ) -> None:
+        name = suggestion.value.lstrip("!")
+        token = chip_token("SKILL", name)
+        start, end, _ = current_token(
+            prompt_input.value, prompt_input.cursor_position
+        )
+        prompt_input.value = (
+            prompt_input.value[:start] + token + " " + prompt_input.value[end:]
+        )
+        prompt_input.cursor_position = start + len(token) + 1
 
     def _apply_file_chip(
         self, prompt_input: PromptInput, suggestion: Suggestion
@@ -384,6 +401,10 @@ class PromptBar(Vertical):
                 self._apply_file_chip(prompt_input, decision.suggestion)
                 autocomplete.set_suggestions([])
                 return
+            if decision.suggestion and decision.suggestion.kind == "skill":
+                self._apply_skill_chip(prompt_input, decision.suggestion)
+                autocomplete.set_suggestions([])
+                return
             prompt_input.value = decision.line
             prompt_input.cursor_position = decision.cursor
             consume = bool(decision.suggestion and decision.suggestion.consume)
@@ -422,8 +443,32 @@ class PromptBar(Vertical):
             self._ac_query = query
             self._search_files(query)
             return
+        if token.startswith("!"):
+            self._ac_query = None
+            autocomplete.set_suggestions(self._skill_suggestions(token[1:]))
+            return
         self._ac_query = None
         autocomplete.set_suggestions([])
+
+    def _skill_suggestions(self, prefix: str) -> list[Suggestion]:
+        self._skills.scan()
+        needle = prefix.lower()
+        out: list[Suggestion] = []
+        for skill in self._skills.skills():
+            if not skill.user_invocable:
+                continue
+            if needle and needle not in skill.name.lower():
+                continue
+            out.append(
+                Suggestion(
+                    value=f"!{skill.name}",
+                    label=skill.name,
+                    hint=skill.description or "skill",
+                    kind="skill",
+                    consume=False,
+                )
+            )
+        return out
 
     @work(exclusive=True, group="files-search")
     async def _search_files(self, query: str) -> None:
