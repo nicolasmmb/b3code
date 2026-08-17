@@ -57,6 +57,8 @@ com escrita atômica). Campos espelhando o schema `AppConfig`:
 | `selected_model` | string | primeiro de `gateway_api_models` | Modelo ativo. No gateway é um item de `gateway_api_models`; no catálogo é `provider:model`. |
 | `exclude_directories` | list | ver lista default | Pastas omitidas na descoberta (walk, índice, `list_dir`, `grep`). Compara o `basename`. |
 | `exclude_extensions` | list | `[]` | Extensões omitidas na descoberta. Normalizadas com ponto e minúsculas (`pyc` vira `.pyc`). |
+| `file_index_cap` | int | `50000` | Teto do índice de arquivos do `@`. Monorepos com mais arquivos precisam de um teto maior. |
+| `file_index_refresh_seconds` | number | `5.0` | Intervalo (s) do refresh periódico do índice. Arquivo criado no disco aparece no `@` em até ~6 s. |
 | `shell_allowed_paths` | list | `[]` | Paths absolutos que o shell pode usar sem perguntar de novo. |
 | `selected_theme` | string | `"b3code"` | Slug do tema ativo (o `name` de um item de `themes`). |
 | `themes` | list | `b3code` + `github-dark` | Temas salvos. Cada item tem `name` (slug), `label` opcional (exibição) e as cores `background`, `foreground`, `accent`, `muted`, `border`, `surface`, `error`, `success`. Hex inválido volta ao default. Nome com espaço vira slug + label (`"B3 Light"` → `name: "b3-light"`, `label: "B3 Light"`). |
@@ -225,7 +227,7 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/quit` / `/exit` | Sai do app |
 
 Linhas que não começam com `/` vão para o chat. Digite `@` para anexar um
-arquivo: o autocomplete busca no workspace (fuzzy, respeitando `.gitignore`) e
+arquivo: o autocomplete busca no workspace (fuzzy: substring + WRatio com fallback para typos, respeitando `.gitignore`) e
 o conteúdo é expandido em um bloco `<file>` dentro do turno do usuário — isso
 mantém o prefixo do prompt estático, preservando o cache do Azure. Digite `!`
 para invocar uma skill direto no chat (autocomplete do nome): o corpo vira um
@@ -358,18 +360,22 @@ flowchart TB
 
 O disco é a fonte.
 O `@` pergunta ao `FileIndex`.
-O `FileIndex` pergunta ao disco.
+O `FileIndex` pergunta ao disco — mas só em background.
 
 A UI usa uma porta: `search_async`.
-Esse método atualiza o índice se o último scan tem mais de 0,3 s.
-Depois ele ranqueia os paths.
+Esse método **nunca re-scana**: ele garante um scan inicial
+(single-flight) e ranqueia da memória.
+Digitar não espera o walk.
 
-O chat não atualiza o índice.
-`write_file`, CodeMode, shell e Finder só mudam o disco.
-A próxima tecla `@` vê a lista nova.
+O frescor do disco é mantido por `PromptBar.refresh_index`,
+um worker que roda em loop e chama `refresh_if_stale`
+(default: re-scan a cada 5 s se o índice está velho).
+`write_file`, CodeMode, shell e Finder só mudam o disco;
+o arquivo novo aparece no `@` em até ~6 s, sem travar tecla.
 
-No boot, `PromptBar.refresh_index` aquece o índice.
-Depois disso, só `search_async`.
+No boot, `refresh_index` aquece o índice.
+A primeira tecla `@` espera só esse scan inicial (single-flight).
+As seguintes ranqueiam da memória.
 
 ```mermaid
 flowchart LR
@@ -379,6 +385,7 @@ flowchart LR
   ac[Autocomplete]
 
   disco -->|varredura| files
+  bar -->|refresh_if_stale em loop| files
   bar -->|search_async| files
   files -->|hits| ac
 ```
@@ -393,19 +400,23 @@ sequenceDiagram
   participant Ac as Autocomplete
 
   Note over Bar,Idx: boot
-  Bar->>Idx: refresh
+  Bar->>Idx: refresh_index (worker em loop)
   Idx->>Disk: varredura
+  Disk-->>Idx: lista
+
+  loop a cada ~1 s
+    Bar->>Idx: refresh_if_stale
+    alt scan velho (>5 s) e sem scan em andamento
+      Idx->>Disk: varredura
+      Disk-->>Idx: lista nova
+    else índice fresco
+      Idx-->>Idx: mantém a lista
+    end
+  end
 
   Writer->>Disk: cria move ou apaga
   User->>Bar: @query
-  Bar->>Idx: search_async
-  Idx->>Idx: ensure_fresh
-  alt scan mais velho que 0,3 s
-    Idx->>Disk: varredura
-    Disk-->>Idx: lista nova
-  else scan fresco
-    Idx-->>Idx: mantém a lista
-  end
+  Bar->>Idx: search_async (só ranqueia)
   Idx-->>Bar: hits
   Bar->>Ac: listagem
 ```
@@ -413,17 +424,15 @@ sequenceDiagram
 ```mermaid
 flowchart TD
   start[search_async]
-  fresh[ensure_fresh]
-  old{scan mais velho que 0,3 s}
-  walk[refresh no thread]
+  ready{índice pronto?}
+  gate[aguarda scan em andamento via single-flight]
   rank[search na memória]
   out[devolve hits]
 
-  start --> fresh
-  fresh --> old
-  old -->|sim| walk
-  walk --> rank
-  old -->|nao| rank
+  start --> ready
+  ready -->|não| gate
+  gate --> rank
+  ready -->|sim| rank
   rank --> out
 ```
 
@@ -433,7 +442,8 @@ Regras:
 - Não adicione `watchdog`.
 - A varredura corre em `asyncio.to_thread`. O loop da TUI não espera o walk.
 - O índice respeita `.gitignore` e omite pastas como `node_modules` e `.git`.
-- O teto é 20 000 arquivos.
+- O teto é configurável via `file_index_cap` (default 50 000).
+- O intervalo do refresh periódico é `file_index_refresh_seconds` (default 5 s).
 
 ### 12.2 Fluxo de retry
 

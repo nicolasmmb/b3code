@@ -39,6 +39,8 @@ class AppContainer:
             cwd,
             skip_dirs=config.exclude_directories,
             skip_exts=config.exclude_extensions,
+            cap=config.file_index_cap,
+            refresh_seconds=config.file_index_refresh_seconds,
         )
         gate = PermissionGate(cfg_svc, cwd)
         skills = SkillIndex(cwd, config.skills)

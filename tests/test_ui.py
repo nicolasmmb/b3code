@@ -626,7 +626,7 @@ async def test_at_lists_file_created_on_disk(tmp_path: Path):
         bar = screen.query_one(PromptBar)
         await bar._files.ensure_scanned()
         (tmp_path / "late.py").write_text("y\n")
-        bar._files._scanned_at = 0.0
+        await bar._files.refresh()
         prompt = screen.query_one("#prompt", PromptInput)
         prompt.focus()
         prompt.text = "@late"

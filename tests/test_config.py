@@ -129,6 +129,15 @@ def test_shell_allowed_paths_roundtrip(tmp_path: Path):
     assert store.load().shell_allowed_paths == ["/tmp"]
 
 
+def test_file_index_cap_default_and_validation():
+    assert AppConfig().file_index_cap == 50_000
+    assert AppConfig().file_index_refresh_seconds == 5.0
+    with pytest.raises(ValueError, match="file_index_cap"):
+        AppConfig(file_index_cap=0)
+    with pytest.raises(ValueError, match="file_index_refresh_seconds"):
+        AppConfig(file_index_refresh_seconds=0)
+
+
 def test_roundtrip(tmp_path: Path):
     path = tmp_path / ".b3code" / "config.json"
     store = ConfigStore(path)

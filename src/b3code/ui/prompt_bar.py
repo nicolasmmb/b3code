@@ -1,7 +1,7 @@
 """Prompt + autocomplete.
 
-O worker `@` chama `FileIndex.search_async`.
-A barra não faz varredura. O índice lê o disco.
+O worker `@` chama `FileIndex.search_async` (nunca re-scana).
+`refresh_index` roda em loop e mantém o índice fresco via `refresh_if_stale`.
 """
 
 from __future__ import annotations
@@ -338,8 +338,10 @@ class PromptBar(Vertical):
 
     @work(exclusive=True, group="files-scan")
     async def refresh_index(self) -> None:
-        await self._files.refresh()
-        self.call_later(self.refresh_suggestions)
+        """Mantém o índice fresco em background — nunca trava a digitação."""
+        while True:
+            await self._files.refresh_if_stale()
+            await asyncio.sleep(1.0)
 
     def consume_key(self, event: Key) -> bool:
         autocomplete = self.query_one(Autocomplete)
