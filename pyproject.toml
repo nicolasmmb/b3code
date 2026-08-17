@@ -1,6 +1,6 @@
 [project]
 name = "b3code"
-version = "0.1.0"
+version = "1.0.0"
 description = "Minimal coding TUI — Textual + Pydantic AI + Azure"
 readme = "README.md"
 authors = [
