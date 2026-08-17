@@ -266,6 +266,9 @@ class AppConfig(BaseModel):
     multiline: bool = True
     # Unified Pydantic AI Thinking effort. off = do not send the setting.
     thinking: ThinkingEffortLevels = DEFAULT_THINKING
+    # Quantas retries o agent faz quando a resposta final não valida
+    # (UnexpectedModelBehavior). Preserva o histórico a cada tentativa.
+    agent_retries: int = 2
     mcp_servers: dict[str, McpServerConfig] = Field(default_factory=dict)
     skills: SkillSettings = Field(default_factory=SkillSettings)
 

@@ -223,7 +223,7 @@ def build_coder(
             *([cap] if (cap := thinking_cap(config)) else []),
             hooks,
         ],
-        retries=2,
+        retries=config.agent_retries,
     )
 
 

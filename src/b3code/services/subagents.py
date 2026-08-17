@@ -68,7 +68,7 @@ def build_subagent(
         instructions=_INSTRUCTIONS[kind],
         toolsets=[files],
         capabilities=_caps(kind, cwd, gate, config),
-        retries=2,
+        retries=config.agent_retries,
     )
 
 
