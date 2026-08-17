@@ -5,7 +5,7 @@ from __future__ import annotations
 from b3code.commands.effects import ReloadSkills, RunPrompt
 from b3code.commands.registry import Command
 from b3code.commands.types import CommandResult, Suggestion
-from b3code.services.skills import SkillIndex
+from b3code.services.skills import Skill, SkillIndex
 
 _USAGE = (
     "usage: /skills | /skills run <name> [args...] | "
@@ -24,7 +24,7 @@ def build_skills_command(index: SkillIndex) -> Command:
                 "run",
                 "run a skill by name with optional args",
                 lambda *args: _run(index, args),
-                lambda prefix="", *_: _complete(index, prefix),
+                lambda *tokens: _complete(index, tokens),
             ),
             "reload": Command(
                 "reload", "rescan skills from disk", lambda *_: _reload(index)
@@ -49,8 +49,21 @@ def _run(index: SkillIndex, args: tuple[str, ...]) -> CommandResult:
     return CommandResult(f"skill {skill.name} loaded", effect=RunPrompt(text))
 
 
-def _complete(index: SkillIndex, prefix: str) -> list[Suggestion]:
+def _complete(index: SkillIndex, tokens: tuple[str, ...]) -> list[Suggestion]:
+    """Completa o nome da skill; depois do nome + espaço, completa os args."""
     index.scan()
+    if not tokens or tokens == ("",):
+        return _complete_names(index, "")
+    if len(tokens) == 1:
+        return _complete_names(index, tokens[0])
+    name, arg_prefix, *_ = tokens
+    skill = index.get(name)
+    if skill is None or not skill.user_invocable:
+        return _complete_names(index, name)
+    return _complete_args(skill, arg_prefix)
+
+
+def _complete_names(index: SkillIndex, prefix: str) -> list[Suggestion]:
     needle = prefix.lower()
     out: list[Suggestion] = []
     for skill in index.skills():
@@ -68,6 +81,23 @@ def _complete(index: SkillIndex, prefix: str) -> list[Suggestion]:
             )
         )
     return out
+
+
+def _complete_args(skill: Skill, prefix: str) -> list[Suggestion]:
+    hint = skill.argument_hint
+    if not hint:
+        return []
+    if prefix and prefix.lower() not in hint.lower():
+        return []
+    return [
+        Suggestion(
+            value=hint,
+            label=hint,
+            hint=skill.description or "skill arg",
+            kind="arg",
+            consume=False,
+        )
+    ]
 
 
 def _listing(index: SkillIndex, args: tuple[str, ...]) -> CommandResult:

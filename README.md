@@ -574,8 +574,9 @@ malformado cai no fallback (corpo inteiro) — nunca quebra o boot.
 | `skills.extra_paths` (config) | config |
 
 **Invocação** — a única porta é `/skills run <nome> [args...]`, sempre com
-autocomplete do nome (`/skills run ` + Tab lista as skills; filtro parcial
-funciona). O corpo vai ao modelo em um bloco `<skill>` dentro do **user turn**
+autocomplete: `/skills run ` + Tab lista as skills (filtro parcial funciona)
+e, depois do nome + espaço, o `argument-hint` da skill vira sugestão de args
+(ex.: `[message]`). O corpo vai ao modelo em um bloco `<skill>` dentro do **user turn**
 (como `@arquivo`), preservando o cache do Azure:
 
 ```

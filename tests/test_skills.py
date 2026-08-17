@@ -323,6 +323,30 @@ def test_skills_run_completes_partial_name(tmp_path: Path):
     assert all(s.hint for s in reg.complete("/skills run "))
 
 
+def test_skills_run_completes_args_from_argument_hint(tmp_path: Path):
+    _write_skill(
+        tmp_path / ".b3code" / "skills",
+        "commit",
+        "---\nname: commit\ndescription: create a commit\nargument-hint: [message]\n---\nBODY\n",
+    )
+    reg = _registry(tmp_path)
+    args = [s.value for s in reg.complete("/skills run commit ")]
+    assert args == ["[message]"]
+    assert all(not s.consume for s in reg.complete("/skills run commit "))
+    assert all(s.label == "[message]" for s in reg.complete("/skills run commit "))
+    partial = [s.value for s in reg.complete("/skills run commit [m")]
+    assert partial == ["[message]"]
+    no_match = [s.value for s in reg.complete("/skills run commit fix")]
+    assert no_match == []
+
+
+def test_skills_run_without_hint_no_args_completion(tmp_path: Path):
+    _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nBODY\n")
+    reg = _registry(tmp_path)
+    args = [s.value for s in reg.complete("/skills run commit ")]
+    assert args == []
+
+
 def test_skills_run_no_args_sends_follow(tmp_path: Path):
     _write_skill(
         tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nSteps\n"
