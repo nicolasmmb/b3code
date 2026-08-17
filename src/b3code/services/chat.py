@@ -17,7 +17,12 @@ from pydantic_ai.models import Model
 
 from b3code.config.credentials import missing_gateway_credentials
 from b3code.config.schema import AppConfig
-from b3code.services.agents import CODER_INSTRUCTIONS, build_coder, build_planner_agent
+from b3code.services.agents import (
+    CODER_INSTRUCTIONS,
+    NO_USAGE_LIMITS,
+    build_coder,
+    build_planner_agent,
+)
 from b3code.services.events import (
     ChatEvent,
     ChatEventKind,
@@ -208,6 +213,7 @@ class ChatService:
             message_history=self.session.messages,
             event_stream_handler=handler,
             cancellation_token=token,
+            usage_limits=NO_USAGE_LIMITS,
         )
         await self.session.replace_async(result.all_messages())
         on_event(ChatEvent(kind="done", text=result.output or ""))
@@ -224,6 +230,7 @@ class ChatService:
             message_history=self._plan_history,
             event_stream_handler=handler,
             cancellation_token=token,
+            usage_limits=NO_USAGE_LIMITS,
         )
         self._plan_history = list(result.all_messages())
         await self._persist_plan_turn(prompt)
