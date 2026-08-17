@@ -163,6 +163,24 @@ def test_stdio_log_file_uses_cwd(tmp_path):
     assert log.parent.is_dir()
 
 
+def test_stdio_injects_code_explorer_root(tmp_path):
+    cfg = AppConfig(mcp_servers={"code": _stdio()})
+    hub = McpHub(cfg, cwd=tmp_path)
+    transport = hub.raw("code").client.transport
+    assert transport.env["CODE_EXPLORER_ROOT"] == str(tmp_path)
+
+
+def test_stdio_respects_explicit_code_explorer_root(tmp_path):
+    cfg = AppConfig(
+        mcp_servers={
+            "code": _stdio(env={"CODE_EXPLORER_ROOT": "/tmp/override"})
+        }
+    )
+    hub = McpHub(cfg, cwd=tmp_path)
+    transport = hub.raw("code").client.transport
+    assert transport.env["CODE_EXPLORER_ROOT"] == "/tmp/override"
+
+
 def test_sse_builder_uses_sse_transport():
     hub = McpHub(
         AppConfig(
