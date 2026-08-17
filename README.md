@@ -19,7 +19,7 @@ sessões entre execuções. Construído com **Textual** (interface), **Pydantic 
 - **Diffs coloridos** com número de linha à esquerda, bandas verde/vermelha na linha inteira e *fold* (`▸`) para recolher/expandir linhas omitidas.
 - **Pergunta ao utilizador** (`ask_user_question`): card de escolha no meio do turno.
 - **Subagentes**: o coder lança um filho (`explore`, `plan` ou `general-purpose`) com contexto próprio.
-- **Skills** (formato Grok/Claude `SKILL.md`): o modelo ativa skills em runtime (`list_skills` / `load_skill`) e você as roda como comando `/nome` — ver [Skills](#134-skills).
+- **Skills** (formato Grok/Claude `SKILL.md`): o modelo ativa skills em runtime (`list_skills` / `load_skill`) e você as roda com `/skill run <nome>` (autocomplete) — ver [Skills](#134-skills).
 
 ## 3. Stack e requisitos
 
@@ -217,8 +217,9 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/mcp doctor [name]` | Testa a conexão. Não grava config. |
 | `/plan on\|off` | Entra/sai do plan mode |
 | `/view-plan` | Mostra o `.b3code/plan.md` atual |
-| `/skills` | Lista as skills (nome, escopo, disabled, colisão) |
-| `/skills reload` | Resscanela skills do disco, reinstala comandos e recria o agent |
+| `/skill run <nome> [args...]` | Roda uma skill pelo nome (autocomplete do nome) |
+| `/skills` | Lista as skills (nome, escopo, disabled) |
+| `/skills reload` | Resscanela skills do disco e recria o agent |
 | `/skills paths` | Mostra os roots de descoberta |
 | `/quit` / `/exit` | Sai do app |
 
@@ -572,9 +573,10 @@ malformado cai no fallback (corpo inteiro) — nunca quebra o boot.
 | `~/.claude/skills/` | user |
 | `skills.extra_paths` (config) | config |
 
-**Invocação como comando** — cada skill vira `/nome` (com autocomplete). O
-corpo vai ao modelo em um bloco `<skill>` dentro do **user turn** (como
-`@arquivo`), preservando o cache do Azure:
+**Invocação** — a única porta é `/skill run <nome> [args...]`, sempre com
+autocomplete do nome (`/skill run ` + Tab lista as skills; filtro parcial
+funciona). O corpo vai ao modelo em um bloco `<skill>` dentro do **user turn**
+(como `@arquivo`), preservando o cache do Azure:
 
 ```
 <skill name="commit" scope="project">
@@ -585,17 +587,19 @@ Task: fix the build
 ```
 
 Sem argumentos, a última linha vira `Follow the skill instructions now.`.
-Colisão com comando nativo: o nativo fica com `/nome`; a skill fica com
-`/<scope>:<nome>` (ex.: `/project:model`). `/skills` marca a colisão.
+Não existe comando `/nome` por skill — `/skill run` é a única forma de rodar
+uma skill. Skills com `user-invocable: false` não aparecem no autocomplete nem
+rodam por comando.
 
 **Invocação automática** — o coder tem as tools de topo `list_skills` e
 `load_skill`: quando a tarefa casa com uma skill, o modelo chama
 `list_skills`, depois `load_skill(name)` e segue as instruções. Skills com
 `disable-model-invocation: true` não aparecem na tool; `user-invocable:
-false` não vira comando.
+false` fica fora do autocomplete e do `/skill run`.
 
-**Recarga** — `/skills reload` resscaneia o disco, reinstala os comandos e
-recria o agent (invalida o prefixo do cache, como `/model`). Sem watcher de
+**Recarga** — `/skills reload` resscaneia o disco e recria o agent
+(invalida o prefixo do cache, como `/model`). O autocomplete e o `/skill run`
+resscaneiam sozinhos, então uma skill nova aparece sem reload. Sem watcher de
 arquivos: o reload é explícito e barato.
 
 | núcleo | factory | comando | tool |

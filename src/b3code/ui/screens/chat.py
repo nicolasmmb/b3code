@@ -270,7 +270,6 @@ class ChatScreen(ChatStreamMixin, Screen):
         )
 
     def _reload_skills(self) -> None:
-        self.deps.commands.reload_skills()
         self.deps.chat.reload(self.deps.config)
 
     def _rebuild_after_command(self) -> None:

@@ -1,41 +1,64 @@
-"""Comandos `/nome` (uma skill) e `/skills` (gestão de skills)."""
+"""Comandos `/skill run` (única porta de invocação) e `/skills` (gestão)."""
 
 from __future__ import annotations
 
 from b3code.commands.effects import ReloadSkills, RunPrompt
 from b3code.commands.registry import Command
-from b3code.commands.types import CommandResult
-from b3code.services.chat import ChatService
-from b3code.services.skills import Skill, SkillIndex
+from b3code.commands.types import CommandResult, Suggestion
+from b3code.services.skills import SkillIndex
 
 
-def build_skill_command(
-    skill: Skill, index: SkillIndex, name: str | None = None
-) -> Command:
-    """`/nome [args...]` → RunPrompt com o corpo da skill + a tarefa."""
+def build_skill_run(index: SkillIndex) -> Command:
+    """`/skill run <nome> [args...]` — roda uma skill, sempre com autocomplete."""
 
-    command_name = name or skill.name
-
-    def handler(*args: str) -> CommandResult:
+    def run(*args: str) -> CommandResult:
+        if not args:
+            return CommandResult("usage: /skill run <name> [args...]")
+        name, *rest = args
         index.scan()
-        fresh = index.get(skill.name)
-        if fresh is None or fresh.disabled:
-            return CommandResult(f"skill {skill.name} not found")
-        task = " ".join(args).strip() or "Follow the skill instructions now."
+        skill = index.get(name)
+        if skill is None or skill.disabled or not skill.user_invocable:
+            return CommandResult(f"unknown or disabled skill {name!r}")
+        task = " ".join(rest).strip() or "Follow the skill instructions now."
         text = f"{index.load(skill.name)}\n\nTask: {task}"
         return CommandResult(f"skill {skill.name} loaded", effect=RunPrompt(text))
 
-    help_text = f"skill: {skill.description}"
-    if skill.argument_hint:
-        help_text += f" — args: {skill.argument_hint}"
-    return Command(command_name, help_text, handler)
+    def complete(prefix: str = "", *_: str) -> list[Suggestion]:
+        index.scan()
+        needle = prefix.lower()
+        out: list[Suggestion] = []
+        for skill in index.skills():
+            if not skill.user_invocable:
+                continue
+            if needle and needle not in skill.name.lower():
+                continue
+            out.append(
+                Suggestion(
+                    value=skill.name,
+                    label=skill.name,
+                    hint=skill.description or "skill",
+                    kind="arg",
+                    consume=False,
+                )
+            )
+        return out
+
+    return Command(
+        "skill",
+        "run a skill by name",
+        None,
+        children={
+            "run": Command(
+                "run",
+                "run a skill by name with optional args",
+                run,
+                complete,
+            ),
+        },
+    )
 
 
-def build_skills_command(
-    index: SkillIndex,
-    chat: ChatService,
-    native: frozenset[str] = frozenset(),
-) -> Command:
+def build_skills_command(index: SkillIndex) -> Command:
     """`/skills`, `/skills reload`, `/skills paths`."""
 
     def handler(*args: str) -> CommandResult:
@@ -45,7 +68,7 @@ def build_skills_command(
             return CommandResult(
                 "usage: /skills | /skills reload | /skills paths"
             )
-        return CommandResult(_skill_listing(index, native))
+        return CommandResult(_skill_listing(index))
 
     def reload(*_: str) -> CommandResult:
         index.scan()
@@ -66,16 +89,11 @@ def build_skills_command(
     )
 
 
-def _skill_listing(index: SkillIndex, native: frozenset[str]) -> str:
+def _skill_listing(index: SkillIndex) -> str:
     lines: list[str] = []
     for skill in index.skills(include_disabled=True):
         line = f"{skill.name}  {skill.scope}"
         if skill.disabled:
             line += "  [disabled]"
-        if skill.name in native:
-            line += (
-                f"  [collides with /{skill.name} → "
-                f"/{skill.scope}:{skill.name}]"
-            )
         lines.append(line)
     return "\n".join(lines) or "(no skills)"

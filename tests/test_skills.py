@@ -43,12 +43,16 @@ def _index(
     return SkillIndex(cwd, settings, home=home or cwd / "home")
 
 
-def _registry(cwd: Path, home: Path | None = None) -> CommandRegistry:
+def _registry(
+    cwd: Path,
+    home: Path | None = None,
+    settings: SkillSettings | None = None,
+) -> CommandRegistry:
     store = ConfigStore(cwd / "config.json")
     cfg = AppConfig(gateway_api_models=["gpt-4o"])
     store.save(cfg)
     sessions = SessionStore(cwd / "sessions.json")
-    skills = _index(cwd, home=home)
+    skills = _index(cwd, settings=settings, home=home)
     chat = ChatService(cfg, sessions, cwd, model=TestModel(), skills=skills)
     return CommandRegistry.build(store, cfg, sessions, chat, skills=skills)
 
@@ -289,7 +293,7 @@ def test_catalog_and_load(tmp_path: Path):
 # --- registry -------------------------------------------------------------
 
 
-def test_skill_command_in_autocomplete_and_run_prompt(tmp_path: Path):
+def test_skill_run_in_autocomplete_and_run_prompt(tmp_path: Path):
     _write_skill(
         tmp_path / ".b3code" / "skills",
         "commit",
@@ -297,54 +301,73 @@ def test_skill_command_in_autocomplete_and_run_prompt(tmp_path: Path):
     )
     reg = _registry(tmp_path)
     names = [s.label for s in reg.complete("/")]
-    assert "/commit" in names
+    assert "/commit" not in names  # sem comando por skill
+    assert "/skill" in names
     assert "/skills" in names
-    result = reg.execute("/commit fix the build")
+    completed = [s.value for s in reg.complete("/skill run ")]
+    assert "commit" in completed
+    result = reg.execute("/skill run commit fix the build")
     assert isinstance(result.effect, RunPrompt)
     assert "Task: fix the build" in result.effect.text
     assert '<skill name="commit" scope="project">' in result.effect.text
     assert "1. git status" in result.effect.text
 
 
-def test_skill_command_no_args_sends_follow(tmp_path: Path):
+def test_skill_run_completes_partial_name(tmp_path: Path):
+    _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nBODY\n")
+    _write_skill(tmp_path / ".b3code" / "skills", "review", "---\nname: review\n---\nBODY\n")
+    reg = _registry(tmp_path)
+    values = [s.value for s in reg.complete("/skill run co")]
+    assert values == ["commit"]
+    assert all(not s.consume for s in reg.complete("/skill run "))
+    assert all(s.hint for s in reg.complete("/skill run "))
+
+
+def test_skill_run_no_args_sends_follow(tmp_path: Path):
     _write_skill(
         tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nSteps\n"
     )
     reg = _registry(tmp_path)
-    result = reg.execute("/commit")
+    result = reg.execute("/skill run commit")
     assert isinstance(result.effect, RunPrompt)
     assert "Follow the skill instructions now." in result.effect.text
 
 
-def test_collision_qualifies_skill(tmp_path: Path):
-    _write_skill(
-        tmp_path / ".b3code" / "skills",
-        "model",
-        "---\nname: model\ndescription: a skill named model\n---\nMODEL BODY\n",
-    )
+def test_skill_run_usage_and_unknown(tmp_path: Path):
+    _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nBODY\n")
     reg = _registry(tmp_path)
-    names = [s.label for s in reg.complete("/")]
-    assert "/model" in names  # nativo continua
-    assert "/project:model" in names  # skill qualificada
-    native = reg.execute("/model")
-    assert not isinstance(native.effect, RunPrompt)
-    skill_run = reg.execute("/project:model do it")
-    assert isinstance(skill_run.effect, RunPrompt)
-    assert "MODEL BODY" in skill_run.effect.text
-    assert "Task: do it" in skill_run.effect.text
+    usage = reg.execute("/skill run")
+    assert "usage" in usage.message
+    assert usage.effect is None
+    missing = reg.execute("/skill run nope")
+    assert "unknown or disabled skill" in missing.message
+    assert missing.effect is None
 
 
-def test_user_invocable_false_not_installed(tmp_path: Path):
+def test_skill_run_user_invocable_false_blocked(tmp_path: Path):
     _write_skill(
         tmp_path / ".b3code" / "skills",
         "hidden",
         "---\nname: hidden\nuser-invocable: false\n---\nBODY\n",
     )
     reg = _registry(tmp_path)
-    names = [s.label for s in reg.complete("/")]
-    assert "/hidden" not in names
-    result = reg.execute("/hidden")
-    assert "unknown command" in result.message
+    values = [s.value for s in reg.complete("/skill run ")]
+    assert "hidden" not in values
+    result = reg.execute("/skill run hidden")
+    assert "unknown or disabled skill" in result.message
+
+
+def test_skill_run_skips_disabled(tmp_path: Path):
+    _write_skill(tmp_path / ".b3code" / "skills", "commit", "---\nname: commit\n---\nBODY\n")
+    reg = _registry(
+        tmp_path,
+        home=tmp_path / "home",
+        settings=SkillSettings(disabled=["commit"]),
+    )
+    values = [s.value for s in reg.complete("/skill run ")]
+    assert "commit" not in values
+    result = reg.execute("/skill run commit")
+    assert "unknown or disabled skill" in result.message
 
 
 def test_skills_list_reload_paths(tmp_path: Path):
@@ -362,19 +385,18 @@ def test_skills_list_reload_paths(tmp_path: Path):
     assert "project" in paths.message
 
 
-def test_skills_reload_installs_new_command(tmp_path: Path):
+def test_skill_run_picks_up_new_skill(tmp_path: Path):
     reg = _registry(tmp_path)
-    assert "/fresh" not in [s.label for s in reg.complete("/")]
+    assert "fresh" not in [s.value for s in reg.complete("/skill run ")]
     _write_skill(
         tmp_path / ".b3code" / "skills",
         "fresh",
         "---\nname: fresh\n---\nFRESH BODY\n",
     )
-    reg.skills.scan()  # o handler de /skills reload faz o scan; a UI chama reload_skills
-    reg.reload_skills()
-    names = [s.label for s in reg.complete("/")]
-    assert "/fresh" in names
-    result = reg.execute("/fresh")
+    reg.roots["skills"].children["reload"].handler()
+    values = [s.value for s in reg.complete("/skill run ")]
+    assert "fresh" in values
+    result = reg.execute("/skill run fresh")
     assert isinstance(result.effect, RunPrompt)
     assert "FRESH BODY" in result.effect.text
 
