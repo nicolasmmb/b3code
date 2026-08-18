@@ -1,26 +1,24 @@
 """Load/save do `config.json` global (único por usuário)."""
 
-import asyncio
 import json
 from pathlib import Path
 
 from b3code.config.dirs import b3code_home
 from b3code.config.schema import AppConfig
-from b3code.utils.paths import atomic_write_text
+from b3code.utils.paths import atomic_write_json
 
 SCHEMA_REF = "./schema.json"
 
 
-def config_schema() -> str:
+def config_schema() -> dict[str, object]:
     """JSON Schema do AppConfig, para o editor validar/autocompletar config.json."""
     schema = AppConfig.model_json_schema()
-    schema = {
+    return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": SCHEMA_REF,
         "title": "b3code configuration",
         **schema,
     }
-    return json.dumps(schema, indent=2, ensure_ascii=False) + "\n"
 
 
 class ConfigStore:
@@ -42,16 +40,12 @@ class ConfigStore:
         return cfg
 
     def save(self, cfg: AppConfig) -> None:
-        atomic_write_text(self.path, self._dump(cfg))
+        atomic_write_json(self.path, self._payload(cfg))
         self._ensure_schema()
-
-    async def save_async(self, cfg: AppConfig) -> None:
-        await asyncio.to_thread(atomic_write_text, self.path, self._dump(cfg))
-        await asyncio.to_thread(self._ensure_schema)
 
     def _ensure_schema(self) -> None:
         if not self._schema_path().exists():
-            atomic_write_text(self._schema_path(), config_schema())
+            atomic_write_json(self._schema_path(), config_schema())
 
     def _schema_path(self) -> Path:
         return self.path.parent / "schema.json"
@@ -69,7 +63,7 @@ class ConfigStore:
         return "exclude_directories" not in raw or "exclude_extensions" not in raw
 
     @staticmethod
-    def _dump(cfg: AppConfig) -> str:
+    def _payload(cfg: AppConfig) -> dict[str, object]:
         data = json.loads(cfg.model_dump_json())
         data["$schema"] = SCHEMA_REF
-        return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+        return data

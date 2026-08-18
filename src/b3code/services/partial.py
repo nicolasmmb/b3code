@@ -34,8 +34,6 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-_MAX_PARTS = 200
-
 TextDelta = TextPartDelta | ThinkingPartDelta
 
 
@@ -114,11 +112,6 @@ class PartialTurnRecorder:
             return
         self._messages.append(ModelRequest(parts=list(self._returns)))
         self._returns = []
-
-    def _append_part(self, part: Any) -> None:
-        if len(self._current) >= _MAX_PARTS:
-            return
-        self._current.append(part)
 
     # --- saída -------------------------------------------------------------
 

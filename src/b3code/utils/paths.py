@@ -6,6 +6,7 @@ porque o sandbox monta o cwd em `/work`.
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 from collections.abc import Callable, Iterable, Iterator
@@ -23,9 +24,7 @@ def resolve_agent_path(path: str, cwd: Path) -> Path:
     return resolved.resolve()
 
 
-def safe_workspace_path(
-    path: str, cwd: Path, *, allowed: Iterable[Path] = ()
-) -> Path:
+def safe_workspace_path(path: str, cwd: Path, *, allowed: Iterable[Path] = ()) -> Path:
     """Resolve `path` dentro de `cwd` (ou de um base em `allowed`).
 
     `allowed` libera leituras pontuais fora do workspace (ex.: o plano
@@ -111,5 +110,10 @@ def atomic_write_text(path: Path, text: str) -> None:
     """Write `text` via temp + os.replace so a crash never leaves a half JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(text, encoding="utf-8")
+    _ = tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
+
+
+def atomic_write_json(path: Path, data: object, *, indent: int = 2) -> None:
+    """Write `data` as pretty JSON via atomic_write_text."""
+    atomic_write_text(path, json.dumps(data, indent=indent, ensure_ascii=False) + "\n")
