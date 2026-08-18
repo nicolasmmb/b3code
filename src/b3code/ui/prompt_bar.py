@@ -88,14 +88,17 @@ class PromptInput(TextArea):
 
     @property
     def cursor_position(self) -> int:
-        return self.document.get_index_from_location(self.cursor_location)
+        # document é DocumentBase na tipagem; os métodos vivem no Document.
+        return self.document.get_index_from_location(self.cursor_location)  # type: ignore[attr-defined]
 
     @cursor_position.setter
     def cursor_position(self, index: int) -> None:
         index = max(0, min(index, len(self.text)))
-        self.move_cursor(self.document.get_location_from_index(index))
+        # document é DocumentBase na tipagem; os métodos vivem no Document.
+        self.move_cursor(self.document.get_location_from_index(index))  # type: ignore[attr-defined]
 
-    def clear(self) -> None:
+    def clear(self) -> None:  # type: ignore[override]
+        # Limpar via self.text não emite evento de edição (intencional).
         self.text = ""
 
     def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
