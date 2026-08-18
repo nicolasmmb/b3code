@@ -90,6 +90,7 @@ class ChatScreen(ChatStreamMixin, Screen):
             self.deps.skills,
             on_command=self._run_command,
             on_chat=self._send_chat,
+            on_draft=self._save_draft,
             id="prompt-bar",
         )
 
@@ -128,6 +129,8 @@ class ChatScreen(ChatStreamMixin, Screen):
         turns = self.deps.sessions.display_turns()
         if turns:
             self.chat_view.rebuild(turns)
+        if self.deps.sessions.draft:
+            prompt_bar.restore_draft(self.deps.sessions.draft)
         prompt_bar.refresh_index()
 
     def _set_plan_badge(self) -> None:
@@ -248,6 +251,9 @@ class ChatScreen(ChatStreamMixin, Screen):
     def action_quit(self) -> None:
         self.app.exit()
 
+    def _save_draft(self, text: str) -> None:
+        self.deps.sessions.set_draft(text)
+
     def _run_command(self, line: str) -> None:
         name = (line[1:].split() or [""])[0]
         if name in {"new", "resume", "plan"} and self.deps.chat.busy:
@@ -285,6 +291,8 @@ class ChatScreen(ChatStreamMixin, Screen):
         if self.question_controller is not None:
             self.question_controller.set_accent(self.deps.config.accent)
         self.chat_view.rebuild(self.deps.sessions.display_turns())
+        prompt_bar = self.query_one(PromptBar)
+        prompt_bar.restore_draft(self.deps.sessions.draft)
         self.query_one(TopBar).set_model(self.deps.config.selected_model)
         self._set_think_badge()
 

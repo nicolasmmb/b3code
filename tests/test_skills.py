@@ -8,7 +8,7 @@ from pydantic_ai.models.test import TestModel
 
 from b3code.commands.effects import ReloadSkills, RunPrompt
 from b3code.commands.registry import CommandRegistry
-from b3code.config.dirs import b3code_home, project_dir
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import AppConfig, SkillSettings
 from b3code.config.store import ConfigStore
 from b3code.services.chat import ChatService
@@ -82,37 +82,33 @@ def test_old_config_without_skills_loads():
 # --- descoberta e prioridade ---------------------------------------------
 
 
-def test_project_beats_user(tmp_path: Path):
+def test_central_beats_grok_compat(tmp_path: Path):
     home = tmp_path / "home"
-    proj_skill = _write_skill(
-        project_dir(tmp_path) / "skills",
-        "commit",
-        "---\nname: commit\ndescription: project\n---\nPROJ",
-    )
-    _write_skill(
+    central_skill = _write_skill(
         b3code_home() / "skills",
         "commit",
-        "---\nname: commit\ndescription: user\n---\nUSER",
+        "---\nname: commit\ndescription: central\n---\nCENTRAL",
+    )
+    _write_skill(
+        home / ".grok" / "skills",
+        "commit",
+        "---\nname: commit\ndescription: grok\n---\nGROK",
     )
     idx = _index(tmp_path, home=home)
     skills = idx.skills()
     assert len(skills) == 1
-    assert skills[0].scope == "project"
-    assert skills[0].body.strip() == "PROJ"
-    assert skills[0].path == proj_skill
+    assert skills[0].scope == "user"
+    assert skills[0].body.strip() == "CENTRAL"
+    assert skills[0].path == central_skill
 
 
-def test_grok_and_claude_compat_project_and_user(tmp_path: Path):
+def test_grok_and_claude_compat_user(tmp_path: Path):
     home = tmp_path / "home"
-    _write_skill(tmp_path / ".grok" / "skills", "grokproj")
-    _write_skill(tmp_path / ".claude" / "skills", "claudeproj")
     _write_skill(home / ".grok" / "skills", "grokuser")
     _write_skill(home / ".claude" / "skills", "claudeuser")
     idx = _index(tmp_path, home=home)
     by_name = {s.name: s.scope for s in idx.skills()}
     assert by_name == {
-        "grokproj": "project",
-        "claudeproj": "project",
         "grokuser": "user",
         "claudeuser": "user",
     }
@@ -155,7 +151,7 @@ def test_extra_path_tilde_expands(tmp_path: Path, monkeypatch):
 
 def test_frontmatter_fields(tmp_path: Path):
     path = _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "commit",
         """---
 name: commit
@@ -186,7 +182,7 @@ Body here
 
 def test_frontmatter_comma_list_and_false_bools(tmp_path: Path):
     path = _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "review",
         """---
 name: review
@@ -208,7 +204,7 @@ Body
 
 def test_fallback_name_and_description(tmp_path: Path):
     path = _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "My Skill!",
         "First paragraph is the description.\n\nReal body.\n",
     )
@@ -220,7 +216,7 @@ def test_fallback_name_and_description(tmp_path: Path):
 
 def test_frontmatter_without_closing_is_whole_body(tmp_path: Path):
     path = _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "broken",
         "---\nname: broken\ndescription: x\n",
     )
@@ -240,7 +236,7 @@ def test_normalize_skill_name():
 
 def test_body_truncated(tmp_path: Path):
     path = _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "big",
         "x" * (MAX_SKILL_BODY + 100),
     )
@@ -253,20 +249,21 @@ def test_body_truncated(tmp_path: Path):
 
 def test_ignore_hides_path(tmp_path: Path):
     home = tmp_path / "home"
-    _write_skill(project_dir(tmp_path) / "skills", "commit")
     _write_skill(b3code_home() / "skills", "commit")
+    _write_skill(home / ".grok" / "skills", "other")
     idx = _index(
         tmp_path,
-        SkillSettings(ignore=[str(project_dir(tmp_path) / "skills")]),
+        SkillSettings(ignore=[str(b3code_home() / "skills")]),
         home=home,
     )
     skills = idx.skills()
     assert len(skills) == 1
+    assert skills[0].name == "other"
     assert skills[0].scope == "user"
 
 
 def test_disabled_marked_but_not_available(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit")
+    _write_skill(b3code_home() / "skills", "commit")
     idx = _index(tmp_path, SkillSettings(disabled=["commit"]))
     assert idx.skills() == []
     all_skills = idx.skills(include_disabled=True)
@@ -275,7 +272,7 @@ def test_disabled_marked_but_not_available(tmp_path: Path):
 
 
 def test_enabled_false_empty(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit")
+    _write_skill(b3code_home() / "skills", "commit")
     idx = _index(tmp_path, SkillSettings(enabled=False))
     assert idx.skills() == []
     assert idx.catalog() == "no skills available"
@@ -283,14 +280,14 @@ def test_enabled_false_empty(tmp_path: Path):
 
 def test_catalog_and_load(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "commit",
         "---\nname: commit\ndescription: create a commit\nwhen-to-use: user asks to commit\n---\nSteps\n",
     )
     idx = _index(tmp_path)
     assert "commit — create a commit (when: user asks to commit)" in idx.catalog()
     loaded = idx.load("commit")
-    assert loaded.startswith('<skill name="commit" scope="project">')
+    assert loaded.startswith('<skill name="commit" scope="user">')
     assert "Steps" in loaded
     assert loaded.rstrip().endswith("</skill>")
     assert idx.load("nope") == ""
@@ -301,7 +298,7 @@ def test_catalog_and_load(tmp_path: Path):
 
 def test_skills_run_in_autocomplete_and_run_prompt(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "commit",
         "---\nname: commit\ndescription: create a commit\n---\n1. git status\n2. commit\n",
     )
@@ -315,13 +312,13 @@ def test_skills_run_in_autocomplete_and_run_prompt(tmp_path: Path):
     result = reg.execute("/skills run commit fix the build")
     assert isinstance(result.effect, RunPrompt)
     assert "Task: fix the build" in result.effect.text
-    assert '<skill name="commit" scope="project">' in result.effect.text
+    assert '<skill name="commit" scope="user">' in result.effect.text
     assert "1. git status" in result.effect.text
 
 
 def test_skills_run_completes_partial_name(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nBODY\n")
-    _write_skill(project_dir(tmp_path) / "skills", "review", "---\nname: review\n---\nBODY\n")
+    _write_skill(b3code_home() / "skills", "commit", "---\nname: commit\n---\nBODY\n")
+    _write_skill(b3code_home() / "skills", "review", "---\nname: review\n---\nBODY\n")
     reg = _registry(tmp_path)
     values = [s.value for s in reg.complete("/skills run co")]
     assert values == ["commit"]
@@ -331,7 +328,7 @@ def test_skills_run_completes_partial_name(tmp_path: Path):
 
 def test_skills_run_completes_args_from_argument_hint(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "commit",
         "---\nname: commit\ndescription: create a commit\nargument-hint: [message]\n---\nBODY\n",
     )
@@ -347,7 +344,7 @@ def test_skills_run_completes_args_from_argument_hint(tmp_path: Path):
 
 
 def test_skills_run_without_hint_no_args_completion(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nBODY\n")
+    _write_skill(b3code_home() / "skills", "commit", "---\nname: commit\n---\nBODY\n")
     reg = _registry(tmp_path)
     args = [s.value for s in reg.complete("/skills run commit ")]
     assert args == []
@@ -355,7 +352,7 @@ def test_skills_run_without_hint_no_args_completion(tmp_path: Path):
 
 def test_skills_run_no_args_sends_follow(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nSteps\n"
+        b3code_home() / "skills", "commit", "---\nname: commit\n---\nSteps\n"
     )
     reg = _registry(tmp_path)
     result = reg.execute("/skills run commit")
@@ -364,7 +361,7 @@ def test_skills_run_no_args_sends_follow(tmp_path: Path):
 
 
 def test_skills_run_usage_and_unknown(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nBODY\n")
+    _write_skill(b3code_home() / "skills", "commit", "---\nname: commit\n---\nBODY\n")
     reg = _registry(tmp_path)
     usage = reg.execute("/skills run")
     assert "usage" in usage.message
@@ -376,7 +373,7 @@ def test_skills_run_usage_and_unknown(tmp_path: Path):
 
 def test_skills_run_user_invocable_false_blocked(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "hidden",
         "---\nname: hidden\nuser-invocable: false\n---\nBODY\n",
     )
@@ -388,7 +385,7 @@ def test_skills_run_user_invocable_false_blocked(tmp_path: Path):
 
 
 def test_skills_run_skips_disabled(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nBODY\n")
+    _write_skill(b3code_home() / "skills", "commit", "---\nname: commit\n---\nBODY\n")
     reg = _registry(
         tmp_path,
         home=tmp_path / "home",
@@ -402,18 +399,17 @@ def test_skills_run_skips_disabled(tmp_path: Path):
 
 def test_skills_list_reload_paths(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nBODY\n"
+        b3code_home() / "skills", "commit", "---\nname: commit\n---\nBODY\n"
     )
     reg = _registry(tmp_path)
     listed = reg.execute("/skills")
-    assert "commit  project" in listed.message
+    assert "commit  user" in listed.message
     assert listed.effect is None
     sub_commands = [s.value for s in reg.complete("/skills ")]
     assert set(sub_commands) >= {"run", "reload", "paths"}
     reloaded = reg.execute("/skills reload")
     assert isinstance(reloaded.effect, ReloadSkills)
     paths = reg.execute("/skills paths")
-    assert "project" in paths.message
     assert "user" in paths.message
     assert "skills" in paths.message
 
@@ -422,7 +418,7 @@ def test_skills_run_picks_up_new_skill(tmp_path: Path):
     reg = _registry(tmp_path)
     assert "fresh" not in [s.value for s in reg.complete("/skills run ")]
     _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "fresh",
         "---\nname: fresh\n---\nFRESH BODY\n",
     )
@@ -445,7 +441,7 @@ def _tools(index: SkillIndex) -> dict:
 
 def test_toolset_list_and_load(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "commit",
         "---\nname: commit\ndescription: create a commit\nwhen-to-use: user asks to commit\n---\nSteps\n",
     )
@@ -461,7 +457,7 @@ def test_toolset_list_and_load(tmp_path: Path):
 
 def test_toolset_hides_model_invocation_disabled(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills",
+        b3code_home() / "skills",
         "secret",
         "---\nname: secret\ndescription: hidden\ndisable-model-invocation: true\n---\nBODY\n",
     )
@@ -473,7 +469,7 @@ def test_toolset_hides_model_invocation_disabled(tmp_path: Path):
 
 def test_toolset_skips_disabled(tmp_path: Path):
     _write_skill(
-        project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nBODY\n"
+        b3code_home() / "skills", "commit", "---\nname: commit\n---\nBODY\n"
     )
     fns = _tools(_index(tmp_path, SkillSettings(disabled=["commit"])))
     with pytest.raises(ModelRetry, match="unknown or disabled"):
@@ -485,7 +481,7 @@ def test_toolset_skips_disabled(tmp_path: Path):
 
 def test_replace_skill_blocks_makes_chip():
     text = (
-        '<skill name="commit" scope="project">\n'
+        '<skill name="commit" scope="user">\n'
         "Steps\n"
         "</skill>\n\n"
         "Task: fix the build"
@@ -499,7 +495,7 @@ def test_replace_skill_blocks_makes_chip():
 
 def test_display_user_content_shows_chip():
     text = (
-        '<skill name="commit" scope="project">\n'
+        '<skill name="commit" scope="user">\n'
         "Steps\n"
         "</skill>\n\n"
         "Task: fix the build"
@@ -511,7 +507,7 @@ def test_display_user_content_shows_chip():
 
 def test_build_user_content_keeps_skill_block(tmp_path: Path):
     text = (
-        '<skill name="commit" scope="project">\n'
+        '<skill name="commit" scope="user">\n'
         "Steps\n"
         "</skill>\n\n"
         "Task: fix the build"
@@ -536,15 +532,15 @@ def _load_skill_blocks(index: SkillIndex):
 
 
 def test_expand_skills_mentions_and_chips(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nSteps\n")
+    _write_skill(b3code_home() / "skills", "commit", "---\nname: commit\n---\nSteps\n")
     idx = _index(tmp_path)
     load = _load_skill_blocks(idx)
     out = expand_skills("!commit fix build", load)
-    assert '<skill name="commit" scope="project">' in out
+    assert '<skill name="commit" scope="user">' in out
     assert "Steps" in out
     assert "fix build" in out
     chip = expand_skills("[SKILL - commit] fix build", load)
-    assert '<skill name="commit" scope="project">' in chip
+    assert '<skill name="commit" scope="user">' in chip
 
 
 def test_expand_skills_unknown_keeps_mention(tmp_path: Path):
@@ -559,7 +555,7 @@ def test_replace_skill_mentions_makes_chip():
 
 
 def test_build_user_content_expands_skill_mention(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nSteps\n")
+    _write_skill(b3code_home() / "skills", "commit", "---\nname: commit\n---\nSteps\n")
     idx = _index(tmp_path)
     content = build_user_content(
         "!commit fix build", tmp_path, lambda rel: "", load_skill=_load_skill_blocks(idx)
@@ -571,7 +567,7 @@ def test_build_user_content_expands_skill_mention(tmp_path: Path):
 
 
 def test_build_user_content_skips_disabled_skill(tmp_path: Path):
-    _write_skill(project_dir(tmp_path) / "skills", "commit", "---\nname: commit\n---\nSteps\n")
+    _write_skill(b3code_home() / "skills", "commit", "---\nname: commit\n---\nSteps\n")
     idx = _index(tmp_path, SkillSettings(disabled=["commit"]))
     content = build_user_content(
         "!commit fix", tmp_path, lambda rel: "", load_skill=_load_skill_blocks(idx)

@@ -95,9 +95,7 @@ def test_project_dir_lives_under_home(tmp_path: Path):
 
 def test_plan_path_and_session_store_centralized(tmp_path: Path):
     assert PlanMode(tmp_path).plan_path == project_dir(tmp_path) / "plan.md"
-    assert SessionStore.for_project(tmp_path).path == (
-        project_dir(tmp_path) / "sessions.json"
-    )
+    assert SessionStore.for_global().path == b3code_home() / "sessions.json"
 
 
 # --- sem fallback legado --------------------------------------------------

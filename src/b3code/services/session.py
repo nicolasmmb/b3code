@@ -26,7 +26,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from b3code.config.dirs import project_dir
+from b3code.config.dirs import b3code_home
 from b3code.utils.paths import atomic_write_json, atomic_write_text
 from b3code.utils.prompt import display_user_content
 from b3code.utils.toolview import preview_output, tool_title
@@ -38,6 +38,7 @@ class Session(BaseModel):
     # dump JSON-friendly do adapter — só carregado na sessão ativa
     messages: list[Any] = Field(default_factory=list)
     message_count: int = 0
+    draft: str = ""
 
 
 class SessionFile(BaseModel):
@@ -65,8 +66,8 @@ class SessionStore:
         self._messages: list[ModelMessage] | None = None
 
     @classmethod
-    def for_project(cls, cwd: Path) -> SessionStore:
-        return cls(project_dir(cwd) / "sessions.json")
+    def for_global(cls) -> SessionStore:
+        return cls(b3code_home() / "sessions.json")
 
     def _blob_path(self, session_id: str) -> Path:
         return self._dir / f"{session_id}.json"
@@ -108,7 +109,30 @@ class SessionStore:
     def list_sessions(self) -> list[Session]:
         return list(self._file.sessions)
 
+    def start(self, session_id: str | None = None) -> Session:
+        """Decide a sessão no arranque (chamado pelo `main`).
+
+        - `session_id` dado → retoma essa sessão (`ValueError` se desconhecida);
+        - sem id (ou id vazio) e sem arquivo ainda → reusa a sessão em branco;
+        - sem id com arquivo existente → cria **sessão nova por launch**.
+        """
+        if session_id:
+            return self.activate(session_id)
+        if not self.path.exists():
+            return self._current
+        return self.new()
+
+    @property
+    def draft(self) -> str:
+        return self._current.draft
+
+    def set_draft(self, text: str) -> None:
+        if text != self._current.draft:
+            self._current.draft = text
+            self._save_index()
+
     def activate(self, session_id: str) -> Session:
+        self._sync_disk_sessions()
         for session in self._file.sessions:
             if session.id == session_id:
                 self._file.active_id = session.id
@@ -160,11 +184,43 @@ class SessionStore:
                 created_at=session.created_at,
                 messages=session.messages,
                 message_count=session.message_count,
+                draft=session.draft,
             ).model_dump_json(indent=2)
             + "\n",
         )
 
+    def _read_disk_file(self) -> SessionFile | None:
+        if not self.path.exists():
+            return None
+        return SessionFile.model_validate_json(self.path.read_text(encoding="utf-8"))
+
+    def _sync_disk_sessions(self) -> None:
+        """Funde sessões do disco na memória (disco primeiro, memória depois).
+
+        Sessões criadas por outros terminais depois do nosso `_load` só
+        existem no disco; sem o merge, `/resume <id>` e `start(id)` não as
+        veriam.
+        """
+        disk = self._read_disk_file()
+        if disk is None:
+            return
+        by_id = {s.id: s for s in disk.sessions}
+        by_id.update({s.id: s for s in self._file.sessions})
+        self._file.sessions = sorted(by_id.values(), key=lambda s: (s.created_at, s.id))
+
     def _save_index(self) -> None:
+        # Merge com o disco (read-modify-write): este processo só reivindica a
+        # sessão corrente; entradas de outros terminais não são apagadas nem
+        # sobrescritas com dados velhos.
+        disk = self._read_disk_file()
+        by_id: dict[str, Session] = {}
+        if disk is not None:
+            by_id = {s.id: s for s in disk.sessions}
+        for item in self._file.sessions:
+            by_id[item.id] = item
+        by_id[self._current.id] = self._current
+        sessions = sorted(by_id.values(), key=lambda s: (s.created_at, s.id))
+        self._file.sessions = sessions
         slim = {
             "active_id": self._file.active_id,
             "sessions": [
@@ -172,8 +228,9 @@ class SessionStore:
                     "id": item.id,
                     "created_at": item.created_at,
                     "message_count": item.message_count,
+                    "draft": item.draft,
                 }
-                for item in self._file.sessions
+                for item in sessions
             ],
         }
         atomic_write_json(self.path, slim)

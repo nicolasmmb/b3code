@@ -28,7 +28,7 @@ from pydantic_ai.messages import (  # noqa: E402
     UserPromptPart,
 )
 
-from b3code.config.dirs import b3code_home, project_dir  # noqa: E402
+from b3code.config.dirs import b3code_home  # noqa: E402
 from b3code.config.schema import DEFAULT_EXCLUDE_DIRECTORIES  # noqa: E402
 from b3code.services.files import FileIndex  # noqa: E402
 from b3code.services.session import SessionStore, turns_from_messages  # noqa: E402
@@ -144,7 +144,7 @@ def run() -> dict:
             )
         )
 
-        store = SessionStore.for_project(root)
+        store = SessionStore.for_global()
         store.replace(_synth_messages())
         turns = turns_from_messages(store.messages)
         tool_text = sum(len(t.text) for t in turns if t.role == "tool")
@@ -156,7 +156,7 @@ def run() -> dict:
                     if store.path.exists()
                     else 0,
                     "display_tool_text_chars": tool_text,
-                    "split_dir": (project_dir(root) / "sessions").is_dir(),
+                    "split_dir": (store.path.parent / "sessions").is_dir(),
                 },
             )
         )

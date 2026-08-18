@@ -24,6 +24,7 @@ from b3code.commands.types import Suggestion
 from b3code.config.schema import AppConfig
 from b3code.services.files import FileIndex
 from b3code.services.skills import SkillIndex
+from b3code.ui.stream import FlushScheduler
 from b3code.ui.widgets.autocomplete import Autocomplete
 from b3code.utils.attachments import (
     AttachKind,
@@ -182,6 +183,7 @@ class PromptBar(Vertical):
         skills: SkillIndex,
         on_command: Callable[[str], None],
         on_chat: Callable[[str], None],
+        on_draft: Callable[[str], None] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -191,6 +193,11 @@ class PromptBar(Vertical):
         self._skills = skills
         self._on_command = on_command
         self._on_chat = on_chat
+        self._on_draft = on_draft
+        self._last_text = ""
+        self._draft_flush = FlushScheduler(
+            self.call_later, self.set_timer, 0.8, self._flush_draft
+        )
         self._ac_query: str | None = None
         self._attachments: dict[str, Attachment] = {}
         self._pending_attachments: dict[str, Attachment] = {}
@@ -275,9 +282,7 @@ class PromptBar(Vertical):
     ) -> None:
         name = suggestion.value.lstrip("!")
         token = chip_token("SKILL", name)
-        start, end, _ = current_token(
-            prompt_input.value, prompt_input.cursor_position
-        )
+        start, end, _ = current_token(prompt_input.value, prompt_input.cursor_position)
         prompt_input.value = (
             prompt_input.value[:start] + token + " " + prompt_input.value[end:]
         )
@@ -326,6 +331,28 @@ class PromptBar(Vertical):
     def refresh_suggestions(self) -> None:
         prompt_input = self._prompt()
         self._refresh_autocomplete(prompt_input.value, prompt_input.cursor_position)
+
+    def restore_draft(self, text: str) -> None:
+        prompt_input = self._prompt()
+        prompt_input.value = text
+        prompt_input.cursor_position = len(text)
+        self._last_text = text
+
+    def flush_draft_now(self) -> None:
+        if self._on_draft is None:
+            return
+        self._draft_flush.cancel()
+        text = self._prompt().value
+        self._last_text = text
+        self._on_draft(text)
+
+    def _flush_draft(self) -> None:
+        if self._on_draft is None:
+            return
+        text = self._prompt().value
+        if text != self._last_text:
+            self._last_text = text
+        self._on_draft(self._last_text)
 
     def nav_autocomplete(self, direction: str) -> bool:
         autocomplete = self.query_one(Autocomplete)
@@ -383,7 +410,10 @@ class PromptBar(Vertical):
         prompt_input = event.control
         if not isinstance(prompt_input, PromptInput):
             prompt_input = self._prompt()
+        self._last_text = prompt_input.value
         self._refresh_autocomplete(prompt_input.value, prompt_input.cursor_position)
+        if self._on_draft is not None:
+            self._draft_flush.request()
 
     @on(PromptInput.Submitted, "#prompt")
     def on_prompt_submitted(self, event: PromptInput.Submitted) -> None:
@@ -416,6 +446,7 @@ class PromptBar(Vertical):
             if execute and consume:
                 autocomplete.set_suggestions([])
                 prompt_input.clear()
+                self.flush_draft_now()
                 self._on_command(decision.line.strip())
                 return
             self._refresh_autocomplete(decision.line, decision.cursor)
@@ -428,6 +459,7 @@ class PromptBar(Vertical):
         }
         self._attachments.clear()
         prompt_input.clear()
+        self.flush_draft_now()
         autocomplete.set_suggestions([])
         if decision.kind == "execute":
             self._on_command(decision.line)

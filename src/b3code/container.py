@@ -34,7 +34,7 @@ class AppContainer:
         catalog = ModelCatalog()
         cfg_svc = ConfigService(store, catalog=catalog)
         config = cfg_svc.config
-        sessions = SessionStore.for_project(cwd)
+        sessions = SessionStore.for_global()
         files = FileIndex(
             cwd,
             skip_dirs=config.exclude_directories,

@@ -8,7 +8,7 @@ from textual.app import App
 from textual.events import Paste
 from textual.widgets import Static
 
-from b3code.config.dirs import project_dir
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import AppConfig, McpServerConfig, ThemeColors
 from b3code.config.store import ConfigStore
 from b3code.container import AppContainer
@@ -72,7 +72,7 @@ async def test_app_opens_welcome(tmp_path: Path):
 
 
 async def test_exclamation_lists_skills_and_inserts_chip(tmp_path: Path):
-    skills_dir = project_dir(tmp_path) / "skills" / "commit"
+    skills_dir = b3code_home() / "skills" / "commit"
     skills_dir.mkdir(parents=True)
     (skills_dir / "SKILL.md").write_text(
         "---\nname: commit\ndescription: create a commit\n---\nSteps\n",

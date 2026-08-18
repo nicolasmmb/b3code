@@ -15,7 +15,7 @@ sessões entre execuções. Construído com **Textual** (interface), **Pydantic 
 - **Dois backends de modelo**: gateway Azure (configurado no JSON) ou catálogo nativo do Pydantic AI.
 - **Plan mode**: um agente planejador explora o repo e escreve o plano em um diretório central por usuário; você aprova, revisa ou sai antes de qualquer implementação.
 - **Gate de permissão de shell**: comandos dentro do workspace rodam livres; caminhos fora pedem `once / always / deny`.
-- **Sessões persistentes**: índice + mensagens no diretório central (separadas por projeto), com retomada (`/resume`).
+- **Sessões persistentes**: índice + mensagens no diretório central (global por usuário), com retomada (`/resume`).
 - **Diffs coloridos** com número de linha à esquerda, bandas verde/vermelha na linha inteira e *fold* (`▸`) para recolher/expandir linhas omitidas.
 - **Pergunta ao utilizador** (`ask_user_question`): card de escolha no meio do turno.
 - **Subagentes**: o coder lança um filho (`explore`, `plan` ou `general-purpose`) com contexto próprio.
@@ -287,13 +287,22 @@ cada passo.
 
 ## 10. Sessões e persistência
 
-- Índice em **`<home-b3code>/projects/<chave>/sessions.json`** (id, data,
-  contagem de mensagens, sessão ativa).
-- Mensagens de cada sessão em **`<home-b3code>/projects/<chave>/sessions/{id}.json`**.
+- Índice em **`<home-b3code>/sessions.json`** (id, data,
+  contagem de mensagens, rascunho do prompt e sessão ativa).
+- Mensagens de cada sessão em **`<home-b3code>/sessions/{id}.json`**.
 - A sessão ativa grava `all_messages()` — os **objetos nativos do Pydantic AI**,
   não um `{"role": "user"}` reconstruído. Isso é importante porque reconstruir
   mensagens quebraria o pairing de tools e o prefixo idêntico que o cache do
   Azure exige.
+- **Cada terminal tem a própria sessão.** Ao iniciar sem `--session`, o b3code
+  cria uma sessão nova por launch — dois ou mais terminais no mesmo projeto não
+  misturam mensagens (o índice é gravado com merge read-modify-write e cada
+  sessão vive no próprio arquivo).
+- `b3code --session <id>` retoma uma sessão existente; `b3code --session`
+  (sem valor) também inicia sessão nova. `Ctrl+S` lista e retoma sessões, `Ctrl+N`
+  cria uma nova.
+- O **rascunho do prompt** é salvo por sessão (com debounce de 0,8 s) e
+  restaurado ao retomar a sessão.
 - `.b3code/` legado de projetos antigos continua gitignored; o b3code novo não
   lê nem cria essa pasta (`.gitignore` permanece).
 
@@ -349,8 +358,8 @@ flowchart TB
     STREAM["ChatStreamMixin · TextBuffer + FlushScheduler (30 fps)"]
     VIEW["ChatView · UserMessage / AssistantMessage / ToolRow / DiffBlock / PlanDoc"]
     SESS["SessionStore · all_messages()"]
-    IDX["<home-b3code>/projects/<key>/sessions.json"]
-    BLOBS["<home-b3code>/projects/<key>/sessions/{id}.json"]
+    IDX["<home-b3code>/sessions.json"]
+    BLOBS["<home-b3code>/sessions/{id}.json"]
 
     PROMPT -->|submit| APPLY
     APPLY -->|"/comando"| REG
@@ -632,9 +641,6 @@ malformado cai no fallback (corpo inteiro) — nunca quebra o boot.
 
 | root | escopo |
 |---|---|
-| `<home-b3code>/projects/<chave>/skills/` | project |
-| `<cwd>/.grok/skills/` | project (compat) |
-| `<cwd>/.claude/skills/` | project (compat) |
 | `<home-b3code>/skills/` | user |
 | `~/.grok/skills/` | user (compat) |
 | `~/.claude/skills/` | user (compat) |
@@ -647,7 +653,7 @@ e, depois do nome + espaço, o `argument-hint` da skill vira sugestão de args
 (como `@arquivo`), preservando o cache do Azure:
 
 ```
-<skill name="commit" scope="project">
+<skill name="commit" scope="user">
 … corpo da skill …
 </skill>
 

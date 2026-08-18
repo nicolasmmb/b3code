@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from b3code.config.dirs import b3code_home, project_dir
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import SkillSettings
 
 MAX_SKILLS = 200
@@ -152,9 +152,6 @@ class SkillIndex:
 
     def roots(self) -> list[tuple[Path, str]]:
         entries: list[tuple[Path, str]] = [
-            (project_dir(self.cwd) / "skills", "project"),
-            (self.cwd / ".grok" / "skills", "project"),
-            (self.cwd / ".claude" / "skills", "project"),
             (b3code_home() / "skills", "user"),
             (self.home / ".grok" / "skills", "user"),
             (self.home / ".claude" / "skills", "user"),
