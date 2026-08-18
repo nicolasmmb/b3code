@@ -257,6 +257,11 @@ class AppConfig(BaseModel):
     )
     # Extensões omitidas na descoberta. Normalizadas com ponto e minúsculas.
     exclude_extensions: list[str] = Field(default_factory=list)
+    # Teto do índice de arquivos do autocomplete `@`. Maior que o default
+    # antigo (20 000) para monorepos; reduza se a memória apertar.
+    file_index_cap: int = Field(default=50_000, ge=1)
+    # Intervalo (s) do refresh periódico do índice via `refresh_if_stale`.
+    file_index_refresh_seconds: float = Field(default=5.0, gt=0)
     # Paths absolutos que o Shell pode usar sem perguntar de novo.
     shell_allowed_paths: list[str] = Field(default_factory=list)
     selected_theme: str = DEFAULT_THEME_NAME

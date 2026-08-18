@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import time
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from b3code.commands.apply import apply_suggestion
 from b3code.commands.types import Suggestion
 from b3code.config.schema import DEFAULT_EXCLUDE_DIRECTORIES
 from b3code.services.files import FileIndex
+from b3code.utils.fuzzy import rank_paths
 from b3code.utils.prompt import current_token, expand_attachments
 
 
@@ -190,3 +192,64 @@ async def test_refresh_does_not_block_loop(tmp_path: Path):
     task.cancel()
     assert ticks >= 1
     assert len(idx.search("", limit=100)) == 80
+
+
+async def test_search_async_default_never_rescans_stale_index(tmp_path: Path):
+    (tmp_path / "a.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    (tmp_path / "late.py").write_text("x")
+    idx._scanned_at = 0.0
+    hits = await idx.search_async("late")
+    assert "late.py" not in [str(p) for p in hits]
+    assert idx._scanned_at == 0.0
+
+
+async def test_ensure_scanned_single_flight(tmp_path: Path, monkeypatch):
+    (tmp_path / "a.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    calls = {"n": 0}
+    original = FileIndex.scan
+
+    def slow_scan(self) -> None:
+        calls["n"] += 1
+        time.sleep(0.05)
+        original(self)
+
+    monkeypatch.setattr(FileIndex, "scan", slow_scan)
+    await asyncio.gather(idx.ensure_scanned(), idx.ensure_scanned())
+    assert calls["n"] == 1
+
+
+async def test_refresh_if_stale_skips_fresh(tmp_path: Path):
+    (tmp_path / "a.py").write_text("ok")
+    idx = FileIndex(tmp_path)
+    idx.scan()
+    scanned_at = idx._scanned_at
+    await idx.refresh_if_stale()
+    assert idx._scanned_at == scanned_at
+
+
+def test_rank_paths_substring_in_segment():
+    names = [str(p) for p in rank_paths("ap", ["app.py", "src/app/main.py"])]
+    assert "app.py" in names
+    assert "src/app/main.py" in names
+
+
+def test_rank_paths_typo_falls_back_to_wratio():
+    names = [str(p) for p in rank_paths("apl.py", ["app.py", "notes.txt"])]
+    assert "app.py" in names
+
+
+def test_rank_paths_query_with_slash():
+    names = [str(p) for p in rank_paths("app/main", ["src/app/main.py", "readme.md"])]
+    assert names and names[0] == "src/app/main.py"
+
+
+def test_rank_paths_basename_first():
+    names = [str(p) for p in rank_paths("app", ["src/app/main.py", "app.py"])]
+    assert names[0] == "app.py"
+
+
+def test_rank_paths_total_mismatch_returns_empty():
+    assert rank_paths("zzz", ["app.py"]) == []

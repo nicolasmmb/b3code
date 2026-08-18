@@ -1,7 +1,9 @@
 """Índice de arquivos para o autocomplete `@`.
 
-O disco é a fonte. A UI chama só `search_async`.
-Esse método faz a varredura se o scan é velho. Depois ranqueia.
+O disco é a fonte. A UI chama só `search_async`, que nunca re-scana:
+ela garante um scan inicial (single-flight) e ranqueia da memória.
+O frescor do disco é mantido por `refresh_if_stale`, rodado em loop
+pelo `PromptBar.refresh_index`.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from b3code.utils.prompt import ATTACH_CHAR_LIMIT
 from b3code.utils.text import truncate_chars
 
 INDEX_FILE_CAP = 20_000
+REFRESH_STALE_S = 5.0
 
 
 class FileIndex:
@@ -28,16 +31,21 @@ class FileIndex:
         *,
         skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
         skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+        cap: int = INDEX_FILE_CAP,
+        refresh_seconds: float = REFRESH_STALE_S,
     ) -> None:
         self.cwd = cwd.resolve()
         self._skip_dirs = frozenset(skip_dirs)
         self._skip_exts = frozenset(ext.lower() for ext in skip_exts)
+        self._cap = max(1, cap)
+        self._refresh_seconds = max(0.1, refresh_seconds)
         self._spec: pathspec.PathSpec | None = None
         self._files: list[str] = []
         self._ready = False
         self._scanned_at = 0.0
         self._lock = threading.Lock()
         self._scan_lock = threading.Lock()
+        self._scan_gate = asyncio.Lock()
 
     def scan(self) -> None:
         with self._scan_lock:
@@ -47,15 +55,29 @@ class FileIndex:
                 self._scanned_at = time.monotonic()
 
     async def refresh(self) -> None:
-        await asyncio.to_thread(self.scan)
+        async with self._scan_gate:
+            await asyncio.to_thread(self.scan)
 
     async def ensure_scanned(self) -> None:
+        """Garante um scan inicial com single-flight (nunca dois walks juntos)."""
         if self._ready:
             return
-        await self.refresh()
+        async with self._scan_gate:
+            if self._ready:
+                return
+            await asyncio.to_thread(self.scan)
 
     async def ensure_fresh(self, *, max_age: float = 0.3) -> None:
         if self._ready and (time.monotonic() - self._scanned_at) < max_age:
+            return
+        await self.refresh()
+
+    async def refresh_if_stale(self, *, min_age: float | None = None) -> None:
+        """Re-scana só se o índice está velho e nenhum scan está em andamento."""
+        threshold = self._refresh_seconds if min_age is None else min_age
+        if self._ready and (time.monotonic() - self._scanned_at) < threshold:
+            return
+        if self._scan_gate.locked():
             return
         await self.refresh()
 
@@ -63,10 +85,16 @@ class FileIndex:
         return rank_paths(query, self._listed(), limit=limit)
 
     async def search_async(
-        self, query: str, limit: int = 20, *, max_age: float = 0.3
+        self, query: str, limit: int = 20, *, max_age: float | None = None
     ) -> list[Path]:
-        """Porta da UI: atualiza o índice se o scan é velho e depois ranqueia."""
-        await self.ensure_fresh(max_age=max_age)
+        """Porta da UI: garante um scan inicial e ranqueia da memória.
+
+        Por default nunca re-scana — digitar não espera o walk.
+        `max_age` explícito (testes) ainda força `ensure_fresh`.
+        """
+        await self.ensure_scanned()
+        if max_age is not None:
+            await self.ensure_fresh(max_age=max_age)
         return await asyncio.to_thread(self.search, query, limit)
 
     def read(self, rel: str, *, limit: int | None = ATTACH_CHAR_LIMIT) -> str:
@@ -87,7 +115,7 @@ class FileIndex:
         if not self._indexable(posix):
             return
         files = self._listed()
-        if posix in files or len(files) >= INDEX_FILE_CAP:
+        if posix in files or len(files) >= self._cap:
             return
         files.append(posix)
         files.sort(key=str.lower)
@@ -137,7 +165,7 @@ class FileIndex:
             if spec and spec.match_file(posix):
                 continue
             found.append(posix)
-            if len(found) >= INDEX_FILE_CAP:
+            if len(found) >= self._cap:
                 break
         return sorted(found, key=str.lower)
 
