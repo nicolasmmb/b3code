@@ -1,7 +1,7 @@
 """Fixtures globais (autouse).
 
 - `B3CODE_HOME` sempre aponta para um tmp por teste: nenhum teste escreve no
-  diretório real do usuário (`%APPDATA%` / `~/.config` / etc.).
+  diretório real do usuário (`~/.b3code`).
 - `OPENAI_API_KEY` dummy: testes de agentes constroem `OpenAIChatModel` sem
   chamar a API; um valor qualquer satisfaz a validação do provider em
   qualquer ambiente (nenhum teste depende da ausência da chave).

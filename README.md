@@ -40,9 +40,9 @@ uv run b3code
 ```
 
 No primeiro run, o app cria **um único** arquivo de config por usuário no
-diretório central (ver tabela na [Configuração](#5-configuração)) e migra
-automaticamente o `.b3code/config.json` legado de projetos antigos. Edite o
-config central com sua chave e endpoint antes de conversar (ou use o catálogo
+diretório central (ver tabela na [Configuração](#5-configuração)). O `.b3code`
+legado de projetos antigos é **ignorado** — não há migração nem fallback. Edite
+o config central com sua chave e endpoint antes de conversar (ou use o catálogo
 de modelos do Pydantic AI — veja [Backends de modelo](#6-backends-de-modelo)).
 
 ## 5. Configuração
@@ -53,9 +53,7 @@ central é resolvido com stdlib apenas (`pathlib`):
 
 | SO | Caminho |
 |---|---|
-| Windows | `%APPDATA%\b3code` (fallback `%LOCALAPPDATA%\b3code`, depois `~\b3code`) |
-| macOS | `~/Library/Application Support/b3code` |
-| Linux/BSD/outros | `$XDG_CONFIG_HOME/b3code` (default `~/.config/b3code`) |
+| Linux/macOS/Windows | `~/.b3code` |
 
 A env `B3CODE_HOME` sobrescreve tudo (útil em containers, CI ou para isolar
 instalações). Nenhum `.b3code` nasce mais no cwd do projeto. Campos espelhando
@@ -126,9 +124,9 @@ Exemplo:
 ```
 
 > `.b3code` continua na lista `exclude_directories` por compat: projetos
-> antigos ainda podem ter a pasta legada no cwd. O b3code novo não cria mais
-> nada lá — todo o estado (config, plano, sessões, skills, anexos) fica no
-> diretório central por usuário.
+> antigos ainda podem ter a pasta legada no cwd. O b3code novo nunca lê nem
+> cria nada lá — todo o estado (config, plano, sessões, skills, anexos) fica
+> no diretório central por usuário.
 
 ### Temas
 
@@ -296,8 +294,8 @@ cada passo.
   não um `{"role": "user"}` reconstruído. Isso é importante porque reconstruir
   mensagens quebraria o pairing de tools e o prefixo idêntico que o cache do
   Azure exige.
-- `.b3code/` legado de projetos antigos continua gitignored; o 1º boot migra os
-  dados para o central (`.gitignore` permanece).
+- `.b3code/` legado de projetos antigos continua gitignored; o b3code novo não
+  lê nem cria essa pasta (`.gitignore` permanece).
 
 ## 11. Arquitetura
 
