@@ -13,9 +13,9 @@ sessões entre execuções. Construído com **Textual** (interface), **Pydantic 
 - Anexo de arquivos com `@caminho` — o conteúdo entra no turno do usuário como um bloco `<file>`.
 - Comandos `/` com **autocomplete** (comandos, argumentos e arquivos).
 - **Dois backends de modelo**: gateway Azure (configurado no JSON) ou catálogo nativo do Pydantic AI.
-- **Plan mode**: um agente planejador explora o repo e escreve `.b3code/plan.md`; você aprova, revisa ou sai antes de qualquer implementação.
+- **Plan mode**: um agente planejador explora o repo e escreve o plano em um diretório central por usuário; você aprova, revisa ou sai antes de qualquer implementação.
 - **Gate de permissão de shell**: comandos dentro do workspace rodam livres; caminhos fora pedem `once / always / deny`.
-- **Sessões persistentes**: índice + mensagens em `.b3code/`, com retomada (`/resume`).
+- **Sessões persistentes**: índice + mensagens no diretório central (separadas por projeto), com retomada (`/resume`).
 - **Diffs coloridos** com número de linha à esquerda, bandas verde/vermelha na linha inteira e *fold* (`▸`) para recolher/expandir linhas omitidas.
 - **Pergunta ao utilizador** (`ask_user_question`): card de escolha no meio do turno.
 - **Subagentes**: o coder lança um filho (`explore`, `plan` ou `general-purpose`) com contexto próprio.
@@ -39,14 +39,27 @@ uv sync
 uv run b3code
 ```
 
-No primeiro run, o app cria o arquivo de config no diretório de trabalho
-(`.b3code/config.json`). Edite-o com sua chave e endpoint antes de conversar
-(ou use o catálogo de modelos do Pydantic AI — veja [Backends de modelo](#6-backends-de-modelo)).
+No primeiro run, o app cria **um único** arquivo de config por usuário no
+diretório central (ver tabela na [Configuração](#5-configuração)) e migra
+automaticamente o `.b3code/config.json` legado de projetos antigos. Edite o
+config central com sua chave e endpoint antes de conversar (ou use o catálogo
+de modelos do Pydantic AI — veja [Backends de modelo](#6-backends-de-modelo)).
 
 ## 5. Configuração
 
-Arquivo: `.b3code/config.json` (criado automaticamente se não existir, gravado
-com escrita atômica). Campos espelhando o schema `AppConfig`:
+Arquivo: `config.json` dentro do **diretório central** do b3code (criado
+automaticamente se não existir, gravado com escrita atômica). O diretório
+central é resolvido com stdlib apenas (`pathlib`):
+
+| SO | Caminho |
+|---|---|
+| Windows | `%APPDATA%\b3code` (fallback `%LOCALAPPDATA%\b3code`, depois `~\b3code`) |
+| macOS | `~/Library/Application Support/b3code` |
+| Linux/BSD/outros | `$XDG_CONFIG_HOME/b3code` (default `~/.config/b3code`) |
+
+A env `B3CODE_HOME` sobrescreve tudo (útil em containers, CI ou para isolar
+instalações). Nenhum `.b3code` nasce mais no cwd do projeto. Campos espelhando
+o schema `AppConfig`:
 
 | Campo | Tipo | Default | Descrição |
 |---|---|---|---|
@@ -111,6 +124,11 @@ Exemplo:
   "mcp_servers": {}
 }
 ```
+
+> `.b3code` continua na lista `exclude_directories` por compat: projetos
+> antigos ainda podem ter a pasta legada no cwd. O b3code novo não cria mais
+> nada lá — todo o estado (config, plano, sessões, skills, anexos) fica no
+> diretório central por usuário.
 
 ### Temas
 
@@ -219,7 +237,7 @@ barra de permissão, barra de aprovação do plano e prompt com autocomplete.
 | `/mcp enable\|disable\|remove <name>` | Liga, desliga ou apaga (persistido) |
 | `/mcp doctor [name]` | Testa a conexão. Não grava config. |
 | `/plan on\|off` | Entra/sai do plan mode |
-| `/view-plan` | Mostra o `.b3code/plan.md` atual |
+| `/view-plan` | Mostra o `plan.md` central do projeto |
 | `/skills run <nome> [args...]` | Roda uma skill pelo nome (autocomplete do nome) |
 | `/skills` | Lista as skills (nome, escopo, disabled) |
 | `/skills reload` | Resscanela skills do disco e recria o agent |
@@ -254,26 +272,32 @@ capacidade `Shell` do harness:
 especialista que:
 
 1. Explora o repositório (lê e faz grep, **sem** executar shell e sem editar nada além do plano);
-2. Escreve `.b3code/plan.md` com 8 seções obrigatórias (`Context`, `Current`,
-   `Approach`, `Steps`, `Files`, `Reuse`, `Risks`, `Verify`) e no mínimo 1200 caracteres
-   — planos finos são rejeitados com `ModelRetry`;
+2. Escreve o plano em `plan.md` do diretório central do projeto
+   (`<home-b3code>/projects/<chave>/plan.md`) com 8 seções obrigatórias
+   (`Context`, `Current`, `Approach`, `Steps`, `Files`, `Reuse`, `Risks`,
+   `Verify`) e no mínimo 1200 caracteres — planos finos são rejeitados com
+   `ModelRetry`;
 3. Chama `exit_plan_mode` e a barra de aprovação aparece: **`a` approve** (envia
    o prompt de implementação), **`s` revise** (o planejador continua), **`q` quit** (sai do modo).
 
-Enquanto o plan mode está ativo, **só `.b3code/plan.md` é gravável** — qualquer
-tentativa de escrever em outro arquivo falha com um retry orientando a usar
-`write_plan_file`. Aprovar envia o prompt *"Implement the approved plan in
-.b3code/plan.md…"* para o agente coder, que executa cada passo.
+O plano fica **fora do workspace** (no diretório central por usuário), então as
+tools de escrita do workspace nunca o alcançam: em plan mode **só o arquivo do
+plano é gravável** (tool `write_plan_file`) — qualquer outra escrita falha com
+um retry orientando a usar `write_plan_file`. Aprovar envia o prompt com o
+caminho real do plano para o agente coder, que lê via `read_file` e executa
+cada passo.
 
 ## 10. Sessões e persistência
 
-- Índice em **`.b3code/sessions.json`** (id, data, contagem de mensagens, sessão ativa).
-- Mensagens de cada sessão em **`.b3code/sessions/{id}.json`**.
+- Índice em **`<home-b3code>/projects/<chave>/sessions.json`** (id, data,
+  contagem de mensagens, sessão ativa).
+- Mensagens de cada sessão em **`<home-b3code>/projects/<chave>/sessions/{id}.json`**.
 - A sessão ativa grava `all_messages()` — os **objetos nativos do Pydantic AI**,
   não um `{"role": "user"}` reconstruído. Isso é importante porque reconstruir
   mensagens quebraria o pairing de tools e o prefixo idêntico que o cache do
   Azure exige.
-- `.b3code/` é gitignored.
+- `.b3code/` legado de projetos antigos continua gitignored; o 1º boot migra os
+  dados para o central (`.gitignore` permanece).
 
 ## 11. Arquitetura
 
@@ -321,14 +345,14 @@ flowchart TB
     TOOLS["workspace + ask_user_question + spawn_subagent"]
     SHELL["Shell (run_command) + CodeMode (/work)"]
     GATE["PermissionGate · once / always / deny"]
-    PLANMD[".b3code/plan.md"]
+    PLANMD["<home-b3code>/projects/<key>/plan.md"]
     PB["PlanBar · approve / revise / quit"]
     EVENTS["services/events.py · map_agent_event → ChatEvent"]
     STREAM["ChatStreamMixin · TextBuffer + FlushScheduler (30 fps)"]
     VIEW["ChatView · UserMessage / AssistantMessage / ToolRow / DiffBlock / PlanDoc"]
     SESS["SessionStore · all_messages()"]
-    IDX[".b3code/sessions.json"]
-    BLOBS[".b3code/sessions/{id}.json"]
+    IDX["<home-b3code>/projects/<key>/sessions.json"]
+    BLOBS["<home-b3code>/projects/<key>/sessions/{id}.json"]
 
     PROMPT -->|submit| APPLY
     APPLY -->|"/comando"| REG
@@ -546,7 +570,7 @@ kill_command_or_subagent(task_id)
 | tipo | ficheiros | shell |
 |---|---|---|
 | `explore` | só leitura | sim (mesmo `PermissionGate`) |
-| `plan` | só leitura | não. Devolve o plano no output. Não grava `.b3code/plan.md` |
+| `plan` | só leitura | não. Devolve o plano no output. Não grava o plano central |
 | `general-purpose` | leitura e escrita | sim. Diffs aparecem no chat do pai |
 
 Regras:
@@ -610,12 +634,12 @@ malformado cai no fallback (corpo inteiro) — nunca quebra o boot.
 
 | root | escopo |
 |---|---|
-| `<cwd>/.b3code/skills/` | project |
-| `<cwd>/.grok/skills/` | project |
-| `<cwd>/.claude/skills/` | project |
-| `~/.b3code/skills/` | user |
-| `~/.grok/skills/` | user |
-| `~/.claude/skills/` | user |
+| `<home-b3code>/projects/<chave>/skills/` | project |
+| `<cwd>/.grok/skills/` | project (compat) |
+| `<cwd>/.claude/skills/` | project (compat) |
+| `<home-b3code>/skills/` | user |
+| `~/.grok/skills/` | user (compat) |
+| `~/.claude/skills/` | user (compat) |
 | `skills.extra_paths` (config) | config |
 
 **Invocação** — a única porta é `/skills run <nome> [args...]`, sempre com
@@ -686,8 +710,8 @@ cada família cobre:
 
 | Script | Uso |
 |---|---|
-| `scripts/bench_loop.py` | Benchmark de wall-clock + stall do event loop nos caminhos quentes da TUI. `uv run python scripts/bench_loop.py --out .b3code/bench.json` |
-| `scripts/mem_hotspots.py` | RSS + tracemalloc dos hotspots (scan, sessão, `@`, grep, diff). `uv run python scripts/mem_hotspots.py --out .b3code/mem.txt` |
+| `scripts/bench_loop.py` | Benchmark de wall-clock + stall do event loop nos caminhos quentes da TUI. `uv run python scripts/bench_loop.py --out <home-b3code>/bench.json` |
+| `scripts/mem_hotspots.py` | RSS + tracemalloc dos hotspots (scan, sessão, `@`, grep, diff). `uv run python scripts/mem_hotspots.py --out <home-b3code>/mem.txt` |
 | `scripts/check_topbar.py` | Inspeção visual da topbar via Pilot (abre a TUI sem LLM). `uv run python scripts/check_topbar.py` |
 | `scripts/repro_plan_cancel.py` | Reproduz cancel no plan mode contra a LLM real. `uv run python scripts/repro_plan_cancel.py` |
 
@@ -704,7 +728,7 @@ src/b3code/
 │   └── builtin/           # help, model, plan, session, theme, skills
 ├── config/
 │   ├── schema.py          # AppConfig
-│   ├── store.py           # ConfigStore (.b3code/config.json)
+│   ├── store.py           # ConfigStore (config.json central por usuário)
 │   ├── service.py         # ConfigService (único escritor)
 │   └── credentials.py     # checagem de credencial
 ├── libs/
@@ -754,7 +778,8 @@ src/b3code/
 
 - **Credencial faltando**: sem `gateway_api_key`/`gateway_api_endpoint` no JSON (com o gateway
   ligado), o turno não roda e a UI mostra `missing gateway_api_key or gateway_api_endpoint in
-  .b3code/config.json`. Desligue o gateway (`/gateway off`) ou preencha o JSON.
+  the b3code config file`. Desligue o gateway (`/gateway off`) ou preencha o
+  JSON central (ver [Configuração](#5-configuração)).
 - **Busy**: só uma request roda por vez (lock FIFO). Se a barra de input está
   travada com um turno em andamento, `escape` cancela.
 - **Cache do Azure**: o system prompt é estático de propósito (mudá-lo a cada

@@ -8,4 +8,4 @@ def missing_gateway_credentials(config: AppConfig) -> str | None:
         return None
     if config.gateway_api_key and config.gateway_api_endpoint:
         return None
-    return "missing gateway_api_key or gateway_api_endpoint in .b3code/config.json"
+    return "missing gateway_api_key or gateway_api_endpoint in the b3code config file"

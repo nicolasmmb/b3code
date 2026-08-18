@@ -115,7 +115,8 @@ class ChatService:
     def approve_plan(self) -> str:
         self.exit_plan()
         return (
-            "Read .b3code/plan.md inside run_code via read_file first. "
+            f"Read the plan file {self.plan.plan_path} inside run_code via "
+            "read_file first. "
             "Implement every step with run_code file tools. "
             "Do not write project files via the shell. "
             "Do not skip Files, Reuse, or Verify."
@@ -304,6 +305,7 @@ class ChatService:
                 questions=self.questions,
                 skills=self.skills,
                 tasks=self.tasks,
+                extra_read_paths=(self.plan.plan_path,),
             )
         return self._coder
 
@@ -317,6 +319,7 @@ class ChatService:
                 on_write=self._emit_plan_draft,
                 injected_model=self._injected_model,
                 mcp=self.mcp,
+                extra_read_paths=(self.plan.plan_path,),
             )
         return self._planner
 

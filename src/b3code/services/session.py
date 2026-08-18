@@ -8,7 +8,6 @@ prefixo idêntico que o cache Azure exige.
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,7 +26,8 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from b3code.utils.paths import atomic_write_text
+from b3code.config.dirs import project_dir
+from b3code.utils.paths import atomic_write_json, atomic_write_text
 from b3code.utils.prompt import display_user_content
 from b3code.utils.toolview import preview_output, tool_title
 
@@ -65,8 +65,8 @@ class SessionStore:
         self._messages: list[ModelMessage] | None = None
 
     @classmethod
-    def for_cwd(cls, cwd: Path) -> SessionStore:
-        return cls(cwd / ".b3code" / "sessions.json")
+    def for_project(cls, cwd: Path) -> SessionStore:
+        return cls(project_dir(cwd) / "sessions.json")
 
     def _blob_path(self, session_id: str) -> Path:
         return self._dir / f"{session_id}.json"
@@ -150,6 +150,8 @@ class SessionStore:
         return data.messages
 
     def _write_blob(self, session: Session) -> None:
+        # model_dump_json: pydantic-core serializa em Rust (2x mais rápido
+        # que json.dumps sobre model_dump()).
         self._dir.mkdir(parents=True, exist_ok=True)
         atomic_write_text(
             self._blob_path(session.id),
@@ -174,7 +176,7 @@ class SessionStore:
                 for item in self._file.sessions
             ],
         }
-        atomic_write_text(self.path, json.dumps(slim, indent=2) + "\n")
+        atomic_write_json(self.path, slim)
 
     def _save(self) -> None:
         self._write_blob(self._current)

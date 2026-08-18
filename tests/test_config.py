@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import (
     DEFAULT_EXCLUDE_DIRECTORIES,
     THEME_COLOR_DEFAULTS,
@@ -138,8 +139,8 @@ def test_file_index_cap_default_and_validation():
         AppConfig(file_index_refresh_seconds=0)
 
 
-def test_roundtrip(tmp_path: Path):
-    path = tmp_path / ".b3code" / "config.json"
+def test_roundtrip():
+    path = b3code_home() / "config.json"
     store = ConfigStore(path)
     cfg = AppConfig(
         gateway_api_key="k",
@@ -187,10 +188,10 @@ def test_mcp_servers_roundtrip_and_reject_bad(tmp_path: Path):
         McpServerConfig()
 
 
-def test_first_run_creates_project_settings_with_all_fields(tmp_path: Path):
-    store = ConfigStore.for_cwd(tmp_path)
+def test_first_run_creates_global_settings_with_all_fields():
+    store = ConfigStore.for_global()
     cfg = store.load()
-    settings = tmp_path / ".b3code" / "config.json"
+    settings = b3code_home() / "config.json"
     assert settings.exists()
     payload = json.loads(settings.read_text())
     assert payload == {**cfg.model_dump(mode="json"), "$schema": "./schema.json"}

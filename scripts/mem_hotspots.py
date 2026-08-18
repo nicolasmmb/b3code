@@ -1,7 +1,10 @@
 """RSS + tracemalloc dos hotspots (scan, sessão, @, grep, diff).
 
-uv run python scripts/mem_hotspots.py --out .b3code/mem-before.txt
-uv run python scripts/mem_hotspots.py --out .b3code/mem-after.txt
+uv run python scripts/mem_hotspots.py --out <central-home>/mem-before.txt
+uv run python scripts/mem_hotspots.py --out <central-home>/mem-after.txt
+
+<central-home> = $B3CODE_HOME ou o diretório de config do SO
+(ver `b3code.config.dirs`).
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from pydantic_ai.messages import (  # noqa: E402
     UserPromptPart,
 )
 
+from b3code.config.dirs import b3code_home, project_dir  # noqa: E402
 from b3code.config.schema import DEFAULT_EXCLUDE_DIRECTORIES  # noqa: E402
 from b3code.services.files import FileIndex  # noqa: E402
 from b3code.services.session import SessionStore, turns_from_messages  # noqa: E402
@@ -140,7 +144,7 @@ def run() -> dict:
             )
         )
 
-        store = SessionStore(root / ".b3code" / "sessions.json")
+        store = SessionStore.for_project(root)
         store.replace(_synth_messages())
         turns = turns_from_messages(store.messages)
         tool_text = sum(len(t.text) for t in turns if t.role == "tool")
@@ -148,13 +152,11 @@ def run() -> dict:
             _snap(
                 "session_40_turns",
                 {
-                    "session_json_bytes": (root / ".b3code" / "sessions.json")
-                    .stat()
-                    .st_size
-                    if (root / ".b3code" / "sessions.json").exists()
+                    "session_json_bytes": store.path.stat().st_size
+                    if store.path.exists()
                     else 0,
                     "display_tool_text_chars": tool_text,
-                    "split_dir": (root / ".b3code" / "sessions").is_dir(),
+                    "split_dir": (project_dir(root) / "sessions").is_dir(),
                 },
             )
         )
@@ -207,7 +209,11 @@ def _compare(before: dict, after: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=b3code_home() / "mem-before.txt",
+    )
     parser.add_argument("--compare", type=Path, default=None)
     args = parser.parse_args()
     data = run()

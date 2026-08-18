@@ -4,6 +4,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.azure import AzureProvider
 
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import AppConfig
 
 
@@ -13,7 +14,8 @@ def build_model(cfg: AppConfig) -> Model | str:
         return cfg.selected_model
     if not cfg.gateway_api_key or not cfg.gateway_api_endpoint:
         raise RuntimeError(
-            "set gateway_api_key and gateway_api_endpoint in .b3code/config.json"
+            "set gateway_api_key and gateway_api_endpoint in the b3code config file "
+            f"({b3code_home() / 'config.json'})"
         )
     return OpenAIChatModel(
         cfg.selected_model,

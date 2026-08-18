@@ -12,6 +12,8 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
+from b3code.config.dirs import project_dir
+
 DROP_MAX_BYTES = 10 * 1024 * 1024
 ATTACH_MAX_BYTES = 10 * 1024 * 1024
 
@@ -243,7 +245,7 @@ def uniquify(attachment: Attachment, existing: dict[str, Attachment]) -> Attachm
 
 
 def persist_bytes(cwd: Path, data: bytes, suffix: str) -> Path:
-    dest_dir = cwd / ".b3code" / "attachments"
+    dest_dir = project_dir(cwd) / "attachments"
     dest_dir.mkdir(parents=True, exist_ok=True)
     ext = suffix if suffix.startswith(".") else f".{suffix}"
     dest = dest_dir / f"{uuid4().hex[:8]}{ext}"

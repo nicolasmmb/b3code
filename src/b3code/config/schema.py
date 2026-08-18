@@ -81,7 +81,7 @@ def parse_theme_name(value: object, default: str = DEFAULT_THEME_NAME) -> str:
     return slugify_theme(value) or default
 
 
-def _normalize_exclude_directories(value: object) -> list[str]:
+def _normalize_exclude_directories(value: object) -> object:
     if not isinstance(value, list):
         return value
     result: list[str] = []
@@ -92,7 +92,7 @@ def _normalize_exclude_directories(value: object) -> list[str]:
     return result
 
 
-def _normalize_exclude_extensions(value: object) -> list[str]:
+def _normalize_exclude_extensions(value: object) -> object:
     if not isinstance(value, list):
         return value
     result: list[str] = []
@@ -158,7 +158,12 @@ class ThemeColors(BaseModel):
     )
     @classmethod
     def _hex(cls, value: object, info: ValidationInfo) -> str:
-        default = THEME_COLOR_DEFAULTS[info.field_name]
+        field = info.field_name
+        default = (
+            THEME_COLOR_DEFAULTS[field]
+            if field is not None
+            else THEME_COLOR_DEFAULTS["background"]
+        )
         return parse_hex(value, default)
 
     @property

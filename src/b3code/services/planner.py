@@ -30,11 +30,12 @@ You are b3code’s Planner. You are a specialist, not an implementer.
 
 CORE RULES (never violate)
 - Explore the repository until you fully understand the relevant code.
-- Write one complete implementation plan to .b3code/plan.md.
-- Do NOT implement any code.
-- Do NOT run shell commands that mutate the repository.
-- Do NOT edit any project file except through the write_plan_file tool.
-- Do NOT create, update, or delete remote state via MCP (tickets, PRs, etc.).
+- Write one complete implementation plan to the plan file (write_plan_file).
+- Do not implement any code.
+- Do not mutate the repository.
+- Do not run shell commands that write or change project files.
+- Do not edit any project file except through the write_plan_file tool.
+- Do not create, update, or delete remote state via MCP (tickets, PRs, etc.).
 
 EXPLORATION PROTOCOL (follow in order)
 1. list_dir on the project root and on likely packages (src/, tests/, packages/, apps/, etc.).
@@ -135,6 +136,7 @@ def planner_toolsets(
     *,
     skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
     skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    extra_read_paths: tuple[Path, ...] = (),
 ) -> list:
     files = workspace_toolset(
         cwd,
@@ -143,10 +145,11 @@ def planner_toolsets(
         max_hits=PLAN_GREP_HITS,
         skip_dirs=skip_dirs,
         skip_exts=skip_exts,
+        extra_read_paths=extra_read_paths,
     )
 
     def write_plan_file(content: str) -> str:
-        """Write the full detailed markdown plan to .b3code/plan.md."""
+        """Write the full detailed markdown plan to the plan file."""
         problem = _plan_gaps(content)
         if problem:
             raise ModelRetry(problem)
@@ -175,10 +178,15 @@ def planner_tool_names(
     *,
     skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
     skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    extra_read_paths: tuple[Path, ...] = (),
 ) -> set[str]:
     names: set[str] = set()
     for toolset in planner_toolsets(
-        cwd, plan, skip_dirs=skip_dirs, skip_exts=skip_exts
+        cwd,
+        plan,
+        skip_dirs=skip_dirs,
+        skip_exts=skip_exts,
+        extra_read_paths=extra_read_paths,
     ):
         tools = getattr(toolset, "tools", None)
         if tools is not None:
@@ -196,6 +204,7 @@ def build_planner(
     *,
     skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
     skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    extra_read_paths: tuple[Path, ...] = (),
     config: AppConfig | None = None,
 ) -> Agent[None, str]:
     from b3code.services.agents import thinking_cap
@@ -214,6 +223,7 @@ def build_planner(
             mcp=mcp,
             skip_dirs=skip_dirs,
             skip_exts=skip_exts,
+            extra_read_paths=extra_read_paths,
         ),
         capabilities=caps or None,
         retries=config.agent_retries if config is not None else 2,
@@ -235,5 +245,5 @@ def _plan_gaps(content: str) -> str | None:
 
 def slim_plan_note(plan: PlanMode) -> str:
     if plan.read():
-        return "plan written to .b3code/plan.md"
-    return "plan mode (no plan.md yet)"
+        return "plan written to the plan file"
+    return "plan mode (no plan file yet)"

@@ -84,9 +84,8 @@ class TaskHub:
         return await self._await_foreground(record, task)
 
     async def snapshot(self, task_ids: list[str], timeout_ms: int | None = None) -> str:
-        handles = [
-            self.records[i].handle for i in task_ids if _live(self.records.get(i))
-        ]
+        records = [self.records[i] for i in task_ids if self.records.get(i) is not None]
+        handles = [r.handle for r in records if r.handle is not None]
         if timeout_ms and handles:
             await asyncio.wait(handles, timeout=max(timeout_ms, 0) / 1000)
         return "\n".join(self._line(i) for i in task_ids)

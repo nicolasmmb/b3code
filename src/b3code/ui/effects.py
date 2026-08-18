@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from b3code.commands.effects import (
+    CommandEffect,
     DoctorMcp,
     NewSession,
     PlanOff,
@@ -79,7 +80,8 @@ def _reload_skills(hooks: CommandHooks, _effect: ReloadSkills) -> bool:
     return False
 
 
-_APPLY = {
+# Cada handler recebe o efeito do próprio tipo da chave (by construction).
+_APPLY: dict[type[CommandEffect], Callable[..., bool]] = {
     Quit: _quit,
     NewSession: _new,
     Refresh: _refresh,

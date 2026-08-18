@@ -58,11 +58,6 @@ def expand_attachments(text: str, cwd: Path, read_file) -> str:
     return "\n".join(chunks).rstrip()
 
 
-def strip_file_blocks(text: str) -> str:
-    """Tira blocos `<file>` na hora de *mostrar* o user turn."""
-    return FILE_BLOCK.sub("", text).strip()
-
-
 def replace_skill_blocks(text: str) -> str:
     """Troca blocos `<skill>` por chips `[SKILL - nome]` na exibição."""
     return SKILL_BLOCK.sub(
@@ -226,7 +221,7 @@ def build_user_content(
 ) -> str | list[str | BinaryContent]:
     leftover, chip_items = _pull_chips(text, attachments or {})
     leftover, at_binaries = _pull_at_binaries(leftover, cwd)
-    binaries = [
+    binaries: list[str | BinaryContent] = [
         _binary_part(item)
         for item in (*chip_items, *at_binaries)
         if item.kind in {AttachKind.IMAGE, AttachKind.PDF}
