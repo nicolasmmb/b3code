@@ -3,8 +3,11 @@
 Does not depend on the real cwd. Builds a synthetic tree, times the hot
 paths the TUI hits, and optionally compares against a previous JSON.
 
-    uv run python scripts/bench_loop.py --out .b3code/bench-before.json
-    uv run python scripts/bench_loop.py --out .b3code/bench-after.json --compare .b3code/bench-before.json
+    uv run python scripts/bench_loop.py --out <central-home>/bench-before.json
+    uv run python scripts/bench_loop.py --out <central-home>/bench-after.json --compare <central-home>/bench-before.json
+
+<central-home> = $B3CODE_HOME ou o diretório de config do SO
+(ver `b3code.config.dirs`).
 """
 
 from __future__ import annotations

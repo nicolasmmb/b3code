@@ -15,6 +15,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import DEFAULT_EXCLUDE_DIRECTORIES
 from b3code.services.files import FileIndex
 from b3code.services.session import SessionStore, turns_from_messages
@@ -159,8 +160,8 @@ def test_session_index_and_per_id_files(tmp_path: Path):
 
 
 def test_recorded_hotspots_show_gains():
-    """Compara `.b3code/mem-before.txt` e `mem-after.txt` quando os dois existem."""
-    root = Path(__file__).resolve().parents[1] / ".b3code"
+    """Compara `mem-before.txt` e `mem-after.txt` do home central quando existem."""
+    root = b3code_home()
     before_path = root / "mem-before.txt"
     after_path = root / "mem-after.txt"
     if not before_path.exists() or not after_path.exists():

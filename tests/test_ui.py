@@ -8,6 +8,7 @@ from textual.app import App
 from textual.events import Paste
 from textual.widgets import Static
 
+from b3code.config.dirs import project_dir
 from b3code.config.schema import AppConfig, McpServerConfig, ThemeColors
 from b3code.config.store import ConfigStore
 from b3code.container import AppContainer
@@ -71,7 +72,7 @@ async def test_app_opens_welcome(tmp_path: Path):
 
 
 async def test_exclamation_lists_skills_and_inserts_chip(tmp_path: Path):
-    skills_dir = tmp_path / ".b3code" / "skills" / "commit"
+    skills_dir = project_dir(tmp_path) / "skills" / "commit"
     skills_dir.mkdir(parents=True)
     (skills_dir / "SKILL.md").write_text(
         "---\nname: commit\ndescription: create a commit\n---\nSteps\n",
@@ -95,7 +96,7 @@ async def test_exclamation_lists_skills_and_inserts_chip(tmp_path: Path):
 
 
 async def test_app_applies_saved_theme(tmp_path: Path):
-    ConfigStore.for_cwd(tmp_path).save(
+    ConfigStore.for_global().save(
         AppConfig(
             themes=[
                 ThemeColors(name="crimson", background="#111111", accent="#DC143C")
@@ -260,7 +261,7 @@ async def test_spinner_animates():
 
 
 async def test_thinking_badge_and_thought_block(tmp_path: Path):
-    ConfigStore.for_cwd(tmp_path).save(AppConfig(thinking="high"))
+    ConfigStore.for_global().save(AppConfig(thinking="high"))
     app = B3App(AppContainer.build(tmp_path))
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -388,7 +389,7 @@ async def test_mcp_doctor_does_not_hang(tmp_path: Path):
 
 
 async def test_mcp_doctor_worker_shows_ok(tmp_path: Path):
-    ConfigStore.for_cwd(tmp_path).save(
+    ConfigStore.for_global().save(
         AppConfig(
             mcp_servers={"demo": McpServerConfig(url="http://unused.example/mcp")}
         )
@@ -731,7 +732,7 @@ async def test_short_error_has_no_fold(tmp_path: Path):
         screen._apply_event(
             ChatEvent(
                 kind="error",
-                text="missing gateway_api_key or gateway_api_endpoint in .b3code/config.json",
+                text="missing gateway_api_key or gateway_api_endpoint in the b3code config file",
             )
         )
         await pilot.pause()

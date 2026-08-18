@@ -2,6 +2,7 @@ import pytest
 from mcp.server.fastmcp import FastMCP
 from pydantic_ai.mcp import MCPToolset
 
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import AppConfig, McpServerConfig
 from b3code.services.mcp import (
     MAX_MCP_OUTPUT,
@@ -154,11 +155,11 @@ async def test_list_shows_ok_after_enter():
     await hub.aclose()
 
 
-def test_stdio_log_file_uses_cwd(tmp_path):
+def test_stdio_log_file_uses_central_home():
     cfg = AppConfig(mcp_servers={"github": _stdio()})
-    hub = McpHub(cfg, cwd=tmp_path)
+    hub = McpHub(cfg)
     transport = hub.raw("github").client.transport
-    log = tmp_path / ".b3code" / "mcp" / "github.stderr.log"
+    log = b3code_home() / "logs" / "mcp" / "github.stderr.log"
     assert transport.log_file == log
     assert log.parent.is_dir()
 
@@ -216,9 +217,9 @@ async def test_doctor_unknown_does_not_connect():
     assert hub.connects == 0
 
 
-async def test_doctor_stdio_error_cites_log(tmp_path):
+async def test_doctor_stdio_error_cites_log():
     cfg = AppConfig(mcp_servers={"bad": _stdio(command="__b3code_no_such_cmd__")})
-    hub = McpHub(cfg, cwd=tmp_path)
+    hub = McpHub(cfg)
     text = await hub.doctor("bad")
     assert "error" in text
-    assert str(tmp_path / ".b3code" / "mcp" / "bad.stderr.log") in text
+    assert str(b3code_home() / "logs" / "mcp" / "bad.stderr.log") in text

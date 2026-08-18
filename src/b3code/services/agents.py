@@ -178,6 +178,7 @@ def build_coder(
     questions: QuestionGate | None = None,
     skills: SkillIndex | None = None,
     tasks: TaskHub | None = None,
+    extra_read_paths: tuple[Path, ...] = (),
 ) -> Agent[None, str]:
     # injected_model só troca o Model — nunca instructions/toolsets/capabilities.
     model = injected_model or build_model(config)
@@ -197,6 +198,7 @@ def build_coder(
                 on_change=on_change,
                 skip_dirs=config.exclude_directories,
                 skip_exts=config.exclude_extensions,
+                extra_read_paths=extra_read_paths,
             ),
             ask_toolset(questions or QuestionGate()),
             task_toolset(tasks or TaskHub()),
@@ -236,6 +238,7 @@ def build_planner_agent(
     on_write: Callable[[str], None] | None = None,
     injected_model: Model | None = None,
     mcp: McpHub | None = None,
+    extra_read_paths: tuple[Path, ...] = (),
 ) -> Agent[None, str]:
     # injected_model só troca o Model — o planner sai sempre completo.
     model = injected_model or build_model(config)
@@ -248,5 +251,6 @@ def build_planner_agent(
         mcp=mcp or McpHub(config),
         skip_dirs=config.exclude_directories,
         skip_exts=config.exclude_extensions,
+        extra_read_paths=extra_read_paths,
         config=config,
     )

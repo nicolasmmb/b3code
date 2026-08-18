@@ -1,9 +1,10 @@
-"""Load/save de `.b3code/config.json` no cwd do projeto."""
+"""Load/save do `config.json` global (único por usuário)."""
 
 import asyncio
 import json
 from pathlib import Path
 
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import AppConfig
 from b3code.utils.paths import atomic_write_text
 
@@ -27,8 +28,8 @@ class ConfigStore:
         self.path = path
 
     @classmethod
-    def for_cwd(cls, cwd: Path) -> "ConfigStore":
-        return cls(cwd / ".b3code" / "config.json")
+    def for_global(cls) -> "ConfigStore":
+        return cls(b3code_home() / "config.json")
 
     def load(self) -> AppConfig:
         if not self.path.exists():

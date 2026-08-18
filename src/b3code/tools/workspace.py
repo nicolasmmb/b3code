@@ -29,6 +29,7 @@ def workspace_toolset(
     max_hits: int = _MAX_HITS,
     skip_dirs: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
     skip_exts: list[str] | tuple[str, ...] | set[str] | frozenset[str] = (),
+    extra_read_paths: tuple[Path, ...] = (),
 ) -> FunctionToolset:
     skip_dirs = frozenset(skip_dirs)
     skip_exts = frozenset(ext.lower() for ext in skip_exts)
@@ -39,7 +40,7 @@ def workspace_toolset(
     def _guard(target: Path) -> None:
         if can_write is not None and not can_write(target):
             raise ModelRetry(
-                "plan mode: only .b3code/plan.md is writable — use write_plan_file"
+                "plan mode: only the plan file is writable — use write_plan_file"
             )
 
     def _commit(target: Path, old: str, new: str) -> FileChange:
@@ -61,7 +62,7 @@ def workspace_toolset(
         path: str, start_line: int | None = None, end_line: int | None = None
     ) -> str:
         """Read a UTF-8 text file. Optional 1-indexed inclusive line range (N|line)."""
-        target = safe_workspace_path(path, cwd)
+        target = safe_workspace_path(path, cwd, allowed=extra_read_paths)
         text = _read_text(target)
         if start_line is None and end_line is None:
             return _truncate(text, max_file_chars)

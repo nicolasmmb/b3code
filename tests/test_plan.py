@@ -29,7 +29,10 @@ def test_can_write_active_only_plan_md(tmp_path: Path):
     assert mode.can_write(tmp_path / "src" / "a.py") is True
 
 
-def test_write_file_blocked_in_plan_mode(tmp_path: Path):
+def test_write_file_blocked_in_plan_mode(tmp_path: Path, monkeypatch):
+    # O home central fica FORA do workspace (sibling do tmp): o plano nunca
+    # é alcançável pelas tools de escrita do workspace.
+    monkeypatch.setenv("B3CODE_HOME", str(tmp_path.parent / "b3code-home"))
     mode = PlanMode(tmp_path)
     mode.enter()
     fns = {
@@ -40,9 +43,11 @@ def test_write_file_blocked_in_plan_mode(tmp_path: Path):
     }
     with pytest.raises(ModelRetry, match="plan mode"):
         fns["write_file"]("a.py", "nope")
-    out = fns["write_file"](".b3code/plan.md", "# plan\n")
-    assert "plan.md" in out
-    assert mode.read().startswith("# plan")
+    # O plano fica fora do workspace: write_file nunca o alcança (só o
+    # write_plan_file escreve o plano central).
+    with pytest.raises(ValueError, match="escapes workspace"):
+        fns["write_file"](str(mode.plan_path), "# plan\n")
+    assert mode.read() == ""
 
 
 def test_plan_meta_extracts_title_and_sections():

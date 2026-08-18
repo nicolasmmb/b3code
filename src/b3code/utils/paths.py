@@ -23,13 +23,25 @@ def resolve_agent_path(path: str, cwd: Path) -> Path:
     return resolved.resolve()
 
 
-def safe_workspace_path(path: str, cwd: Path) -> Path:
-    """Resolve `path` dentro de `cwd`. Recusa escape do workspace."""
+def safe_workspace_path(
+    path: str, cwd: Path, *, allowed: Iterable[Path] = ()
+) -> Path:
+    """Resolve `path` dentro de `cwd` (ou de um base em `allowed`).
+
+    `allowed` libera leituras pontuais fora do workspace (ex.: o plano
+    central em plan mode). Default vazio = comportamento atual.
+    """
     resolved = resolve_agent_path(path, cwd)
     cwd_resolved = cwd.resolve()
-    if not resolved.is_relative_to(cwd_resolved):
-        raise ValueError(f"path escapes workspace: {path}")
-    return resolved
+    if resolved.is_relative_to(cwd_resolved):
+        return resolved
+    for base in allowed:
+        try:
+            if resolved.is_relative_to(base.resolve()):
+                return resolved
+        except OSError:
+            continue
+    raise ValueError(f"path escapes workspace: {path}")
 
 
 def escaped_paths(command: str, cwd: Path) -> list[Path]:

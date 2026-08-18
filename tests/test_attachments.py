@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic_ai import BinaryContent
 
+from b3code.config.dirs import project_dir
 from b3code.services.files import FileIndex
 from b3code.utils.attachments import (
     ATTACH_MAX_BYTES,
@@ -153,7 +154,7 @@ def test_oversized_binary_rejected(tmp_path: Path):
 
 def test_persist_bytes(tmp_path: Path):
     dest = persist_bytes(tmp_path, make_png(8, 8), ".png")
-    assert dest.is_relative_to(tmp_path / ".b3code" / "attachments")
+    assert dest.is_relative_to(project_dir(tmp_path) / "attachments")
     assert dest.suffix == ".png"
     assert dest.read_bytes().startswith(b"\x89PNG")
 

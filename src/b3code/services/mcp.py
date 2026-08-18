@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from b3code.config.dirs import b3code_home
 from b3code.config.schema import AppConfig, McpServerConfig
 
 MAX_MCP_OUTPUT = 20_000
@@ -245,9 +246,7 @@ class McpHub:
             lines.append(f"  log  {log}")
         return "\n".join(lines)
 
-    def _log_file(self, name: str) -> Path | None:
-        if self.cwd is None:
-            return None
-        path = self.cwd / ".b3code" / "mcp" / f"{name}.stderr.log"
+    def _log_file(self, name: str) -> Path:
+        path = b3code_home() / "logs" / "mcp" / f"{name}.stderr.log"
         path.parent.mkdir(parents=True, exist_ok=True)
         return path

@@ -27,6 +27,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
+from b3code.config.dirs import project_dir
 from b3code.utils.paths import atomic_write_text
 from b3code.utils.prompt import display_user_content
 from b3code.utils.toolview import preview_output, tool_title
@@ -65,8 +66,8 @@ class SessionStore:
         self._messages: list[ModelMessage] | None = None
 
     @classmethod
-    def for_cwd(cls, cwd: Path) -> SessionStore:
-        return cls(cwd / ".b3code" / "sessions.json")
+    def for_project(cls, cwd: Path) -> SessionStore:
+        return cls(project_dir(cwd) / "sessions.json")
 
     def _blob_path(self, session_id: str) -> Path:
         return self._dir / f"{session_id}.json"
